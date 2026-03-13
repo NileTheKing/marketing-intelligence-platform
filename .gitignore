@@ -9,3 +9,6 @@ common-messaging/.gradle/
 # Secret files
 application-oauth.yml
 .env
+
+# test related files
+jwt-tokens.json
