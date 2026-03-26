@@ -90,7 +90,7 @@ public class WebController {
      *
      * @return the view name "admin_create_campaignActivitys"
      */
-    @GetMapping("/admin_create_campaignActivitys")
+    @GetMapping("/admin-create-campaign-activities")
     public String admin_create_event() {
         log.info("Serving admin_create_campaignActivitys.html");
         return "admin_create_campaignActivitys";
