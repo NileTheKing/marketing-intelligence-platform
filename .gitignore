@@ -5,10 +5,21 @@
 .idea/
 *.iml
 build/
+.gradle/
 common-messaging/.gradle/
+
 # Secret files
 application-oauth.yml
 .env
 
 # test related files
 jwt-tokens.json
+
+# Build and IDE artifacts
+bin/
+*.class
+out/
+.settings/
+.project
+.classpath
+.factorypath
