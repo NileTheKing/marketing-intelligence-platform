@@ -4,10 +4,14 @@ import com.axon.entry_service.domain.CampaignActivityMeta;
 import com.axon.entry_service.domain.ReservationResult;
 import com.axon.entry_service.event.ReservationApprovedEvent;
 import java.time.Instant;
+import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 
 @Service
 @RequiredArgsConstructor
@@ -15,7 +19,24 @@ public class EntryReservationService {
 
     private final StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
-
+    private final RedisScript<Long> reservationScript =
+            new DefaultRedisScript<>(RESERVATION_LUA, Long.class);
+    private static final String RESERVATION_LUA = """
+        local added = redis.call('SADD', KEYS[1], ARGV[1])
+        if added == 0 then
+            return -1
+        end
+        
+        local count = redis.call('INCR', KEYS[2])
+        
+        if tonumber(ARGV[2]) > 0 and count > tonumber(ARGV[2]) then
+            redis.call('SREM', KEYS[1], ARGV[1])
+            redis.call('DECR', KEYS[2])
+            return -2
+        end
+        
+        return count
+    """;
     /**
      * Attempt to reserve a participation slot for a user in a campaign activity.
      *
@@ -49,22 +70,25 @@ public class EntryReservationService {
         String userSetKey = participantsKey(campaignActivityId);
         String counterKey = counterKey(campaignActivityId);
 
-        Long added = redisTemplate.opsForSet().add(userSetKey, userKey);
-        if (added == null) {
+        Long result = redisTemplate.execute(
+                reservationScript,
+                List.of(userSetKey, counterKey),
+                userKey,
+                String.valueOf(meta.limitCount())
+        );
+        if (result == null) {
             return ReservationResult.error();
         }
-        if (added == 0L) {
+
+        if (result == -1) {
             return ReservationResult.duplicated();
         }
 
-        Long order = redisTemplate.opsForValue().increment(counterKey);
-        Integer limitCount = meta.limitCount();
-        if (order == null || (limitCount != null && order > limitCount)) {
-            redisTemplate.opsForSet().remove(userSetKey, userKey);
-            redisTemplate.opsForValue().decrement(counterKey);
+        if (result == -2) {
             return ReservationResult.soldOut();
         }
 
+        Long order = result;
         // Publish APPROVED event for dashboard tracking
         eventPublisher.publishEvent(new ReservationApprovedEvent(
                 campaignActivityId,

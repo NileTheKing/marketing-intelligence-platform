@@ -19,4 +19,8 @@ public final class KafkaTopics {
 
     @Deprecated
     public static final String PAYMENT_RETRY_TOPIC = "axon.payment.retry";
+
+    // Dead Letter Topics (DLT) for Fault Tolerance
+    public static final String CAMPAIGN_ACTIVITY_COMMAND_DLT = "axon.campaign-activity.command.dlt";
+    public static final String PURCHASE_FAILED_DLT = "axon.purchase.failed.dlt";
 }

@@ -227,7 +227,7 @@ public class BehaviorEventService {
                 .bool(b -> {
                     for (Long id : activityIds) {
                         b.should(s -> s
-                                .wildcard(w -> w.field("pageUrl.keyword").value("*/campaign-activity/" + id + "/*")));
+                                .wildcard(w -> w.field("pageUrl.keyword").value("*campaign*activity/" + id + "*")));
                     }
                     return b;
                 }));
@@ -303,7 +303,7 @@ public class BehaviorEventService {
         return Query.of(q -> q
                 .wildcard(w -> w
                         .field("pageUrl.keyword")
-                        .value("*/campaign-activity/" + activityId + "/*")));
+                        .value("*campaign*activity/" + activityId + "*")));
     }
 
     private Query buildTriggerTypeFilter(String triggerType) {
