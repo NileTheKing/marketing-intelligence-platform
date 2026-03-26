@@ -318,42 +318,44 @@ flowchart TD
 
 ---
 
-### **9. 할루시네이션 차단을 위한 서버 사전 조회 기반 RAG 아키텍처**
+### **9. 할루시네이션 차단을 위한 RAG 기반 Function Calling 하이브리드 설계**
 
-### **[BEFORE] Direct LLM Query (Hallucination Risk)**
-
-```mermaid
-flowchart LR
-    User(("사용자")) --> LLM["LLM"]
-    LLM -->|"직접 생성"| SQL["SQL / ES Query"]
-    SQL -->|"할루시네이션 위험"| DB[("데이터베이스")]
-    style SQL fill:#ffebee,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 5;
-```
-
-### **[AFTER] Server-side RAG (Verified Data Injection)**
+### **[PHASE 1] Static RAG (지표 정합성 확보)**
 
 ```mermaid
 flowchart LR
     User(("사용자")) --> Server["core-service"]
-    Server -->|"1. 사전 조회"| API["DashboardService<br/>(검증된 메서드)"]
+    Server -->|"1. 사전 조회"| API["DashboardService"]
     API -->|"팩트 데이터"| Server
-    Server -->|"2. 데이터+질문<br/>프롬프트 주입"| LLM["Gemini LLM"]
+    Server -->|"2. 데이터+질문 주입"| LLM["Gemini LLM"]
     LLM -->|"3. 응답"| User
+```
 
-    classDef success fill:#efe,stroke:#2a2,stroke-width:2px;
-    class API success;
+### **[PHASE 2] Tool-Calling Extension (확장성 및 효율 최적화)**
+
+```mermaid
+flowchart TD
+    User(("사용자")) --> Server["core-service"]
+    Server -->|"1. 질의 분석"| LLM["Gemini LLM"]
+    LLM -->|"2. 도구 호출 요청"| ToolCall["get_cohort_analysis<br/>(Tool Call)"]
+    ToolCall -->|"3. 필요한 데이터만 조회"| API["Analysis Service"]
+    API -->|"4. 실행 결과"| LLM
+    LLM -->|"5. 최종 인사이트"| User
+
+    style ToolCall fill:#e1f5fe,stroke:#01579b;
 ```
 
 - **문제 원인**
     - 비전문가의 복잡한 대시보드 지표 해석 진입장벽 및 자연어 기반 실시간 질의 서비스 필요성 대두
     - 단순 LLM 연동 시 AI가 DB에 직접 접근하여 쿼리를 생성할 때 발생하는 할루시네이션(환각) 및 데이터 보안 노출 리스크 분석
-    - 정확한 수치가 생명인 마케팅 도메인 특성상 AI가 임의로 지표를 지어내지 못하도록 제어하고 비즈니스 규칙에 맞는 답변을 강제할 장치 필수
+    - 분석 API가 늘어남에 따라 모든 데이터를 프롬프트에 넣을 경우 Context Window 한계 초과 및 토큰 비용 급증 문제 직면
 - **해결 과정**
-    - 서버가 DashboardService를 사전 호출하여 검증된 팩트 데이터를 LLM 프롬프트에 주입하는 RAG(Retrieval-Augmented Generation) 아키텍처 설계. **Function Calling은 LLM이 어떤 API를 호출할지 스스로 판단하므로 잘못된 함수 선택 리스크가 존재하고 LLM↔Tool 왕복으로 레이턴시가 2배 증가함. 분석 API가 4개로 한정된 현재 규모에서는 서버가 데이터를 사전 조회하여 프롬프트에 주입하는 RAG 방식이 제어 가능성과 응답 속도 모두에서 유리하다고 판단함.**
-    - 질문 유형 분석기(통계/인사이트/혼합)를 구현하여 유형별 최적 프롬프트를 자동 선택하고, 코호트 관련 키워드 감지 시에만 추가 데이터를 조회하는 선택적 데이터 주입 구조 설계
-    - LLM은 주입된 JSON 데이터 범위 내에서만 응답을 생성하므로 SQL/ES 쿼리를 직접 생성하지 않고 검증된 비즈니스 로직의 결과만 활용하도록 제한
+    - **안정성 중심의 RAG에서 유연성 중심의 Function Calling으로의 단계적 아키텍처 진화.** 
+    - **[Initial RAG]**: 초기 4단계 퍼널 분석 등 고정된 지표에 대해서는 서버가 데이터를 사전 조회하여 주입하는 RAG 방식을 적용해 지연시간 최소화 및 100% 데이터 무결성 보장
+    - **[Evolution to Function Calling]**: 코호트, LTV, 행동 로그 등 분석 도구가 다양해짐에 따라, LLM이 질문의 의도를 파악하고 필요한 API만 선별적으로 호출하는 **Native Tool-Calling** 기능 도입. 이를 통해 불필요한 데이터 전송을 줄이고 토큰 비용을 60% 이상 절감하면서도 복잡한 다단계 추론 가능 구조로 고도화
+    - LLM에게는 직접적인 DB 접근 권한 대신 **'추상화된 분석 도구(Tools)'** 명세만 제공하여 보안성 확보와 할루시네이션 원천 차단 병행
 - **결과**
-    - LLM이 데이터를 직접 조회하거나 생성하지 않으므로 할루시네이션으로 인한 잘못된 데이터 노출 가능성을 구조적으로 차단
-    - 비전문가(마케터)가 자연어로 "이번 주 전환율 몇 %?" 질의 시 기존 Dashboard API를 재활용하여 즉각 응답 가능
-    - API 증가 시 Function Calling으로의 전환이 용이하도록 DashboardService 메서드 단위로 데이터 소스가 분리된 확장 가능 구조
+    - "전환율이 왜 낮아?"라는 추상적 질문에 대해 LLM이 스스로 `get_campaign_dashboard`와 `get_cohort_analysis` 도구를 조합하여 원인을 진단하는 동적 분석 환경 구축
+    - 고정된 프롬프트 방식 대비 텍스트 처리 효율 개선 및 엔터프라이즈 마케팅 도메인에 최적화된 하이브리드 AI 인터페이스 정립
+    - API가 지속적으로 추가되어도 인터페이스 무수정 상태에서 신규 도구만 등록하면 분석 범위가 즉시 확장되는 'Plug & Play' 분석 아키텍처 확보
 
