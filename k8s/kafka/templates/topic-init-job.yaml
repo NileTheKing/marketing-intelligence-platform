@@ -65,6 +65,10 @@ spec:
           # 3. Kubernetes Logs (Fluent Bit → Kafka → ES)
           create_topic "k8s.logs" 3 2
 
+          # 4. Dead Letter Topics (Fault Tolerance)
+          create_topic "axon.campaign-activity.command.dlt" 3 3
+          create_topic "axon.purchase.failed.dlt" 3 3
+
           echo ""
           echo "✅ All topics created successfully!"
           echo ""

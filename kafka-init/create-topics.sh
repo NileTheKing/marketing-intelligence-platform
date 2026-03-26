@@ -15,21 +15,21 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 1. event.raw - All behavior events (analytics)
+# 1. event.behavior - All behavior events (analytics)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo "Creating topic: axon.event.raw"
+echo "Creating topic: axon.event.behavior"
 echo "  Purpose: All behavior events (PAGE_VIEW, CLICK, APPROVED, PURCHASE, LOGIN)"
 echo "  Flow: Frontend/Backend → Kafka → Kafka Connect → Elasticsearch"
 
 kafka-topics --create --if-not-exists \
-  --topic "axon.event.raw" \
+  --topic "axon.event.behavior" \
   --bootstrap-server broker_1:29092 \
   --partitions 1 \
   --replication-factor 1 \
   --config retention.ms=604800000 \
   --config compression.type=lz4
 
-echo "  ✅ Created: axon.event.raw (1 partition - local dev)"
+echo "  ✅ Created: axon.event.behavior (1 partition - local dev)"
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -51,19 +51,39 @@ echo "  ✅ Created: axon.campaign-activity.command (1 partition - local dev)"
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 3. payment.retry
+# 3. event.commerce - Commerce events
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo "Creating topic: axon.payment.retry"
+echo "Creating topic: axon.event.commerce"
 
 kafka-topics --create --if-not-exists \
-  --topic "axon.payment.retry" \
+  --topic "axon.event.commerce" \
   --bootstrap-server broker_1:29092 \
   --partitions 1 \
   --replication-factor 1 \
   --config retention.ms=604800000 \
   --config compression.type=lz4
 
-echo "  ✅ Created: axon.payment.retry (1 partition - local dev)"
+echo "  ✅ Created: axon.event.commerce (1 partition - local dev)"
+echo ""
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 4. Dead Letter Topics (DLT) for Fault Tolerance
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+echo "Creating topic: axon.campaign-activity.command.dlt"
+kafka-topics --create --if-not-exists \
+  --topic "axon.campaign-activity.command.dlt" \
+  --bootstrap-server broker_1:29092 \
+  --partitions 1 \
+  --replication-factor 1
+
+echo "Creating topic: axon.purchase.failed.dlt"
+kafka-topics --create --if-not-exists \
+  --topic "axon.purchase.failed.dlt" \
+  --bootstrap-server broker_1:29092 \
+  --partitions 1 \
+  --replication-factor 1
+
+echo "  ✅ Created: Dead Letter Topics"
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

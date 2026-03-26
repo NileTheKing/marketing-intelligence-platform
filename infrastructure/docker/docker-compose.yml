@@ -71,7 +71,7 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: axon_db
       MYSQL_USER: axon_user
-      MYSQL_PASSWORD: ${DB_PASSWORD} # Updated to K8s standard
+        MYSQL_PASSWORD: ${DB_PASSWORD:-axon1234} # Added default fallback
     volumes:
       - mysql_data:/var/lib/mysql
     command:
@@ -90,7 +90,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --requirepass ${REDIS_PASSWORD} --save ""
+    command: redis-server --requirepass ${REDIS_PASSWORD:-axon1234} --save ""
     restart: always
     networks:
       - axon-network
