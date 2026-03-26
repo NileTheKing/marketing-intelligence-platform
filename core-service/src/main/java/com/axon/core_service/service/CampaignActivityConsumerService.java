@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 public class CampaignActivityConsumerService {
 
     private final Map<CampaignActivityType, CampaignStrategy> strategies;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final int kafkaBatchBuffer = 20;  // Reduced from 50 to decrease transaction time and lock contention
 
     // 메시지 버퍼 (Thread-safe Queue)
@@ -32,10 +34,12 @@ public class CampaignActivityConsumerService {
      * Creates a CampaignActivityConsumerService and builds an unmodifiable map from each strategy's type to the strategy.
      *
      * @param strategyList list of CampaignStrategy instances used to populate the internal unmodifiable map keyed by each strategy's type
+     * @param kafkaTemplate KafkaTemplate used to send failed messages to the DLT
      */
-    public CampaignActivityConsumerService(List<CampaignStrategy> strategyList) {
+    public CampaignActivityConsumerService(List<CampaignStrategy> strategyList, KafkaTemplate<String, Object> kafkaTemplate) {
         this.strategies = strategyList.stream()
                 .collect(Collectors.toUnmodifiableMap(CampaignStrategy::getType, Function.identity()));
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     /**
@@ -119,6 +123,9 @@ public class CampaignActivityConsumerService {
                 }
             } catch (Exception e) {
                 log.error("Error processing batch for type {}: {}", type, e.getMessage(), e);
+                // [PORTFOLIO POINT] DLQ Implementation for Fault Tolerance
+                log.warn("🚨 [DLQ] Sending {} failed messages to DLT: {}", batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
+                batch.forEach(msg -> kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, msg));
             }
         });
     }

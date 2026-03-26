@@ -32,6 +32,7 @@ public class PurchaseHandler {
     private final PurchaseService purchaseService;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
+    private final DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
 
     // Purchase 이벤트 버퍼
     private final ConcurrentLinkedQueue<PurchaseInfoDto> purchaseBuffer = new ConcurrentLinkedQueue<>();
@@ -175,6 +176,8 @@ public class PurchaseHandler {
                 // 1. 구매 저장 (REQUIRES_NEW Transaction in Service)
                 purchaseService.createPurchaseBatch(List.of(purchase));
 
+                //userSummaryService.recordPurchase(purchase.userId(), purchase.occurredAt());
+
                 // 2. 이벤트 발행
                 if (purchase.campaignActivityId() != null) {
                     eventPublisher.publishEvent(new CampaignActivityApprovedEvent(
@@ -186,9 +189,10 @@ public class PurchaseHandler {
                     ));
                 }
             } catch (Exception e) {
-                log.error("Individual save failed for user {}: {}", purchase.userId(), e.getMessage());
-                // 개별 실패는 무시하고 다음 건 진행
+                deadLetterHandler.handle(purchase, e);
+                // 개별 실패는 격리 처리하고 다음 건 진행
             }
+
         }
     }
 
