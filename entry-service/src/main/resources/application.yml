@@ -6,9 +6,9 @@ spring:
       enabled: true
   data:
     redis:
-      host: localhost
-      port: 6379
-      password: axon1234
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:changeme}
       lettuce:
         pool:
           max-active: ${SPRING_DATA_REDIS_LETTUCE_POOL_MAX_ACTIVE:8}
@@ -32,11 +32,11 @@ spring:
       properties:
         spring.json.trusted.packages: "*"
 jwt:
-  secret: ${JWT_SECRET:YOUR_VERY_SECRET_RANDOM_STRING_THAT_IS_LONG_ENOUGH_axonskusw}
+  secret: ${JWT_SECRET:changeme}
 
 payment:
   token:
-    secret: ${PAYMENT_TOKEN_SECRET:dev_payment_token_secret_key}
+    secret: ${PAYMENT_TOKEN_SECRET:changeme}
 
 axon:
   core-service:

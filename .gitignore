@@ -10,7 +10,9 @@ common-messaging/.gradle/
 
 # Secret files
 application-oauth.yml
+application-local.yml
 .env
+*.log
 
 # test related files
 jwt-tokens.json
@@ -22,4 +24,5 @@ out/
 .settings/
 .project
 .classpath
+.project
 .factorypath
