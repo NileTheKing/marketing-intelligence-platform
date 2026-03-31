@@ -113,8 +113,8 @@ graph TB
 - **[Solution]** 검증 로직을 시스템 최전방인 **Entry 서비스로 전진 배치**하여 유입 시점에 즉각 당첨을 확정하는 구조로 개선.
 - **[Optimization]** Redis Lua 스크립트를 도입하여 중복 체크와 수량 차감을 단일 원자적 연산으로 처리함으로써 동시성 이슈 근본 해결.
 
-### 2. 데이터 신뢰성: 트랜잭션 격리 및 장애 파급 차단
-- **[Problem]** 대량의 벌크 저장 중 단 1건의 데이터 오류가 전체 배치(20건)를 롤백시켜, 정상 데이터 적재까지 지연되는 '배치 오염' 현상 확인.
+### 2. 데이터 신뢰성: 장애 파급 차단 및 지연 동기화
+- **[Problem]** 대량의 벌크 저장 중 단 1건의 오류가 전체 배치(20건)를 롤백시켜, 정상 데이터 적재까지 지연되는 '배치 오염' 현상 확인.
 - **[Solution]** `REQUIRES_NEW` 전파 속성을 적용하여 개별 트랜잭션을 물리적으로 분리하고, 실패 건만 **Dead Letter Queue(DLQ)**로 격리하는 폴백 전략 구축.
 - **[Result]** 비정상 데이터 유입 시에도 파이프라인 중단 없이 데이터 유실 0% 실증.
 
@@ -132,55 +132,48 @@ graph TB
 
 ## 주요 기능
 
-### 계층형 실시간 데이터 분석
+### 1. 마케팅 인텔리전스 (Analytics & AI)
+
+#### 계층형 성과 대시보드
 <p align="center">
   <img src="./docs/assets/recordings/dashboard_overview.png" width="850" />
 </p>
 
-#### 실시간 지표 스트리밍 및 파이프라인
-<p align="center">
-  <img src="./docs/assets/recordings/dashboard_sse.gif" width="850" />
-</p>
+- **다각도 지표 분석**: 전역 성과(Global), 캠페인 단위, 개별 활동(Activity)으로 이어지는 계층형 분석 환경 제공.
+- **코호트 및 LTV 추적**: 유입 고객의 재구매율, 고객 생애 가치(LTV), 리텐션 히트맵을 통한 장기적 수익성 지표 시각화.
 
-- 서버 사이드 푸시(SSE) 기반의 전용 지표 스트리밍으로 5초 주기 가시성 제공.
-- 이벤트 수집부터 대시보드 반영까지의 전체 데이터 파이프라인 정합성 확보.
-
-<details>
-<summary><b>계층형 대시보드 및 운영 화면 상세</b></summary>
-
-| 분석 레벨 | 주요 기능 및 지표 | 상세 화면 |
-| :--- | :--- | :---: |
-| **Level 1: 전역** | 전체 캠페인 통합 매출/방문자 랭킹, 통합 ROAS | [보기](./docs/assets/recordings/dashboard_overview.png) |
-| **Level 2: 캠페인** | 소속 활동 성과 요약, 퍼널 전환율, 기여도 분석 | [보기](./docs/assets/recordings/campaign_admin.png) |
-| **Level 3: 활동** | 개별 활동 심층 분석, LTV, Retention 히트맵 | [보기](./docs/assets/recordings/dashboard_11.png) |
-| **운영 관리** | 캠페인 생명주기 관리 및 동적 이벤트 수집 조건 등록 | [보기](./docs/assets/recordings/event_admin.png) |
-</details>
-
-### 하이브리드 AI 에이전트 (Gemini 2.5 Flash-lite)
+#### 하이브리드 AI 전략 에이전트 (Gemini 2.5 Flash-lite)
 <p align="center">
   <img src="./docs/assets/recordings/dashboard_llm.gif" width="800" />
 </p>
 
-- **RAG + Function Calling**: 실시간 지표와 마케팅 지식을 결합하여 "LTV/CAC 기반 예산 재분배 전략" 등 분석 리포트 생성.
-- **최적화 성과**: 필요한 데이터만 선택적으로 조회하는 도구 호출 구조를 통해 데이터 전수 주입 방식 대비 **토큰 소모량 80% 절감** 및 DB 부하 경감.
+- **데이터 기반 리포팅**: 실시간 지표(RAG)와 분석 도구(Tool Calling)를 결합하여 "LTV/CAC 기반 예산 재분배 전략" 등 구체적인 리포트 자동 생성.
+- **시스템 최적화**: 필요한 데이터만 선택 호출하는 구조를 통해 전수 주입 방식 대비 **토큰 소모량 80% 절감** 및 DB 조회 부하 경감.
 
----
+#### 실시간 지표 스트리밍
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_sse.gif" width="850" />
+</p>
 
-## 부하 테스트 결과 (Verified)
+- **지연 없는 가시성**: SSE(Server-Sent Events) 프로토콜을 활용하여 이벤트 발생부터 대시보드 반영까지의 파이프라인 정합성 실시간 유지.
+
+### 2. 운영 및 시스템 검증 (Operation & Verification)
+
+#### CRM 운영 관리 및 동적 이벤트 수집
+<p align="center">
+  <img src="./docs/assets/recordings/event_admin.png" width="850" />
+</p>
+
+- **코드 수정 없는 추적**: 자체 개발한 JS SDK와 연동하여 관리자 화면에서 클릭, 페이지 뷰 등 수집 조건을 동적으로 등록 및 제어.
+- **캠페인 생명주기 관리**: 마케팅 활동의 상태(활성/비활성), 한정 수량, 예산 등을 실시간으로 관리하는 운영 콘솔 제공.
+
+#### 대규모 트래픽 수용성 검증
 <p align="center">
   <img src="./docs/assets/recordings/k6_spike.gif" width="850" />
 </p>
 
-<table>
-  <tr>
-    <td><img src="./docs/assets/recordings/k6_result_stat.png" width="450" /></td>
-    <td><img src="./docs/assets/recordings/k6_result_db.png" width="450" /></td>
-  </tr>
-  <tr align="center">
-    <td><b>[k6 최종 결과] 3,000 VU 에러율 0%</b></td>
-    <td><b>[정합성 검증] 유입 대비 처리량 일치 확인</b></td>
-  </tr>
-</table>
+- **극한 환경 테스트**: 3,000 VU(Peak 2,900 RPS) 부하 상황에서도 시스템 붕괴 없이 모든 요청을 안정적으로 처리하는 가용성 실증.
+- **데이터 정합성 보장**: 10,000건 이상의 선착순 응모 시도 중 정확히 한정 수량만큼만 당첨을 확정하는 무결성 검증 완료.
 
 ---
 
