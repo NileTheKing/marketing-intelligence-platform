@@ -105,10 +105,11 @@ while IFS=$'\t' read -r USER_ID FIRST_PURCHASE; do
         PRODUCT_ID=${PRODUCT_IDS[$RANDOM % ${#PRODUCT_IDS[@]}]}
         PRICE=$(( PRICE_LOW + RANDOM % (PRICE_MID - PRICE_LOW) ))
 
-        # Insert purchase
+        # Insert purchase (Only if the date is not in the future)
         INSERT_QUERY="
         INSERT INTO purchases (user_id, product_id, campaign_activity_id, purchase_type, price, quantity, purchase_at)
-        VALUES ($USER_ID, $PRODUCT_ID, NULL, 'SHOP', $PRICE, 1, '$REPURCHASE_DATE');
+        SELECT $USER_ID, $PRODUCT_ID, NULL, 'SHOP', $PRICE, 1, '$REPURCHASE_DATE'
+        WHERE '$REPURCHASE_DATE' <= NOW();
         "
 
         $MYSQL_CMD -e "$INSERT_QUERY"
@@ -126,10 +127,11 @@ while IFS=$'\t' read -r USER_ID FIRST_PURCHASE; do
         PRODUCT_ID=${PRODUCT_IDS[$RANDOM % ${#PRODUCT_IDS[@]}]}
         PRICE=$(( PRICE_MID + RANDOM % (PRICE_HIGH - PRICE_MID) ))
 
-        # Insert purchase
+        # Insert purchase (Only if the date is not in the future)
         INSERT_QUERY="
         INSERT INTO purchases (user_id, product_id, campaign_activity_id, purchase_type, price, quantity, purchase_at)
-        VALUES ($USER_ID, $PRODUCT_ID, NULL, 'SHOP', $PRICE, 1, '$REPURCHASE_DATE');
+        SELECT $USER_ID, $PRODUCT_ID, NULL, 'SHOP', $PRICE, 1, '$REPURCHASE_DATE'
+        WHERE '$REPURCHASE_DATE' <= NOW();
         "
 
         $MYSQL_CMD -e "$INSERT_QUERY"
@@ -147,10 +149,11 @@ while IFS=$'\t' read -r USER_ID FIRST_PURCHASE; do
         PRODUCT_ID=${PRODUCT_IDS[$RANDOM % ${#PRODUCT_IDS[@]}]}
         PRICE=$(( PRICE_HIGH + RANDOM % 500000 ))
 
-        # Insert purchase
+        # Insert purchase (Only if the date is not in the future)
         INSERT_QUERY="
         INSERT INTO purchases (user_id, product_id, campaign_activity_id, purchase_type, price, quantity, purchase_at)
-        VALUES ($USER_ID, $PRODUCT_ID, NULL, 'SHOP', $PRICE, 1, '$REPURCHASE_DATE');
+        SELECT $USER_ID, $PRODUCT_ID, NULL, 'SHOP', $PRICE, 1, '$REPURCHASE_DATE'
+        WHERE '$REPURCHASE_DATE' <= NOW();
         "
 
         $MYSQL_CMD -e "$INSERT_QUERY" 2>/dev/null
