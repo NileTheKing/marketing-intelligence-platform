@@ -1,130 +1,204 @@
-# Axon: High-Performance Customer Data Platform (CDP)
+# Axon: 실시간 대규모 트래픽 처리 및 마케팅 분석 플랫폼
+> **선착순 이벤트 제어와 고객 생애 가치(LTV) 분석을 결합한 통합 CRM 솔루션**
+> *(IITP 과기정통부 대학기업협력형 SW아카데미 — 오브젠 기업 연계 프로젝트)*
 
-Axon은 이커머스 환경에서 발생하는 대규모 선착순(FCFS) 트래픽을 지연 없이 처리하고, 사용자의 행동 로그를 실시간으로 수집/분석하기 위해 설계된 **이벤트 기반 통계 및 캠페인 플랫폼**입니다. 비즈니스 파이프라인(명령)과 데이터 파이프라인(로그)을 구조적으로 분리하여, 어떠한 트래픽 스파이크 상황에서도 기업의 핵심 시스템 스레드를 고갈시키지 않도록 완충(Shock Absorber)하는 것을 핵심 목표로 개발되었습니다.
-
----
-
-## 🛠️ 기술 스택 (Tech Stack)
-
-*   **Backend Application**: Java 21, Spring Boot 3.5.5, Virtual Threads
-*   **Data & Messaging**: MySQL 8.0, Redis, Elasticsearch 8.x, Apache Kafka (KRaft Mode)
-*   **Infrastructure**: Kubernetes (K2P), Docker Compose
-*   **Observability**: Prometheus, Grafana, Fluent Bit, Kibana
-*   **Frontend & AI**: Thymeleaf, Vanilla JS (Tracker SDK), Chart.js, TailwindCSS, Gemini 2.0 Flash
+Axon은 대규모 프로모션 시 발생하는 **급격한 접속자 유입 상황에서도 시스템 안정성을 유지**하고, 유입된 고객 데이터를 실시간으로 분석하여 **마케팅 의사결정을 돕는 지능형 플랫폼**입니다. 요청 수집과 비즈니스 로직 처리를 물리적으로 분리한 **부하 충격 완화 구조**를 통해 대규모 스파이크 트래픽을 안정적으로 수용합니다.
 
 ---
 
-## 🌟 핵심 기능 (Key Features)
+## 비즈니스 시나리오 및 성과
+"3,000명의 접속자가 2초 만에 200개의 한정 상품에 응모하는 극한의 이커머스 환경"을 가정하여 시스템의 성능과 정합성을 검증했습니다.
 
-### 1. 고동시성 선착순 예약 (FCFS Campaign)
-*   수천 명의 동시 접속자가 몰리는 캠페인 이벤트에서 데이터베이스 락(Lock) 경합 없이 빠르고 정확하게 선착순 응모 및 결제 인가를 처리합니다.
-> *(실제 동작 데모: `![선착순 데모](docs/images/fcfs.gif)`)*
-
-### 2. 실시간 마케팅 대시보드 및 지표 분석
-*   페이지 뷰, 클릭, 진입, 예약, 구매로 이어지는 풀 퍼널(Funnel) 전환율과 일자별 리텐션(Cohort), LTV(고객 생애 가치)를 시각화합니다.
-> *(대시보드 데모: `![대시보드 데모](docs/images/dashboard.gif)`)*
-
-### 3. AI 기반 캠페인 어시스턴트
-*   RAG(Retrieval-Augmented Generation) 패턴을 활용하여, 대시보드의 실시간 집계 데이터를 기반으로 마케터의 자연어 질의에 답변하고 의사결정을 돕는 챗봇 어시스턴트를 제공합니다.
+| 측정 지표 | 결과 | 비고 |
+| :--- | :--- | :--- |
+| **최대 가용량** | **2,900 RPS / 3,000 VU** | k6 부하 테스트 (에러율 0.00%) |
+| **로그 처리량** | **20,000+ EPS** | Kafka 및 Elasticsearch 실시간 적재 |
+| **선착순 정합성** | **오버부킹 0건** | 원자적 제어를 통한 정확한 수량 차감 |
+| **데이터 무결성** | **유실률 0%** | 유입 요청 대비 최종 구매 확정 일치 |
 
 ---
 
-## 🏗️ 시스템 아키텍처 (Architecture)
+## 시스템 아키텍처
+
+### 1. 서비스 논리 구조
+사용자의 요청이 각 서비스를 거쳐 데이터베이스와 AI 엔진으로 전달되는 흐름입니다. 트래픽 진입부와 로직 처리부 사이에 Kafka를 배치하여 **배압 조절(Backpressure)**이 가능하도록 설계했습니다.
 
 ```mermaid
-flowchart TD
-    User(("User Browser")) 
-    
-    subgraph "Ingestion Layer"
-        User -->|"1. FCFS 응모/결제 (HTTP)"| Entry["Entry Service (Shock Absorber)"]
-        User -->|"2. 행동 로그 (JS Tracker)"| Entry
-        
-        Entry -->|"Atomic Check"| Redis[("Redis")]
-        
-        Entry -->|"Command Events"| Kafka_Cmd[Kafka: axon.campaign-activity.command]
-        Entry -->|"Behavior Logs"| Kafka_Behavior[Kafka: axon.event.behavior]
-    end
-    
-    subgraph "Core Domain & Payment"
-        Kafka_Cmd -->|"Safe Drain"| Core["Core Service"]
-        Core -->|"Isolated TX & Payment"| MySQL[(MySQL)]
-    end
-    
-    subgraph "Data & Analytics"
-        Kafka_Behavior -->|"Streaming"| ES[(Elasticsearch)]
-        Core -.->|"Read Replica"| Dashboard["Admin Dashboard UI"]
-        ES -->|"Aggregation API"| Dashboard
-        Dashboard -->|"RAG Injected"| AI["AI Agent (Gemini)"]
+graph TB
+    subgraph Client["브라우저"]
+        Browser["UI (Thymeleaf/JS)"]
+        JSTracker["자체 행동 수집 SDK"]
     end
 
-    %% Flow Styles
-    style Entry fill:#e1f5fe,stroke:#01579b;
-    style Core fill:#e8f5e9,stroke:#2e7d32;
-    style ES fill:#fff3e0,stroke:#e65100;
+    subgraph Entry["Entry Service (유입 제어)"]
+        EntryController["Entry Controller"]
+        FastValidation["조건 검증 (Redis)"]
+        FCFSLogic["선착순 제어 (Redis Lua)"]
+        EntryKafka["Kafka Producer"]
+    end
+
+    subgraph MQ["메시지 브로커"]
+        Kafka[("Apache Kafka")]
+    end
+
+    subgraph Core["Core Service (로직/분석)"]
+        KafkaConsumer["Kafka Consumer (Batch)"]
+        CampaignLogic["비즈니스 로직"]
+        DashboardLogic["분석/대시보드"]
+        LLMController["AI 에이전트 (Gemini)"]
+        MySQL[("MySQL")]
+    end
+
+    subgraph Pipeline["데이터 파이프라인"]
+        KafkaConnect["Kafka Connect"]
+        ES[("Elasticsearch")]
+    end
+
+    %% Flow
+    Browser --> EntryController
+    JSTracker --> EntryController
+    EntryController --> FastValidation
+    EntryController --> FCFSLogic
+    FCFSLogic --> EntryKafka
+    EntryKafka --> Kafka
+    Kafka --> KafkaConsumer
+    KafkaConsumer --> CampaignLogic
+    CampaignLogic --> MySQL
+    Kafka --> KafkaConnect
+    KafkaConnect --> ES
+    DashboardLogic --> ES
+    DashboardLogic --> MySQL
+    LLMController --> MySQL
 ```
 
----
+### 2. 인프라 및 클라우드 구성
+네트워크 격리 및 K8s 클러스터링을 통한 운영 환경 구성도입니다.
 
-## ⚙️ 트러블슈팅 및 기술적 의사결정 (Troubleshooting & Engineering)
+<p align="center">
+  <img src="./docs/assets/recordings/archi.png" width="850" alt="Axon Infrastructure">
+</p>
 
-대용량 트래픽 상황에서 한정된 컴퓨팅 리소스의 효율을 극대화하기 위해 치열하게 고민한 문제 해결 및 아키텍처 의사결정 기록입니다. 상세 코드는 **[Architecture Deep-Dive 포트폴리오](./docs/PORTFOLIO_DIAGRAMS.md)** 에서 확인 가능합니다.
-
-### 🚨 1. 트러블슈팅 (Problem Solving)
-
-*   **[부하 방어] 300 VU 접속 불가 현상을 3,000 VU 환경으로 확장**
-    *   **문제**: 초기 초당 500건 수준의 요청에서 Connection Reset과 Timeout이 대량 발생하여 시스템이 붕괴됨.
-    *   **해결**: Linux 커널의 `net.core.somaxconn` 파라미터 및 웹 서버(Tomcat)의 Accept Count 튜닝을 통해 TCP SYN Queue 수용량을 대폭 확장.
-    *   **성과**: k6 스파이크 테스트 기준 **3,000명 동시 접속(Peak 2,900 RPS)** 환경에서 **에러율(5XX) 0.00% 달성** 및 병목 지점 해소.
-
-*   **[동시성 제어] DB 락 경합 제거를 위한 Redis Lock-free 알고리즘**
-    *   **문제**: 200명 한정 선착순 이벤트에 다수 접근 시 MySQL 비관적 락(Pessimistic Lock)으로 인한 스레드 대기 및 커넥션 스톨 현상 발생.
-    *   **해결**: Redisson 기반의 무거운 분산 락 대신, Redis의 `SADD`와 `INCR`을 하나로 묶은 **Lua 스크립트를 활용하여 단일 스레드 기반 원자적 상태 변경(Lock-free)** 아키텍처로 전환.
-    *   **성과**: 10,655건의 치열한 동시 요청 속에서 **오버부킹 0건** 검증 완료.
-
-*   **[장애 격리] 물리 트랜잭션 오염 방지를 위한 `REQUIRES_NEW` 예외 격리**
-    *   **문제**: Kafka 컨슈머가 Batch 단위로 메시지를 DB에 영속화할 때, 1건의 오류가 전체 배치를 롤백시키고 무한 재시도 큐에 빠지는 트랜잭션 좀비화 감지.
-    *   **해결**: Spring의 `Propagation.REQUIRES_NEW`를 사용하여 개별 건을 물리 트랜잭션으로 강제 분리하고, 실패 건만 **Dead Letter Queue (DLQ)** 로 즉각 유배시켜 롤백 전파 차단.
-
-*   **[조회 성능] Elasticsearch 역정규화를 통한 실시간 대시보드 N+1 해결**
-    *   **문제**: MySQL에 적재된 다형성(Polymorphism) 이벤트를 조인하여 통계를 구성할 때 심각한 N+1 문제와 조회 지연 발생.
-    *   **해결**: 데이터 수집 단계부터 역정규화(Denormalization)된 Flat 데이터를 ES로 전송하고, 단일 `Terms Aggregation`으로 다차원 통계를 추출하여 **렌더링 성능 440% 향상**.
+- **Cloud Platform**: KT Cloud K2P (Kubernetes to Production) 환경 기반.
+- **Network & Security**: Public IP를 특정 워커 노드에 1:1 매핑(Static NAT)하고, 방화벽 설정을 통해 특정 포트만 허용하는 폐쇄망 구조 지향.
+- **Middleware Cluster**: 고가용성을 위해 Kafka(KRaft), Redis, Elasticsearch를 K8s 내부 ClusterIP 서비스로 연동.
 
 ---
 
-### 💡 2. 기술적 의사결정 (Technical Architecture Decisions)
+## 핵심 엔지니어링 및 기술적 의사결정
 
-#### [데이터 파이프라인 설계]
-*   **MSA 통신을 위한 공통 모듈(common-messaging)**: Entry Service와 Core Service 간의 강결합을 막기 위해, DTO와 토픽 상수만 분리한 멀티 모듈 MSA 구조를 설계.
-*   **어댑터 패턴(Adapter Pattern)**: 퍼널 데이터를 ES로 쏠 때, Purchase/Entry/Behavior 등 출처가 다른 이벤트의 다형성을 제어하고 단일 규격화하기 위해 어댑터 패턴 도입.
-*   **이원화된 파이프라인 (Command vs Behavior)**: 무거운 행동 로그 적재 지연이 결제 시스템(Command) 마비로 이어지는 것을 막기 위해 Kafka Topic을 분리하여 장애 격리.
-*   **Kafka (vs RabbitMQ)**: 단순한 메시지 전달이 아닌, 장애 복구 시 재처리와 DB/ES 다중 컨슈머 파이프라이닝을 위해 디스크 기반 영속성을 보장하는 Kafka(KRaft) 채택.
-*   **자체 JS SDK (vs GA4/Matomo)**: 서드파티 툴의 샘플링/딜레이를 없애고, 우리 비즈니스 도메인 식별자를 즉각 ES로 쏘아 올려 완전한 No-ETL 파이프라인을 구축하기 위함.
-*   **SSE (Server-Sent Events) 도입**: 실시간 대시보드의 갱신을 위해 무거운 WebSocket이나 서버 부하가 심한 Polling 대신, 단방향 스트리밍인 SSE를 선택해 리소스 최적화.
+상세한 설계 의도와 트러블슈팅 과정은 **[Architecture Deep-Dive 포트폴리오](./docs/PORTFOLIO_DIAGRAMS.md)**에서 확인하실 수 있습니다.
 
-#### [병목 원천 차단 및 트래픽 방어]
-*   **Redis 재고 처리 전략**: DB 레벨의 동시성 제어는 풀 고갈을 야기하므로, Spike 트래픽의 98%를 Entry 레이어(Redis API)에서 쳐내는 전면 방어탑 역할로 사용.
-*   **Redis Gating 바이패스 최적화**: 선착순 확정 후 Core 결제로 넘어온 데이터는 불필요한 Redis 조회를 건너뛰도록(Bypass) 튜닝하여 백엔드 처리량 극대화.
-*   **극단적인 Lock Contention 회피**: 부하 테스트 결과를 반영하여 DB의 UserSummary 및 재고 차감을 동기 처리에서 비동기 지연 처리(Eventual Consistency)로 과감히 분리.
-*   **동기형 논블로킹 (RestClient)**: JDK 21 가상 스레드(Virtual Threads)의 이점을 취하기 위해 기존 WebClient 대신 동기형 프로그래밍 방식을 유지하며 RestClient로 전면 마이그레이션.
-*   **투트랙 동시성 제어 (Redis INCR + Redisson)**: 빠른 속도가 필요한 최초 진입 검증은 Redis Lua로 처리하고, 최후의 결제 정합성이 보장되어야 하는 부분만 Redisson의 분산락으로 보호하여 책임 분리.
-*   **전략 패턴(Strategy Pattern)**: 쉴 새 없이 변하는 이벤트/쿠폰 검증 로직을 OCP 원칙에 맞게 확장하기 위해 동적인 Validation Engine으로 설계.
+### 1. 동시성 제어: 비동기 환경의 순서 정합성 해결 및 Lock-free 설계
+*   **검증 로직의 전진 배치**: 초기 설계 시 선착순 판단을 Core 서비스에 두었으나, Kafka 비동기 소비 특성상 요청 순서와 처리 순서가 뒤바뀌는 정합성 오류를 발견했습니다. 이를 해결하기 위해 **검증 로직을 요청 진입점(Entry)으로 전진 배치**하여 유입 즉시 당첨을 확정하는 구조로 개선했습니다.
+*   **Redis Lua Script 도입**: Redisson 분산 락의 네트워크 오버헤드를 극복하기 위해, 중복 체크와 수량 차감을 Redis 내부에서 단일 연산으로 처리하는 Lua 스크립트를 도입했습니다. 락 대기 시간을 제거하여 **응답 속도를 Sub-ms 단위로 개선**하고, 10,000건 이상의 동시 요청 속에서 **오버부킹 0건**을 달성했습니다.
+*   **JDK 21 가상 스레드(Virtual Threads)**: 대규모 커넥션 처리를 위해 WebFlux 도입을 검토했으나, 비즈니스 로직의 복잡도와 디버깅 난이도를 고려하여 **동기식 코드 스타일을 유지하면서도 리소스를 최적화**할 수 있는 가상 스레드 기반의 논블로킹 통신을 채택했습니다.
 
-#### [고가용성 인프라 구축]
-*   **데이터베이스 Read-Only Replica**: 대시보드의 무거운 통계 조회 쿼리(Table Lock)가 사용자 쇼핑몰 결제(OLTP)를 파괴하지 않도록 마스터-슬레이브 분리.
-*   **코호트 배치의 증분 처리(Incremental)**: 전체 스캔 배치가 DB를 장악하지 않도록 변경분만 색출하여 집계하는 로직을 결합해 LTV 통계 배치 연산 속도 82% 향상.
+### 2. 데이터 신뢰성: 장애 파급 차단 및 지연 동기화
+*   **트랜잭션 격리 및 배치 폴백**: 대량의 벌크 저장 중 단 1건의 오류가 전체 배치를 롤백시켜 데이터 적재가 지연되는 '배치 오염'을 막기 위해, **`REQUIRES_NEW` 전파 속성과 Dead Letter Queue(DLQ)**를 결합했습니다. 실패 건만 격리하고 나머지 데이터는 보존하는 폴백 전략을 구축하여 데이터 유실 0%를 실증했습니다.
+*   **지연 재고 동기화(Deferred Sync)**: 구매 확정 시 상품 재고와 유저 요약 정보를 실시간 업데이트할 때 발생하는 DB Row Lock 경합을 제거하기 위해, 구매 로그를 기반으로 스케줄러가 사후 정산하는 **결과적 일관성(Eventual Consistency)** 모델을 도입했습니다.
+*   **비동기 배압 조절**: 폭발적인 유입 트래픽이 메인 DB에 직접적인 충격을 주지 않도록 **Kafka를 완충재로 활용**했습니다. DB가 가용 자원에 맞춰 메시지를 소비하게 함으로써 시스템 전체의 가용성을 유지합니다.
+
+### 3. 데이터 파이프라인: 수집 시점 역정규화 및 분석 최적화
+*   **경량 파이프라인 설계**: 사용자 행동 로그가 **자체 SDK → 서버 → Kafka → Kafka Connect → Elasticsearch** 인덱스에 적재되는 경량 파이프라인을 구현하여 인프라 의존성을 낮추고 성능을 높였습니다.
+*   **수집 시점 역정규화(Denormalization)**: 수백만 건의 로그를 대시보드에서 조인하여 조회할 때 발생하는 성능 저하를 해결하기 위해, SDK 단계에서 메타데이터를 결합하여 전송하는 구조를 설계했습니다. Elasticsearch 단일 인덱스 쿼리만으로 통계를 산출하여 **조회 성능을 440% 향상**시켰습니다.
+*   **SSE(Server-Sent Events) 스트리밍**: 리소스가 무거운 WebSocket이나 서버 부하가 심한 Polling 대신, 단방향 스트리밍인 SSE를 선택하여 대규모 접속 환경에서도 실시간 지표 가시성을 최적화했습니다.
+
+### 4. 인프라 최적화: 커넥션 폭증 대응
+*   **네트워크 계층 최적화**: 3,000 VU 스파이크 테스트 시 발생하는 Connection Reset에 대응하기 위해 리눅스 커널의 **`net.core.somaxconn`** 및 **`tcp_max_syn_backlog`** 파라미터를 1024로 증설했습니다.
+*   **가용성 확보**: Ingress의 연결 유지(Keep-alive) 및 Accept-count 설정을 조정하여, 단시간 내에 몰리는 대량의 TCP 핸드셰이크 부하를 완화하고 서버 도달률을 극대화했습니다.
 
 ---
 
-## 🚀 빠른 시작 (Getting Started)
+## 주요 기능
 
-1. **인프라 실행 (Kafka, MySQL, Redis, ES)**
+### 계층형 데이터 분석
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_overview.png" width="850" alt="Global Dashboard Overview">
+</p>
+
+#### 실시간 지표 스트리밍 및 파이프라인
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_sse.gif" width="850" alt="Real-time Metrics Simulation">
+</p>
+
+- 서버 사이드 푸시(SSE) 기반의 전용 지표 스트리밍 구현.
+- 이벤트 수집부터 대시보드 반영까지의 전체 데이터 파이프라인 정합성 확보.
+
+<details>
+<summary>계층형 대시보드 상세 보기 (Global/Campaign/Activity)</summary>
+
+| 분석 레벨 | 주요 분석 데이터 및 기능 | 상세 지표 | 상세 화면 |
+| :--- | :--- | :--- | :--- |
+| **Level 1: 전역 (Global)** | 전체 캠페인 통합 성과 | 매출/방문자 랭킹, 통합 ROAS | [상세 보기](./docs/assets/recordings/dashboard_overview.png) |
+| **Level 2: 캠페인 (Campaign)** | 소속 활동(Activity) 성과 요약 | 퍼널 전환율, 성과 기여도 | [상세 보기](./docs/assets/recordings/campaign_admin.png) |
+| **Level 3: 활동 (Activity)** | 개별 활동 심층 및 코호트 분석 | 전환 퍼널, LTV, Retention 히트맵 | [[지표 보기]](./docs/assets/recordings/dashboard_11.png) [[코호트 보기]](./docs/assets/recordings/dashboard_cohort.png) |
+</details>
+
+### 하이브리드 AI 에이전트 (Gemini 2.5 Flash-lite)
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_llm.gif" width="800" alt="AI Hybrid Agent Reporting">
+</p>
+
+- 현재 페이지 데이터를 지식(RAG)으로 참조하고, 필요 시 도구(Tool-calling)를 통해 외부 지표를 탐색하는 하이브리드 엔진 구축.
+- 수집된 정량 데이터를 바탕으로 "LTV/CAC 기반 예산 재분배 전략" 등 구체적인 분석 리포트 생성.
+
+### CRM 운영 프레임워크
+<details>
+<summary>CRM 운영 화면 상세 (Campaign/Event Management)</summary>
+
+| 관리 항목 | 주요 기능 및 운영 명세 | 상세 화면 |
+| :--- | :--- | :--- |
+| **캠페인 및 활동 관리** | 캠페인/활동의 상태 제어, 신규 등록 및 생명주기 관리 | [상세 보기](./docs/assets/recordings/campaign_admin.png) |
+| **동적 이벤트 추적 관리** | 코드 수정 없는 분석 지표 및 사용자 행동 수집 조건 등록 | [상세 보기](./docs/assets/recordings/event_admin.png) |
+</details>
+
+---
+
+## 부하 테스트 결과 (Verified)
+
+<p align="center">
+  <img src="./docs/assets/recordings/k6_spike.gif" width="850" alt="k6 Spike Test Sequence">
+</p>
+
+| 측정 항목 | 결과 | 비고 |
+| :--- | :--- | :--- |
+| **최대 가용량** | **2,900 RPS / 3,000 VU** | k6 부하 테스트 기준 |
+| **로그 처리량** | **20,000+ EPS** | Kafka 및 Elasticsearch 실시간 적재량 |
+| **선착순 정합성** | **오버부킹 0건** | 한정 수량 원자적 차감 검증 |
+| **데이터 무결성** | **유실률 0%** | 유입 대비 처리량 일치 확인 |
+
+<table>
+  <tr>
+    <td><img src="./docs/assets/recordings/k6_result_stat.png" width="450" alt="k6 Final Stats"></td>
+    <td><img src="./docs/assets/recordings/k6_result_db.png" width="450" alt="DB Consistency Check"></td>
+  </tr>
+  <tr align="center">
+    <td><b>[k6 최종 결과] 3,000 VU 에러율 0%</b></td>
+    <td><b>[정합성 검증] 유입 대비 처리량 일치 확인</b></td>
+  </tr>
+</table>
+
+---
+
+## 기술 스택
+*   **Application**: Java 21, Spring Boot 3.x, Virtual Threads
+*   **Messaging**: Apache Kafka (KRaft), Redis
+*   **Storage**: MySQL 8 (Master-Slave), Elasticsearch 8
+*   **Infrastructure**: Kubernetes (K2P), Nginx Ingress Controller
+*   **Monitoring**: Prometheus, Grafana, Fluent Bit, Kibana
+
+---
+
+## 빠른 시작 (Getting Started)
+
+1. **인프라 환경 구성**
    ```bash
    docker-compose up -d
    ```
-2. **서비스 배포 및 실행**
+2. **서비스 실행**
    ```bash
    ./gradlew :entry-service:bootRun
    ./gradlew :core-service:bootRun
    ```
-3. **대시보드 UI 접속**
-   * 브라우저에서 `http://localhost:8080/admin/dashboard/1` 로 접속하여 실시간 차트 및 AI 에이전트를 확인할 수 있습니다.
+3. **대시보드 접속**
+   * 브라우저에서 `http://localhost:8080/admin/dashboard/1` 로 접속하여 실시간 지표 및 AI 분석 기능을 확인할 수 있습니다.

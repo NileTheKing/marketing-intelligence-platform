@@ -1,20 +1,20 @@
-# Axon Portfolio: Architecture & Technical Story
+# [Project Axon] 고성능 마케팅 인텔리전스(CRM) 플랫폼
+## 3,000 VU 확장성 및 AI 기반 실시간 분석 아키텍처
 
-이 리포트는 대규모 트래픽 처리와 엔터프라이즈 데이터 무결성을 실증적으로 해결한 9가지 엔지니어링 케이스를 정리한 기술 포트폴리오입니다.
+> **IITP 과기정통부 대학기업협력형 SW아카데미 — 오브젠(Obzen) 기업 연계 프로젝트**  
+> *(공식 과제명: 로그 데이터 수집을 통한 고객 데이터 활용 및 분석)*
 
 ---
 
 ## 프로젝트 개요
 
-**Axon** — 대규모 선착순(FCFS) 캠페인 이벤트 처리 플랫폼
-
 | 항목 | 내용 |
 |------|------|
-| 아키텍처 | MSA 2-Service (entry-service ↔ Kafka ↔ core-service) |
-| 기술 스택 | Java 21, Spring Boot 3, Kafka (KRaft 3 Broker), MySQL 8, Redis, ES 8.15 |
-| 인프라 | K8s (K2P 클러스터: 워커 2대, 각 4vCPU/16GB) |
-| 모니터링 | Prometheus, Grafana, Fluent Bit → Kibana |
-| 부하 실측 | 3,000 VU / Peak 2,900 RPS / 에러율 0.00% / 오버부킹 0건 |
+| **아키텍처** | MSA 기반 데이터 파이프라인 (entry-service ↔ Kafka ↔ core-service) |
+| **핵심 성과** | **3,000 VU 동시 접속 환경 수용** (Peak 2,900 RPS / 에러율 0%) |
+| **데이터 정합성** | Redis Lua 기반 Lock-free 설계로 **오버부킹 0건 달성** |
+| **지능형 분석** | RAG 및 Native Function Calling 기반 **마케팅 인사이트 챗봇** |
+| **기술 스택** | Java 21, Spring Boot 3, Kafka (KRaft), MySQL, Redis, ES 8 |
 
 ```mermaid
 flowchart LR
@@ -23,23 +23,14 @@ flowchart LR
     Entry -->|"비동기 전송"| Kafka{{"Kafka"}}
     Kafka --> Core["core-service"]
     Core --> MySQL[("MySQL")]
-    Core -->|"이벤트 발행"| ES[("Elasticsearch")]
-    ES --> Dashboard["대시보드"]
-    Dashboard --> LLM["AI Agent"]
+    ES --> Dashboard["대시보드 (SSE)"]
+    Dashboard --> AI["AI Agent (Hybrid)"]
 
     style Entry fill:#e1f5fe,stroke:#01579b;
     style Core fill:#e8f5e9,stroke:#2e7d32;
 ```
 
----
-
-### **Legend & Notation**
-
-- 🟥 **Red (Dashed)**: 병목 / 장애 전파 / 데이터 경합 (The Problem - BEFORE)
-- 🟩 **Green (Thick)**: 튜닝 / 격리 / 원자적 처리 (The Solution - AFTER)
-- 🟦 **Blue**: 일반적인 인프라 및 통신
-
----
+이 리포트는 대규모 트래픽 처리와 엔터프라이즈 데이터 무결성을 실증적으로 해결한 10가지 엔지니어링 케이스를 정리한 기술 포트폴리오입니다.
 
 ### **1. Lock 오버헤드 제거를 위한 Redis 기반 Lock-free 알고리즘 설계**
 
@@ -99,11 +90,11 @@ sequenceDiagram
 flowchart TD
     Consumer["Kafka Consumer<br/>flushBatch()"] --> BatchTry{"Batch 저장 시도"}
 
-    BatchTry -->|"성공"| Commit["✅ 커밋"]
-    BatchTry -->|"실패"| Retry["REQUIRES_NEW<br/>개별 재시도"]
+    BatchTry -->|"성공"| Commit["커밋"]
+    BatchTry -->|"실패"| Retry["REQUIRES_NEW 개별 재시도"]
 
     Retry -->|"성공 건"| Commit
-    Retry -->|"최종 실패"| DLQ["🚨 Dead Letter Queue"]
+    Retry -->|"최종 실패"| DLQ["Dead Letter Queue"]
 
     style BatchTry fill:#fff3e0,stroke:#e65100;
     style DLQ fill:#ffebee,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 5;
@@ -318,7 +309,7 @@ flowchart TD
 
 ---
 
-### **9. 할루시네이션 차단을 위한 RAG 기반 Function Calling 하이브리드 설계**
+### **9. 할루시네이션 관리를 위한 RAG 기반 Function Calling 하이브리드 설계**
 
 ### **[PHASE 1] Static RAG (지표 정합성 확보)**
 
@@ -345,17 +336,48 @@ flowchart TD
     style ToolCall fill:#e1f5fe,stroke:#01579b;
 ```
 
-- **문제 원인**
-    - 비전문가의 복잡한 대시보드 지표 해석 진입장벽 및 자연어 기반 실시간 질의 서비스 필요성 대두
-    - 단순 LLM 연동 시 AI가 DB에 직접 접근하여 쿼리를 생성할 때 발생하는 할루시네이션(환각) 및 데이터 보안 노출 리스크 분석
-    - 분석 API가 늘어남에 따라 모든 데이터를 프롬프트에 넣을 경우 Context Window 한계 초과 및 토큰 비용 급증 문제 직면
-- **해결 과정**
-    - **안정성 중심의 RAG에서 유연성 중심의 Function Calling으로의 단계적 아키텍처 진화.** 
-    - **[Initial RAG]**: 초기 4단계 퍼널 분석 등 고정된 지표에 대해서는 서버가 데이터를 사전 조회하여 주입하는 RAG 방식을 적용해 지연시간 최소화 및 100% 데이터 무결성 보장
-    - **[Evolution to Function Calling]**: 코호트, LTV, 행동 로그 등 분석 도구가 다양해짐에 따라, LLM이 질문의 의도를 파악하고 필요한 API만 선별적으로 호출하는 **Native Tool-Calling** 기능 도입. 이를 통해 불필요한 데이터 전송을 줄이고 토큰 비용을 60% 이상 절감하면서도 복잡한 다단계 추론 가능 구조로 고도화
-    - LLM에게는 직접적인 DB 접근 권한 대신 **'추상화된 분석 도구(Tools)'** 명세만 제공하여 보안성 확보와 할루시네이션 원천 차단 병행
-- **결과**
-    - "전환율이 왜 낮아?"라는 추상적 질문에 대해 LLM이 스스로 `get_campaign_dashboard`와 `get_cohort_analysis` 도구를 조합하여 원인을 진단하는 동적 분석 환경 구축
-    - 고정된 프롬프트 방식 대비 텍스트 처리 효율 개선 및 엔터프라이즈 마케팅 도메인에 최적화된 하이브리드 AI 인터페이스 정립
-    - API가 지속적으로 추가되어도 인터페이스 무수정 상태에서 신규 도구만 등록하면 분석 범위가 즉시 확장되는 'Plug & Play' 분석 아키텍처 확보
+- **문제 상황 분석**
+    - 대시보드 지표 해석을 위한 자연어 질의 서비스 필요성 확인
+    - LLM이 직접 DB에 접근할 때 발생하는 데이터 환각(Hallucination) 및 보안 리스크 제어 필요
+    - 분석 대상 데이터가 늘어남에 따라 모든 컨텍스트를 프롬프트에 주입할 때 발생하는 비용 및 성능 문제 검토
+- **해결 방식**
+    - **RAG와 도구 호출(Tool-Calling)을 결합한 하이브리드 추론 구조 설계.**
+    - **[Context RAG]**: 현재 보고 있는 페이지의 핵심 지표는 서버가 사전 조회하여 `[Current Context]`로 주입 (응답 속도 및 팩트 정합성 확보).
+    - **[Native Tool-Calling]**: 사용자가 다른 캠페인이나 상세 코호트 분석을 요청할 때, LLM이 스스로 필요한 API 도구를 선택하여 호출하는 구조 구현.
+    - **[Safety Guard Layer]**: AI가 호출하는 도구(예: `get_cohort_analysis`) 내부에서 무거운 실시간 집계 연산을 차단하고, 미리 계산된 배치 캐시(`ltv_batch`) 테이블만 조회하도록 강제하여 DB 부하 관리.
+- **구현 결과**
+    - 질문의 의도에 따라 지식(RAG) 검색과 도구(Agent) 실행을 유연하게 전환하는 하이브리드 엔진 구축
+    - API 가이드라인에 맞춘 도구 명세(Schemas) 제공으로 할루시네이션 발생 빈도 관리 및 보안성 확보
+    - 불필요한 전체 데이터 전송을 배제하고 필요한 시점에만 API를 호출하도록 설계하여 토큰 사용 효율 개선
+
+---
+
+### **10. 실시간 데이터 파이프라인 정합성 및 SSE 스트리밍 설계**
+
+```mermaid
+flowchart LR
+    User(("사용자 액션")) --> Entry["entry-service"]
+    Entry -->|"이벤트 발행"| Kafka{{"Kafka (Event Bus)"}}
+    Kafka -->|"컨슘 & 처리"| Core["core-service"]
+    Core -->|"지표 갱신"| Redis[("Redis Metrics")]
+    Core -->|"스트리밍"| SSE["SSEService (Emitter)"]
+    SSE -->|"실시간 푸시"| Dashboard["브라우저 대시보드"]
+
+    classDef success fill:#efe,stroke:#2a2,stroke-width:2px;
+    class Kafka,SSE success;
+```
+
+- **문제 상황 분석**
+    - 마케팅 스파이크 트래픽 발생 시, 수집된 데이터가 대시보드에 반영되기까지의 지연(Latency) 최소화 요구
+    - 브라우저의 반복적인 폴링(Polling) 요청이 서버 커넥션 부하를 가중시키는 병목 구조 확인
+    - 이벤트 발생 빈도가 불규칙한 환경에서 효율적으로 데이터를 밀어줄(Push) 수 있는 전송 모델 필요성 검토
+- **해결 방식**
+    - **단방향 스트리밍 프로토콜(SSE)과 이벤트 기반 아키텍처 결합.**
+    - **[Event-Driven Flow]**: 사용자 액션이 Kafka를 거쳐 Core 서비스에서 처리되는 순간, 해당 지표를 구독 중인 SSE Emitter를 통해 브라우저로 즉시 전송.
+    - **[Resource Optimization]**: 양방향 통신(WebSocket) 대비 오버헤드가 적은 SSE를 선택하여 대규모 대시보드 접속 환경에서의 서버 리소스 최적화.
+    - **[Data Pipeline Integrity]**: 스파이크 트래픽 유입 시에도 Kafka의 배압(Backpressure) 조절 기능과 연계하여 대시보드 데이터가 순차적으로, 누락 없이 갱신되도록 파이프라인 정합성 관리.
+- **구현 결과**
+    - 이벤트 발생 시점부터 대시보드 수치 갱신까지의 지연 시간을 최소화하여 준실시간 분석 환경 조성
+    - 서버 자원을 많이 점유하는 폴링 방식을 제거하고 SSE 단방향 채널을 통해 수천 명의 대시보드 동시 접속 수용 구조 확보
+    - 부하 테스트(k6) 시나리오와 연계하여 대량의 이벤트가 유입되는 상황에서도 대시보드 지표가 정합성 있게 상승함을 확인
 

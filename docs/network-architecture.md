@@ -33,43 +33,45 @@
 
 ```mermaid
 graph TD
-    User((👤 User))
+    User((User))
     
-    subgraph KT_Cloud_Zone
-        Firewall[🔥 Firewall<br>(Allow 30080)]
-        NAT[🔀 Static NAT<br>(210...202 -> Worker02)]
+    subgraph "KT Cloud Zone (External)"
+        Firewall["Firewall<br/>Allow Port 30080"]
+        NAT["Static NAT<br/>210...202 to Worker02"]
         
-        subgraph Worker_Nodes
-            Worker1[Worker Node 01]
-            Worker2[Worker Node 02<br>(Port 30080)]
+        subgraph "Worker Nodes"
+            Worker1["Worker Node 01<br/>172.25.0.171"]
+            Worker2["Worker Node 02<br/>172.25.0.172:30080"]
         end
     end
     
-    subgraph K8s_Cluster
-        Service[⚙️ Ingress Service<br>(NodePort: 30080)]
+    subgraph "Kubernetes Cluster (Internal)"
+        Service["Ingress Service<br/>NodePort: 30080"]
         
-        subgraph Ingress_Pods
-            Ingress1[Nginx Pod 1]
-            Ingress2[Nginx Pod 2]
+        subgraph "Ingress Controllers"
+            Ingress1["Nginx Ingress Pod 1"]
+            Ingress2["Nginx Ingress Pod 2"]
         end
         
-        subgraph Apps
-            Entry[Entry Service]
-            Core[Core Service]
+        subgraph "Microservices"
+            Entry["entry-service"]
+            Core["core-service"]
         end
     end
 
-    %% Flow
-    User -->|:30080| Firewall
+    %% Flow Details
+    User -->|Port 30080| Firewall
     Firewall --> NAT
-    NAT -->|Direct| Worker2
+    NAT -->|Forward to| Worker2
     
-    Worker2 --> Service
-    Service -->|Round Robin| Ingress1
-    Service -->|Round Robin| Ingress2
+    Worker2 -->|Internal Routing| Service
+    Service -->|Load Balance| Ingress1
+    Service -->|Load Balance| Ingress2
     
-    Ingress1 --> Entry & Core
-    Ingress2 --> Entry & Core
+    Ingress1 -->|Proxy Pass| Entry
+    Ingress1 -->|Proxy Pass| Core
+    Ingress2 -->|Proxy Pass| Entry
+    Ingress2 -->|Proxy Pass| Core
 ```
 
 ## 3. Internal Communication
