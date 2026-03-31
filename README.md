@@ -81,6 +81,7 @@ graph TB
 - **Cloud Platform**: KT Cloud K2P (Kubernetes to Production) 환경 기반.
 - **Network & Security**: Public IP를 특정 워커 노드에 1:1 매핑(Static NAT)하고, 방화벽 설정을 통해 특정 포트만 허용하는 폐쇄망 구조 지향.
 - **Middleware Cluster**: 고가용성을 위해 Kafka(KRaft), Redis, Elasticsearch를 K8s 내부 ClusterIP 서비스로 연동.
+- **배포 자동화 (CI/CD)**: GitHub Actions를 통해 메인 브랜치 푸시 시 Docker 이미지 빌드 및 K2P 클러스터로의 자동 배포를 수행하도록 구성했습니다.
 
 ---
 
