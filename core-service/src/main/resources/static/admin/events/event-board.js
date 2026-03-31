@@ -115,8 +115,17 @@
         <td class="px-4 py-4">
           <button class="text-neutral-900 hover:text-primary-600" data-event-edit="${event.id}">${event.name}</button>
         </td>
-        <td class="px-4 py-4">
-          <span class="px-2 py-1 text-xs font-medium rounded-full ${badgeClass(event.status)}">${translateStatus(event.status)}</span>
+        <td class="px-4 py-4" style="min-width: 120px; width: 120px;">
+          <div class="flex items-center flex-nowrap space-x-2">
+            <span class="relative flex h-2 w-2 flex-shrink-0">
+              ${event.status === 'ACTIVE' 
+                ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>' 
+                : '<span class="relative inline-flex rounded-full h-2 w-2 bg-neutral-300"></span>'}
+            </span>
+            <span class="text-sm font-bold whitespace-nowrap leading-none ${event.status === 'ACTIVE' ? 'text-green-700' : 'text-neutral-500'}" style="white-space: nowrap !important;">
+              ${translateStatus(event.status)}
+            </span>
+          </div>
         </td>
         <td class="px-4 py-4 text-sm text-neutral-700">${event.triggerType ?? '-'}</td>
         <td class="px-4 py-4 text-sm text-neutral-700">
