@@ -52,8 +52,8 @@ graph TB
     subgraph Core["Core Service (로직/분석)"]
         KafkaConsumer["Kafka Consumer (Batch)"]
         CampaignLogic["비즈니스 로직"]
-        DashboardLogic["분석/대시보드"]
         LLMController["AI 에이전트 (Gemini)"]
+        DashboardLogic["분석/대시보드"]
         MySQL[("MySQL")]
     end
 
@@ -74,9 +74,9 @@ graph TB
     CampaignLogic --> MySQL
     Kafka --> KafkaConnect
     KafkaConnect --> ES
+    LLMController --> MySQL
     DashboardLogic --> ES
     DashboardLogic --> MySQL
-    LLMController --> MySQL
 ```
 
 ### 2. 인프라 및 클라우드 구성
