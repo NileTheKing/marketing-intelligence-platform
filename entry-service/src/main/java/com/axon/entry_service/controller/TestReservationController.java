@@ -51,7 +51,6 @@ public class TestReservationController {
          * @return reservation result with success/failure status
          */
 
-        /**
         @PostMapping("/reserve/{userId}")
         public ResponseEntity<ReservationResult> testReserve(
                         @PathVariable Long userId,
@@ -85,23 +84,30 @@ public class TestReservationController {
 
                 if (result.isSuccess()) {
                         // For testing purposes, immediately trigger purchase creation in Core Service
-                        // This simulates the "Payment -> Purchase" flow without actual payment
-                        com.axon.messaging.dto.CampaignActivityKafkaProducerDto command = com.axon.messaging.dto.CampaignActivityKafkaProducerDto
-                                        .builder()
-                                        .campaignActivityId(request.getCampaignActivityId())
-                                        .userId(userId)
-                                        .productId(request.getProductId())
-                                        .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
-                                        .timestamp(Instant.now().toEpochMilli())
-                                        .quantity(1)
-                                        .build();
+                        // [AUTHENTIC DATA]: Introduce 15% payment dropout (churn) rate
+                        if (Math.random() > 0.15) {
+                                com.axon.messaging.dto.CampaignActivityKafkaProducerDto command = com.axon.messaging.dto.CampaignActivityKafkaProducerDto
+                                                .builder()
+                                                .campaignActivityId(request.getCampaignActivityId())
+                                                .userId(userId)
+                                                .productId(request.getProductId())
+                                                .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                                                .timestamp(Instant.now().toEpochMilli())
+                                                .quantity(1L)
+                                                .build();
 
-                        producerService.send(com.axon.messaging.topic.KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, command);
-                        log.info("Test: Triggered purchase creation for userId={} activityId={}", userId,
-                                        request.getCampaignActivityId());
+                                producerService.send(com.axon.messaging.topic.KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, command);
+                                log.info("Test: Triggered purchase creation for userId={} activityId={}", userId,
+                                                request.getCampaignActivityId());
+                        } else {
+                                log.info("Test: Simulating Payment Dropout for userId={} (Qualified but not Purchased)", userId);
+                                // [FIX]: Decrement Redis counter for dropouts so they don't occupy slots
+                                // and match dashboard real-time participants count.
+                                reservationService.rollbackReservation(request.getCampaignActivityId(), userId);
+                                log.info("Test: Rolled back Redis reservation for dropped out user={}", userId);
+                        }
                 }
 
                 return ResponseEntity.ok(result);
         }
-                        **/
 }

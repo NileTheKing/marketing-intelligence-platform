@@ -91,7 +91,7 @@ public class BehaviorEventService {
                 .size(0)
                 .trackTotalHits(t -> t.enabled(true)) // Fix: Enable accurate total hits count (no 10k limit)
                 .query(q -> q.bool(b -> b
-                        .filter(buildPageUrlFilter(activityId))
+                        .filter(buildActivityIdFilter(activityId))
                         .filter(buildMultiTriggerTypeFilter(triggerTypes))
                         .filter(buildTimeRangeFilter(start, end)))),
                 Void.class);
@@ -194,7 +194,7 @@ public class BehaviorEventService {
                 .index("axon.event.*")
                 .size(0)
                 .query(q -> q.bool(b -> b
-                        .filter(buildMultiActivityUrlFilter(activityIds))
+                        .filter(buildMultiActivityIdFilter(activityIds))
                         .filter(buildTimeRangeFilter(start, end))))
                 .aggregations("hourly_traffic", a -> a
                         .dateHistogram(h -> h
@@ -222,12 +222,11 @@ public class BehaviorEventService {
         return hourlyTraffic;
     }
 
-    private Query buildMultiActivityUrlFilter(java.util.List<Long> activityIds) {
+    private Query buildMultiActivityIdFilter(java.util.List<Long> activityIds) {
         return Query.of(q -> q
                 .bool(b -> {
                     for (Long id : activityIds) {
-                        b.should(s -> s
-                                .wildcard(w -> w.field("pageUrl.keyword").value("*campaign*activity/" + id + "*")));
+                        b.should(s -> s.term(t -> t.field("properties.activityId").value(id)));
                     }
                     return b;
                 }));
@@ -284,7 +283,7 @@ public class BehaviorEventService {
                 .size(0)
                 .trackTotalHits(t -> t.enabled(true)) // Fix: Enable accurate total hits count (no 10k limit)
                 .query(q -> q.bool(b -> b
-                        .filter(buildPageUrlFilter(activityId))
+                        .filter(buildActivityIdFilter(activityId))
                         .filter(buildTriggerTypeFilter(triggerType))
                         .filter(buildTimeRangeFilter(start, end)))),
                 Void.class);
@@ -298,12 +297,11 @@ public class BehaviorEventService {
         return response.hits().total().value();
     }
 
-    private Query buildPageUrlFilter(Long activityId) {
-        // pageUrl 필터 쿼리 작성 wildcard
+    private Query buildActivityIdFilter(Long activityId) {
         return Query.of(q -> q
-                .wildcard(w -> w
-                        .field("pageUrl.keyword")
-                        .value("*campaign*activity/" + activityId + "*")));
+                .term(t -> t
+                        .field("properties.activityId")
+                        .value(activityId)));
     }
 
     private Query buildTriggerTypeFilter(String triggerType) {

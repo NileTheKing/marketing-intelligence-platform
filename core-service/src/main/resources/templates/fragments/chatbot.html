@@ -1,4 +1,62 @@
 <div th:fragment="chatbot" id="chat-widget" class="fixed bottom-6 right-6 z-50">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        #chat-messages .markdown-body {
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        #chat-messages .markdown-body p { margin-bottom: 0.5rem; }
+        #chat-messages .markdown-body p:last-child { margin-bottom: 0; }
+        #chat-messages .markdown-body ul, #chat-messages .markdown-body ol {
+            margin-bottom: 0.5rem;
+            padding-left: 1.25rem;
+        }
+        #chat-messages .markdown-body li { margin-bottom: 0.25rem; }
+        #chat-messages .markdown-body strong { font-weight: 600; color: #1e40af; }
+        #chat-messages .markdown-body h1, #chat-messages .markdown-body h2, #chat-messages .markdown-body h3 {
+            font-weight: 700;
+            margin-top: 0.75rem;
+            margin-bottom: 0.5rem;
+            color: #111827;
+        }
+        #chat-messages .markdown-body h3 { font-size: 1rem; }
+        
+        /* Table Styles */
+        #chat-messages .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+            background: white;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+        #chat-messages .markdown-body th {
+            background: #f3f4f6;
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
+        }
+        #chat-messages .markdown-body td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        #chat-messages .markdown-body tr:last-child td { border-bottom: none; }
+        
+        #chat-messages .markdown-body hr {
+            border: 0;
+            border-top: 1px solid #e5e7eb;
+            margin: 0.75rem 0;
+        }
+        #chat-messages .markdown-body code {
+            background: #f3f4f6;
+            padding: 0.125rem 0.25rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
     <!-- Chat Button -->
     <button id="chat-toggle-btn"
         class="w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all duration-300 focus:outline-none transform hover:scale-110">
@@ -7,7 +65,7 @@
 
     <!-- Chat Window -->
     <div id="chat-window"
-        class="hidden absolute bottom-16 right-0 w-[450px] h-[85vh] max-h-[800px] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 origin-bottom-right transform scale-95 opacity-0">
+        class="hidden absolute bottom-16 right-0 w-[calc(100vw-2.5rem)] md:w-[450px] max-w-[450px] h-[85vh] max-h-[800px] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 origin-bottom-right transform scale-95 opacity-0">
 
         <!-- Header -->
         <div class="bg-blue-600 p-4 flex justify-between items-center text-white">

@@ -21,6 +21,9 @@ public class EntryReservationService {
     private final ApplicationEventPublisher eventPublisher;
     private final RedisScript<Long> reservationScript =
             new DefaultRedisScript<>(RESERVATION_LUA, Long.class);
+    private final RedisScript<Long> cancellationScript =
+            new DefaultRedisScript<>(CANCELLATION_LUA, Long.class);
+
     private static final String RESERVATION_LUA = """
         local added = redis.call('SADD', KEYS[1], ARGV[1])
         if added == 0 then
@@ -37,6 +40,15 @@ public class EntryReservationService {
         
         return count
     """;
+
+    private static final String CANCELLATION_LUA = """
+        local removed = redis.call('SREM', KEYS[1], ARGV[1])
+        if removed == 1 then
+            return redis.call('DECR', KEYS[2])
+        end
+        return -1
+    """;
+
     /**
      * Attempt to reserve a participation slot for a user in a campaign activity.
      *
@@ -104,6 +116,8 @@ public class EntryReservationService {
     /**
      * Removes a user's reservation from the participant set for the specified
      * campaign activity in Redis.
+     * This will also decrement the reservation counter if the user was actually
+     * removed.
      *
      * @param campaignActivityId the campaign activity identifier whose participant
      *                           set will be modified
@@ -112,7 +126,13 @@ public class EntryReservationService {
      */
     public void rollbackReservation(long campaignActivityId, long userId) {
         String userKey = String.valueOf(userId);
-        redisTemplate.opsForSet().remove(participantsKey(campaignActivityId), userKey);
+        String userSetKey = participantsKey(campaignActivityId);
+        String counterKey = counterKey(campaignActivityId);
+
+        redisTemplate.execute(
+                cancellationScript,
+                List.of(userSetKey, counterKey),
+                userKey);
     }
 
     /**

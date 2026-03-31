@@ -247,17 +247,17 @@ function updateActivityTable(activities) {
         const row = document.createElement('tr');
         row.className = "bg-white border-b hover:bg-gray-50 transition-colors duration-150";
         row.innerHTML = `
-            <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+            <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap text-left">
                 <a href="/admin/dashboard/${activity.activityId}" class="text-blue-600 hover:underline hover:text-blue-800 transition-colors">
                     ${activity.activityName}
                 </a>
             </td>
-            <td class="px-6 py-4 text-right">${formatNumber(activity.totalVisits)}</td>
-            <td class="px-6 py-4 text-right">${formatNumber(activity.totalEngages)}</td>
-            <td class="px-6 py-4 text-right font-semibold text-blue-600">${formatNumber(activity.engagementRate)}%</td>
-            <td class="px-6 py-4 text-right">${formatNumber(activity.totalPurchases)}</td>
-            <td class="px-6 py-4 text-right font-semibold text-green-600">${formatNumber(activity.conversionRate)}%</td>
-            <td class="px-6 py-4 text-right">${formatCurrency(activity.gmv)}</td>
+            <td class="px-6 py-4 text-center">${formatNumber(activity.totalVisits)}</td>
+            <td class="px-6 py-4 text-center">${formatNumber(activity.totalEngages)}</td>
+            <td class="px-6 py-4 text-center font-semibold text-blue-600">${formatNumber(activity.engagementRate)}%</td>
+            <td class="px-6 py-4 text-center">${formatNumber(activity.totalPurchases)}</td>
+            <td class="px-6 py-4 text-center font-semibold text-green-600">${formatNumber(activity.conversionRate)}%</td>
+            <td class="px-6 py-4 text-center">${formatCurrency(activity.gmv)}</td>
         `;
         tbody.appendChild(row);
     });

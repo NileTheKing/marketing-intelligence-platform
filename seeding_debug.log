@@ -1,0 +1,20 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧹 Step 1: Cleaning up existing data...
+mysql: [Warning] Using a password on the command line interface can be insecure.
+ ✅ DB, ES, Redis Cleaned.
+
+🏗️ Step 2: Seeding High-Impact Campaigns...
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+ ✅ Campaigns & Activities Seeded.
+🕒 Step 3: Generating 60-day History for Cohort Analysis (Activity 11)...
+📊 Generating funnel for Activity 11: 100 visits...
+..... Done.
+  ⏳ Shifting Activity 11 to 60 days ago...
