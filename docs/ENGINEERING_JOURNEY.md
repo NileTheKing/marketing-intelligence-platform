@@ -1,232 +1,304 @@
-# Axon: 데이터의 흐름을 비즈니스 가치로 연결하는 CRM 플랫폼 엔지니어링 여정
-> **오브젠(Obzen) 기업 연계 프로젝트: 고부하 트래픽 제어 및 지능형 마케팅 분석 시스템 구축**
+# Technical Portfolio: 고성능 마케팅 및 실시간 데이터 처리 시스템 설계
+> **3,000 VU 환경의 선착순 트래픽 제어와 비동기 분석 파이프라인 최적화 기록**
 
-"백엔드 기술이 실제 비즈니스 현장에서 어떻게 가치를 창출하는지 멘토들과 소통하며 그 매력을 직접 확인했습니다. 기술의 지향점은 결국 '고객의 만족'과 이를 통한 '비즈니스 수익성'에 있음을 깨달았습니다."
+본 포트폴리오는 Axon 플랫폼의 핵심 엔지니어링 사례를 다루는 기술 리포트입니다. Axon은 이커머스 프로모션 시 발생하는 **대규모 선착순(FCFS) 트래픽을 안정적으로 제어**하고, 유입된 고객의 행동 로그를 실시간으로 분석하여 **마케팅 수익성(LTV) 인사이트를 도출**하는 시스템입니다.
 
-Axon은 대규모 프로모션 시 발생하는 **초고부하 스파이크 트래픽(Peak 2,900 RPS)** 속에서 데이터 정합성을 사수하고, 정밀한 고객 분석을 통해 마케팅 의사결정을 돕는 지능형 CRM 플랫폼입니다. 
+단순한 기능 구현을 넘어, 3,000 VU(Peak 2,900 RPS)라는 극한의 상황에서 발생하는 병목을 어떻게 진단하고 기술적 트레이드오프를 거쳐 최적화했는지에 대한 해결 논리를 서술합니다.
 
-본 문서는 **기존 시스템 대비 수용량을 10배 확장**하고, **오버부킹 0건**의 완벽한 정합성을 달성하며 '서버 기술'을 '비즈니스 가치'로 연결해 나간 9가지 엔지니어링 기록입니다.
+**시스템 구조**: 트래픽 유입과 선착순 판정을 담당하는 **Entry-service**와 캠페인·구매 도메인 로직 및 영속성을 처리하는 **Core-service**, 두 서비스가 **Kafka**를 통해 비동기로 연결된 구조다. 이하 섹션들은 이 아키텍처 위에서 발생한 문제와 해결 과정을 다룹니다.
 
-> [!TIP]
-> - 상세 비즈니스 성과 및 실행 방법: [README.md](file:///Users/yangnail/dev/projects/skusw/axon/README.md)
-> - 개별 기술 컴포넌트 시각화: [PORTFOLIO_DIAGRAMS.md](file:///Users/yangnail/dev/projects/skusw/axon/docs/PORTFOLIO_DIAGRAMS.md)
+- 프로젝트 개요 깃허브링크: https://github.com/NileTheKing/marketing-intelligence-platform
 
 ---
 
-## I. 시스템 아키텍처 및 설계 맥락
-
-### 1. 서비스 논리 계층
-Axon의 아키텍처는 **'트래픽 수용부(Entry)'**와 **'비즈니스 처리부(Core)'**를 물리적으로 분리하고, 메시지 브로커(Kafka)를 통한 **배압 조절**을 구현하여 시스템 전체의 회복 탄력성을 확보하는 것을 목표로 합니다.
+## 1. 아키텍처 설계: 부하 완충을 위한 구조적 격리
 
 ```mermaid
-graph TB
-    subgraph Client["Edge Layer"]
-        Browser["UI (Thymeleaf/JS)"]
-        JSTracker["Event SDK (Custom)"]
+flowchart TD
+    subgraph BEFORE["BEFORE: 단일 동기 트랜잭션"]
+        direction LR
+        U1(("트래픽")) --> SVC["단일 서비스<br/>(선착순 확정 → 재고 차감 → 이력 업데이트 → 참여 기록)"]
+        SVC --> DB1[("MySQL")]
     end
 
-    subgraph Entry["Traffic Control (Entry-Service)"]
-        EntryController["Entry Controller"]
-        FastValidation["Fast Validation (Redis)"]
-        FCFSLogic["Atomic FCFS (Redis Lua)"]
-        EntryKafka["Kafka Producer"]
+    subgraph AFTER["AFTER: 계층 분리 + 비동기"]
+        direction LR
+        U2(("스파이크 트래픽")) --> Entry["Entry-Service<br/>(유입 제어)"]
+        Entry -->|"비동기 전송"| Kafka{{"Kafka<br/>(부하 완충)"}}
+        Kafka -->|"순차 소비"| Core["Core-Service<br/>(비즈니스 처리)"]
+        Core --> DB2[("MySQL")]
     end
-
-    subgraph MQ["Message Bus"]
-        Kafka[("Apache Kafka")]
-    end
-
-    subgraph Core["Business & Analytics (Core-Service)"]
-        KafkaConsumer["Batch Consumer"]
-        CampaignLogic["Business Strategy"]
-        LLMController["AI Agent (Gemini)"]
-        DashboardLogic["Analytics Dashboard"]
-        MySQL[("MySQL Master-Slave")]
-    end
-
-    subgraph Pipeline["Data Pipeline"]
-        KafkaConnect["Kafka Connect"]
-        ES[("Elasticsearch")]
-    end
-
-    %% Flow
-    Browser --> EntryController
-    JSTracker --> EntryController
-    EntryController --> FastValidation
-    EntryController --> FCFSLogic
-    FCFSLogic --> EntryKafka
-    EntryKafka --> Kafka
-    Kafka --> KafkaConsumer
-    KafkaConsumer --> CampaignLogic
-    CampaignLogic --> MySQL
-    Kafka --> KafkaConnect
-    KafkaConnect --> ES
-    LLMController --> MySQL
-    DashboardLogic --> ES
-    DashboardLogic --> MySQL
 ```
 
-### 2. 인프라 아키텍처
-본 플랫폼은 컨테이너 오케스트레이션 기반의 클라우드 환경에서 보안과 고가용성을 준수하여 설계되었습니다. 상세 인프라 명세는 [README.md](file:///Users/yangnail/dev/projects/skusw/axon/README.md)를 참고해 주시기 바랍니다.
+**문제**
+- 선착순 구매 이벤트 오픈 시점에 집중되는 스파이크 트래픽이 비즈니스 로직과 DB에 직접적인 충격을 주어 시스템 전체가 마비될 위험 확인.
+- 기존 단일 요청 흐름에서는 FCFS 선착순 확정, 재고 차감, 유저 구매 이력 업데이트, 이벤트 참여 기록이 하나의 동기 트랜잭션으로 연결되어 있어 DB 지연이 즉각적으로 사용자 응답 지연으로 전파되는 구조적 한계 노출.
+- 대량 유입 시 DB 커넥션 풀 고갈을 방지하기 위해 트래픽을 일시적으로 수용할 메시지 대기열 계층 부재.
 
-<p align="center">
-  <img src="../docs/assets/recordings/archi.png" width="850" alt="Axon Infrastructure Diagram">
-</p>
+**해결**
+- API Gateway 수준의 단순 Throttling 대신, 요청을 대기열에 수용하면서 시스템이 가용한 수준만큼 순차 처리하는 **Kafka 기반 Backpressure** 설계.
+- 시스템 복잡도는 증가하지만, DB 커넥션 풀을 보호하고 스파이크 트래픽을 평탄화(Traffic Smoothing)하여 가용성을 확보하는 것이 비즈니스 연속성 측면에서 적합하다고 판단.
 
----
-
-## II. 고부하 트래픽 제어 및 캠페인 확장성 설계
-
-### **1. Traffic Shielding: 부하 충격 완화를 위한 서비스 독립 설계**
-**Problem**
-- 마케팅 프로모션 시 발생하는 스파이크 트래픽이 비즈니스 로직과 DB에 직접적인 충격을 주는 구조적 취약성 확인.
-- 요청 수집과 처리가 강결합된 구조에서는 단일 장애점 발생 시 전체 서비스가 마비될 리스크 존재.
-- 대규모 유입 시 시스템 가동성을 유지하기 위해 트래픽을 일시적으로 수용할 메시지 버퍼링 계층의 부재.
-
-**Solution**
-- 트래픽 유입 제어와 로직 처리를 물리적으로 분리한 MSA 구조 채택.
-- 두 서비스 사이에 Kafka를 배치하여 시스템 간 결합도를 낮추고 배압 조절 기능 확보.
-- 메인 DB I/O 발생 전 Kafka를 충격 흡수 장치로 활용하여 안정적인 파이프라인 구축.
-
-**Result**
-- 급격한 트래픽 증가 시에도 핵심 로직 가동성을 100% 보호하며 시스템 전체의 회복 탄력성 확보.
-- **Value**: "비즈니스 로직과 상관없이 유입되는 대규모 트래픽을 입구에서 격리하여 메인 서비스 가동성을 100% 보호합니다."
+**결과**
+- Entry-service만 독립적으로 수평 확장(Scale-out) 가능한 구조 확보 — 트래픽 유입부(Entry)와 비즈니스 처리부(Core)의 배포 단위 분리.
+- Kafka 버퍼링을 통해 피크 타임에도 DB 커넥션 풀의 급격한 변동 없이 안정적인 메시지 소비 흐름 유지.
 
 ---
 
-### **2. Process Extensibility: 가변 비즈니스 로직 캡슐화를 위한 전략 패턴**
-**Problem**
-- 선착순, 쿠폰 발행 등 캠페인 유형이 추가될 때마다 if-else 분기문으로 인한 코드 복잡도 급증.
-- 특정 정책 수정이 전체 안정성을 위협하는 강한 결합도로 인해 신규 정책 도입 시 높은 Side-Effect 리스크 존재.
-- 중복되는 공통 로직과 산재된 예외 처리로 인해 비즈니스 요구사항을 신속하게 반영하기 어려운 구조적 한계 분석.
+## 2. 비즈니스 확장성: 객체지향 설계를 통한 유연성 확보
 
-**Solution**
-- 캠페인 유형별 특화 로직을 인터페이스로 추상화하고 각각의 독립된 클래스로 캡슐화하는 전략 패턴 도입.
-- 스프링의 `ApplicationContext`를 활용해 런타임 시점에 유형별 전략 빈을 동적으로 주입하는 팩토리 설계.
-- 공통 데이터 검증 및 로깅 구간은 템플릿화하여 추출하고, 변경이 잦은 비즈니스 규칙만 전략 객체로 분리.
+```mermaid
+flowchart TD
+    Consumer["Campaign Consumer"] -->|"Strategy Lookup"| Map["Strategy Map"]
+    Map --> FCFS["First-Come-First-Serve"]
+    Map --> Coupon["Coupon Issuance"]
+    Map --> General["General Activity"]
+```
 
-**Result**
-- 신규 캠페인 유형 추가 시 기존 코드 수정 없이 신규 전략 구현만으로 배포가 가능한 OCP 구조 확립.
-- **Value**: "신규 캠페인 요건이 발생할 때마다 시스템 중단이나 대규모 코드 수정 없이 즉각적인 비즈니스 대응이 가능합니다."
+**문제**
+- 선착순, 쿠폰 발행 등 캠페인 유형이 추가될 때마다 늘어나는 `if-else` 분기문으로 인해 코드 가독성과 유지보수성 저하.
+- 특정 유형의 로직 수정이 전체 Consumer에 영향을 줄 수 있는 강한 결합도로 인해 신규 정책 도입 시 사이드 이펙트 리스크 존재.
 
----
+**해결**
+- 캠페인 유형별 특화 로직을 `CampaignStrategy` 인터페이스로 추상화하고 독립된 구현체로 캡슐화하는 **전략 패턴(Strategy Pattern)** 도입.
+- 신규 정책 도입 시 기존 코드 수정 없이 구현체만 추가하는 **OCP(Open-Closed Principle)** 준수.
+- 스프링의 `ApplicationContext`가 전략 빈(Bean)을 자동 수집 → Consumer 생성 시 `Map<CampaignActivityType, CampaignStrategy>`(유형 식별자: FCFS, 쿠폰 발행 등)로 빌드하여 런타임 시점의 전략 디스패치 구현.
 
-### **3. Order Integrity: Kafka 소비 순서 불일치 해결을 위한 로직 전진 배치**
-**Problem**
-- 선착순 로직을 Core 서비스에서 처리할 경우, Kafka 비동기 소비 특성상 요청 도착 순서와 처리 순서의 괴리 발생.
-- Kafka 파티션 키를 사용하지 않는 환경에서 다중 컨슈머 처리 시 발생하는 레이스 컨디션으로 정합성 파괴 실측.
-- 마감 이후의 요청까지 Kafka를 거쳐 Core DB 도달 시 발생하는 불필요한 시스템 리소스 낭비 현상 진단.
-
-**Solution**
-- 정합성의 핵심인 선착순 판단 로직을 비동기 구간 이전인 요청 진입점(Entry-service)으로 전진 배치.
-- 요청 즉시 당첨 여부를 확정하고 성공 건만 Kafka로 발행하여 처리 순서와 상관없이 당첨 권한을 보장하도록 개선.
-- 선착순 마감 이후 호출은 즉각 Fail-fast 응답을 반환하도록 설계하여 배후 서비스 및 데이터베이스 리소스 보호.
-
-**Result**
-- 분산 처리 환경에서도 요청 도착 순서에 기반한 완벽한 선착순 정합성을 확보하여 오버부킹 발생 0건 달성.
-- **Value**: "마케팅 프로모션 시 실제 요청 순서에 따른 보상을 정확히 지급하여 이벤트 신규도와 고객 만족도를 사수합니다."
+**결과**
+- 신규 캠페인 유형 추가 시 기존 전략 코드 무수정으로 배포 가능한 구조 확립.
+- 정책별 로직이 물리적으로 분리되어 각 전략에 대한 독립적인 단위 테스트 가능.
 
 ---
 
-### **4. Atomic Concurrency: Redis Lua Script를 이용한 무정지 동시성 제어**
-**Problem**
-- 고부하 환경에서 'Read-Check-Write' 방식의 비원자적 연산으로 인해 한정 수량을 초과하는 데이터 불일치 리스크 확인.
-- 무거운 분산 락을 사용할 경우, 반복적인 네트워크 오버헤드로 인해 응답 속도가 저하되는 병목 분석.
-- 멀티 인스턴스 환경에서 스레드 점유 방식의 동시성 제어가 API 처리량 저하의 핵심 원인임을 진단.
+## 3. 정합성 최적화: 비동기 환경의 한계 극복 (1)
 
-**Solution**
-- 유저 중복 체크와 수량 차감(SADD + INCR)을 단일 연산으로 수행하는 Redis Lua 스크립트 기반 아키텍처 도입.
-- 별도의 락 라이브러리 없이 Redis의 싱글 스레드 특성으로 로직을 원자화하여 락 대기 시간을 구조적으로 제거.
-- 네트워크 단절 후 재시도 시의 중복 참여를 막기 위해 멱등성 검증 로직을 Lua 스크립트 내부에 결합하여 보호.
+```mermaid
+flowchart TD
+    subgraph Problem ["BEFORE: 로직이 Core에 위치"]
+        U1(("User1")) --"1번 요청"--> K1{{"Kafka"}}
+        U2(("User2")) --"2번 요청"--> K1
+        K1 --"2번 먼저 소비"--> C1["Core 정합성 검증"]
+    end
+    
+    subgraph Solution ["AFTER: 로직을 Entry로 전진"]
+        U3(("User1")) --"1번 요청"--> E1["Entry: 원자적 검증"]
+        U4(("User2")) --"2번 요청"--> E1
+        E1 --"1번 당첨 확정"--> K2{{"Kafka"}}
+    end
+```
 
-**Result**
-- 10,000건 이상의 동시 요청이 집중되는 상황에서도 오버부킹 0건을 유지하며 데이터 무결성을 성공적으로 실증.
-- **Value**: "초당 10,000건 이상의 동시 요청 속에서도 단 1건의 오차 없는 선착순 당첨을 보장하여 관리 리스크를 제거합니다."
+**문제**
+- 선착순 판단 로직이 비동기 구간(Core) 뒤에 위치할 경우, Kafka의 파티션 할당이나 네트워크 지연에 따라 실제 유입 순서와 처리 순서가 뒤바뀌는 현상 발생.
+- 먼저 응모한 유저가 낙첨되고 나중에 응모한 유저가 당첨되는 정합성 오류를 부하 테스트 중 실측하여 확인.
+- 마감 이후의 요청까지 Kafka를 거쳐 Core DB에 도달하는 불필요한 리소스 낭비.
 
----
+**해결**
+- Kafka 파티션 키를 통한 순서 보장은 리밸런싱이나 장애 상황에서 완벽하지 않으므로, 판정 시점 자체를 유입 시점과 일치시키는 **전진 배치(Forward Placement)** 단행.
+- Entry에서 즉각적인 원자적 판정을 내리고 성공한 건만 Kafka로 발행 — 이후 비동기 소비 순서와 무관하게 당첨 권한 보장.
+- 선착순 마감 이후 요청은 Entry에서 즉각 Fail-fast 응답 반환하여 배후 서비스 보호.
 
-### **5. Network Tuning: Listen Backlog 증설을 통한 Connection Storm 대응**
-**Problem**
-- k6 부하 테스트 중 300 VU 임계점에서 대량의 Connection Reset 및 Timeout 장애 발생 진단.
-- 리눅스 커널의 기본 TCP Listen Backlog(128) 임계치를 초과하는 SYN 패킷 유입으로 시스템 입구에서 드랍 발생 확인.
-- 폭발적으로 몰리는 커넥션 생성 요청(Connection Storm)이 앱 도달 전의 전송 계층에서 병목을 유도함을 인지.
-
-**Solution**
-- 호스트 서버 및 K8s 노드 커널의 `net.core.somaxconn` 파라미터를 128에서 1024로 확장하여 대기열 확보.
-- Ingress Nginx 설정에서 `keep-alive` 및 `accept-count`를 조정하여 TCP 연결 수립 비용 최적화 전략 적용.
-- 서비스 메시 전 구간에서 3-Way Handshake 부하를 완화할 수 있도록 연결 유지 시간을 비즈니스 여정에 맞춰 튜닝.
-
-**Result**
-- 초기 실패 지점(300 VU)을 돌파하여 3,000 VU(Peak 2,900 RPS) 환경을 에러 0.00%로 수용하는 데 성공.
-- **Value**: "대규모 광고 집행 시 발생하는 병목 현상을 네트워크 계층에서 사전 차단하여 광고 효율 손실을 방지합니다."
-
----
-
-### **6. Batch Resilience: REQUIRES_NEW 전파 속성을 이용한 트랜잭션 오염 차단**
-**Problem**
-- Kafka 컨슈머가 메시지를 일괄 저장할 때, 단 1건의 데이터 예외가 전체 배치를 롤백시키는 '배치 오염' 장애 발견.
-- 실패한 배치의 무한 재시도로 인해 컨슈머 랙(Lag)이 누적되고 전체 데이터 파이프라인이 중단되는 리스크 확인.
-- 단순 전체 롤백 전략은 특정 데이터 결함이 전체 가용성을 해치게 두는 구조적 취약점이 있음을 진단.
-
-**Solution**
-- `Propagation.REQUIRES_NEW` 전파 속성을 활용해 배치 실패 시 각 메시지를 독립 트랜잭션으로 격리하여 개별 재시도.
-- 배치를 순회하며 개별 저장 시도 중 발생하는 예외를 Catch하여 성공 건만 최종 커밋하는 폴백 구조 구축.
-- 최종 실패 데이터는 Dead Letter Queue(DLQ)로 즉각 격리하여 메시지를 영구 보존하고 파이프라인 연속성 확보.
-
-**Result**
-- 대량 적재 중 발생한 국소적 결합이 전체 가용성을 해치지 않도록 장애 범위를 완전히 차단하고 유실률 0% 달성.
-- **Value**: "일부 데이터 결함으로 인한 파이프라인 중단을 방지하여 실시간 분석 리포트의 연속성을 보장합니다."
+**결과**
+- 다중 Consumer 환경에서 유입 순서 역전 0건 (k6 검증).
+- k6 기준 10,000건 요청 중 200건(2%)만 Core에 도달, **98%를 Entry에서 Fail-fast 처리** — DB와 Core 서비스 부하를 구조적으로 차단.
+- DB 접근 없이 메모리 기반 검증으로 즉각 응답하여 피크 타임 응답 속도 개선.
 
 ---
 
-## III. 도메인 이해 기반의 지능형 분석 시스템 구현
+## 4. 정합성 최적화: 비동기 환경의 한계 극복 (2)
 
-### **7. Lock Mitigation: 비즈니스 정합성과 성능을 양립하는 지연 재고 정산**
-**Problem**
-- 구매 확정 시 상품 재고와 유저 요약을 즉시 업데이트할 때 발생하는 빈번한 DB Row-Lock 경합으로 인한 성능 저하.
-- 인기 상품의 경우 특정 행에 수천 개의 트랜잭션이 집중되어 커넥션 스톨 및 응답 지연의 핵심 병목 분석.
-- 성능과 정합성이라는 상충 가치를 양립하기 위해 실시간 강한 정합성 유지 방식의 한계를 인지하고 돌파구 모색.
+```mermaid
+sequenceDiagram
+    participant App as Entry-Service
+    participant Redis as Redis (Single Thread)
+    App->>Redis: EVAL reservation.lua (UserId)
+    Note right of Redis: 1. SADD (중복 체크)<br/>2. INCR (수량 차감)<br/>3. 한도 확인
+    Redis-->>App: OK (Atomic Response)
+    App-)Kafka: 성공 이벤트 발행
+```
 
-**Solution**
-- 강한 정합성 대신 구매 로그라는 명확한 근거를 기반으로 사후에 정산하는 결과적 일관성 모델 도입.
-- 메인 비즈니스 트랜잭션 내의 인라인 업데이트를 의도적으로 비활성화하여 DB 쓰기 부하와 Row-Lock 경합을 원천 제거.
-- `@TransactionalEventListener`를 활용해 기록 시점과 정산 시점을 물리적으로 분리하는 비동기 지연 업데이트 아키텍처 구축.
+**문제**
+- Section 3의 Forward Placement로 선착순 순서 역전 문제를 해결한 뒤, Entry에서 사용하는 FCFS 카운터 연산 방식에서 별도의 정합성 문제 발견.
+- 기존 구현: `INCR(카운터 증가) → 오버부킹 여부 확인 → 오버부킹 시 DECR(복구)`의 3-step 연산.
+- Redis는 싱글스레드 기반이므로 이 시퀀스에서 동시성으로 인한 오버부킹 자체는 발생하지 않음.
+- 단, INCR 성공 후 네트워크 단절이나 프로세스 크래시 발생 시 DECR 복구가 실행되지 않아 **Ghost Reservation(유령 선점)** 발생 — 카운터는 점유됐지만 실제 참여자는 없는 상태. 이 오차가 누적되면 실제 참여 가능 재고가 카운터보다 높아지는 재고 정합성 오류 유발.
 
-**Result**
-- 재고 테이블에 집중되던 Lock 경합을 제거함으로써 피크 타임 응답 속도를 개선하고 시스템 확장성 대폭 확보.
-- **Value**: "인기 상품의 DB 경합을 제거하여 마케터가 이벤트 중에도 지연 없이 실시간 지표를 확인할 수 있게 합니다."
+**해결**
+- 복구 로직의 실패 가능성 자체를 없애기 위해 `SADD(중복 체크) + INCR(수량 차감) + 한도 확인`을 **단일 Lua 스크립트**로 원자화.
+- Redis는 Lua 스크립트를 단일 명령으로 처리 — 스크립트 실행 도중 다른 커맨드가 끼어들 수 없으므로 중간 상태 자체가 발생하지 않아, DECR 복구 로직이 불필요해짐.
+- 네트워크 재시도 시 발생하는 중복 참여를 막기 위한 **멱등성(Idempotency)** 검증(`SADD`)을 동일 스크립트 내에 결합.
 
----
-
-### **8. Query Optimization: 분석 성능 향상을 위한 수집 시점 역정규화 설계**
-**Problem**
-- 수천만 건의 로그가 적재된 Elasticsearch 대시보드 조회 시, Join 없는 집계 연산 불가로 인한 심각한 렌더링 지연 발생.
-- 정규화 구조 저장 시 조회 시점마다 대규모 인덱스 교차 참조가 발생하며, 이는 활동 수 증가에 따라 성능이 선형적 저하.
-- 실시간 의사결정이 중요한 분석 도메인 특성상 1~2초 이내의 빠른 대시보드 응답을 보장하기 위한 모델 재구조화 인지.
-
-**Solution**
-- 저장 시점 정규화 대신 수집 시점(SDK/Entry)에서 캠페인 정보를 태깅하는 설계적 역정규화 단행.
-- ES에서 조인이나 다단계 집계 없이 단일 인덱스 쿼리 및 단순 버킷 집계만으로 통계를 산출하도록 규격화.
-- 분석을 위한 메타데이터를 이벤트 페이로드에 선제적으로 포함시켜 서버 측의 연산 부담과 ETL 오버헤드 원천 제거.
-
-**Result**
-- 쿼리 시점의 연산을 수집 시점으로 전이시켜 대시보드 통합 KPI 조회 성능을 이전 대비 440% 가시적으로 향상.
-- **Value**: "수백만 건의 대용량 데이터를 즉각적으로 집계하여 마케터가 데이터 추출 대기 없이 인사이트를 도출하도록 돕습니다."
+**결과**
+- Ghost Reservation 0건 — 원자 연산으로 중간 실패 상태 없으므로 카운터와 실제 참여자 수가 항상 일치.
+- k6 10,000+ 동시 요청에서 오버부킹 0건.
+- Redis 호출 3회 → Lua 스크립트 1회로 감소.
 
 ---
 
-### **9. Intelligence Logic: 하이브리드 RAG 및 Tool-Calling 기반 AI 리포팅**
-**Problem**
-- AI 에이전트가 지표를 해석할 때 최신 원천 데이터와의 정합성을 확보하지 못해 발생하는 데이터 환각(Hallucination) 현상 발생.
-- 모든 캠페인 데이터를 프롬프트에 직접 주입할 경우, 불필요한 토큰 소모량이 급증하고 컨텍스트 윈도우 제한으로 인한 분석 품질 저하 직면.
-- LLM이 직접 DB에 접근할 때 발생하는 보안 리스크와 실시간 집계 쿼리로 인한 메인 데이터베이스 부하 가중 우려.
+## 5. 적재 신뢰성: 장애 파급 차단 및 트랜잭션 연쇄 롤백 전략
 
-**Solution**
-- 정적 지식 검색(RAG)과 필요한 시점에 특정 API만 호출하는 기능 호출(Tool-Calling)을 결합한 하이브리드 추론 구조 설계.
-- 사용자 질문의 의도(특정 액티비티 비교 등)를 분석하여 전체 데이터가 아닌 타겟팅된 데이터만 선택적으로 조회하는 지능형 라우팅 구현.
-- **Safety Guard Layer**: AI 도구 호출 시 원천 DB의 실시간 조회를 차단하고, 미리 계산된 배치 캐시 테이블만 참조하도록 강제하여 인프라 보호.
+```mermaid
+flowchart TD
+    Consumer["Kafka Consumer (20개 배치)"] --> Loop["개별 메시지 처리 루프"]
+    subgraph ParentTX ["참여 기록 트랜잭션"]
+        Loop --> Entry["1. 참여 기록 저장<br/>(CampaignActivityEntry)"]
+        Entry --> Event["구매 이벤트 발행"]
+        subgraph ChildTX ["구매 트랜잭션 (REQUIRES_NEW)"]
+            Event --> Purchase["2. 구매 처리<br/>(Purchase 저장 + UserSummary 갱신)"]
+        end
+    end
+    ChildTX --"예외 발생"--> Rollback["참여 기록까지 연쇄 롤백"]
+    ChildTX --"성공"--> Commit["최종 커밋"]
+    Rollback --> DLT["데드 레터 토픽(DLT) 격리"]
+```
 
-**Result**
-- 리소스 최적화: 데이터 전수 주입 방식 대비 질문 당 평균 **토큰 소모량을 약 80% 절감**하고, 응답 대기 시간 단축.
-- 인프라 가용성 확보: 분석을 위한 DB 조회 범위를 필요한 ID로 국소화하고 캐시를 우선 참조하게 함으로써 **메인 DB 부하를 약 70% 이상 경감**.
-- **Value**: "자연어 기반의 정밀한 리포트 생성을 지원하여 데이터 접근 문턱을 낮추고 마케팅 전략 수립 시간을 단축합니다."
+**문제**
+- Kafka 메시지 소비 시 **'참여 기록 저장'**과 **'구매 처리(구매 내역 저장 및 유저 요약 갱신)'**가 연쇄적으로 수행되는 구조임.
+- 20개 단위 배치 처리 중 단 1건의 구매 처리 예외가 전체 배치를 롤백시켜 정상적인 타 유저의 적재까지 중단시키는 '배치 오염' 발생.
+- 초기 `AFTER_COMMIT` 검토 시 구매 실패에도 참여 기록만 남는 데이터 불일치 위험 확인 및 정합성 사수를 위한 연쇄 롤백 구조의 필요성 진단.
+
+**해결**
+- **정합성 사수**: `BEFORE_COMMIT` 이벤트를 활용해 구매 실패 시 해당 참여 기록까지 함께 롤백되도록 설계하여 "구매 없는 참여" 발생 원천 차단.
+- **트랜잭션 격리**: `PurchaseService`에 `REQUIRES_NEW`를 적용해 배치 내 각 메시지를 독립 트랜잭션으로 격리하고 단건 장애의 배치 전체 파급 방지.
+- **장애 복구**: 최종 실패 건은 데드 레터 토픽(DLT)으로 분리하여 데이터 유실을 방지하고, 정상 데이터는 즉시 커밋하여 파이프라인 가용성 확보.
+
+**결과**
+- 일부 데이터 결함에도 전체 적재 프로세스가 중단되지 않음을 확인하여 데이터 유실률 0% 달성.
+- 배치 처리의 성능(Throughput)을 유지하면서도 개별 유저 단위의 정합성을 단일 DB 수준으로 보장함.
+- DLT 보존 체계를 통해 장애 원인 분석 및 재처리 기반을 마련하여 운영 안정성 확보.
+
+---
+
+## 6. 정합성 최종 수비: 분산 시스템의 데이터 무결성 설계
+
+```mermaid
+flowchart TD
+    Kafka --> Consumer
+    Consumer --> Lock{"Redisson Lock<br/>(EventId)"}
+    Lock -->|성공| DB{"멱등성 체크<br/>(Unique Key)"}
+    DB -->|신규| Process["데이터 적재 및 커밋"]
+    DB -->|중복| Skip["중복 처리 스킵"]
+```
+
+**문제**
+- Kafka의 'At-least-once' 전달 특성으로 인해 네트워크 재시도 시 동일한 성공 메시지가 중복 소비될 가능성 상존.
+- 다중 Consumer 환경에서 동일 이벤트 ID에 동시 접근 시 레이스 컨디션으로 이중 결제나 이중 적재가 발생할 정합성 리스크 확인.
+- DB Unique 제약 조건만으로는 선행 작업(재고 차감 등)의 중복 실행을 막을 수 없어 상위 레벨의 동시성 제어 필요.
+
+**해결**
+- **Redisson 분산 락**을 도입하여 동일한 이벤트 ID에 대해 한 번에 하나의 Consumer만 접근하도록 인프라 레벨 동시성 제어 구현.
+- DB 레벨에 **멱등키(Idempotency Key)** 제약 조건을 추가하여 이미 처리된 건의 중복 저장을 이중으로 차단.
+- '하나의 이벤트는 오직 한 번만 처리되어야 한다'는 분산 시스템의 기본 정합성 원칙을 최우선으로 설계.
+
+**결과**
+- k6 부하 테스트 및 Consumer 재기동 시나리오에서 중복 적재 0건.
+- 인프라 레벨의 공격적인 재시도 전략을 안전하게 수립할 수 있는 기반 확보.
+
+---
+
+## 7. 쓰기 병목 해소: 지연 동기화를 통한 Throughput 극대화
+
+```mermaid
+flowchart LR
+    P[("구매 로그 테이블")] --"Single Source of Truth"--> S["스케줄러 / 이벤트"]
+    S --"비동기 배치 정산"--> Stock[("재고 테이블")]
+```
+
+**문제**
+- 구매 확정 시 상품 재고와 유저 요약을 실시간 업데이트할 때 발생하는 빈번한 **DB Row-Lock 경합**이 응답 지연의 주요 원인임을 확인.
+- 인기 상품(Hot-Spot)의 경우 특정 행에 트랜잭션이 집중되어 커넥션 풀이 고갈되는 성능 임계점 노출.
+- Strong Consistency를 유지하는 방식으로는 초당 수천 건의 쓰기 요청을 감당할 수 없음을 부하 테스트를 통해 진단.
+
+**해결**
+- 실시간 강한 정합성 대신 구매 로그를 근거로 사후 정산하는 **Eventual Consistency** 모델 채택.
+- 메인 결제 트랜잭션 내 인라인 업데이트를 의도적으로 제거하여 DB 쓰기 부하와 Row-Lock 경합을 줄이고, 정합성의 근거(Single Source of Truth)가 되는 구매 로그 적재에만 집중.
+- **`@TransactionalEventListener`**로 기록 시점과 정산 시점을 물리적으로 분리하여 재고·유저 요약(UserSummary — 마지막 구매일, 누적 구매액 등 집계 테이블) 업데이트를 비동기 후처리로 이관.
+
+**결과**
+- 재고 테이블 Row-Lock 경합 제거로 피크 타임 응답 속도 개선 및 DB 커넥션 풀 가동률 안정화.
+- 장애 발생 시에도 구매 로그 기반의 재정산이 가능한 복구 구조 확보.
+
+---
+
+## 8. 조회 성능 최적화: 수집 시점 역정규화 설계
+
+```mermaid
+flowchart LR
+    subgraph BEFORE["BEFORE: N+1 집계"]
+        A1["Activity 1 조회"] --> AGG["백엔드 합산"]
+        A2["Activity 2 조회"] --> AGG
+        AN["Activity N 조회"] --> AGG
+    end
+
+    subgraph AFTER["AFTER: 역정규화 + 단일 집계"]
+        SDK["JS SDK (캠페인 메타 포함)"] --> Entry2 --> Kafka2 --> ES[("ES 인덱스")]
+        ES --> Q["단일 버킷 집계"]
+    end
+```
+
+**문제**
+- Campaign은 여러 CampaignActivity의 집합으로 구성. 캠페인 레벨 대시보드 조회 시 해당 Campaign에 속한 모든 Activity를 각각 쿼리한 뒤 백엔드에서 합산하는 방식이었음.
+- Activity 수가 늘어날수록 쿼리 수가 선형으로 증가하는 N+1성 연산으로 조회 지연과 타임아웃 발생.
+- 분석 워크로드와 OLTP 워크로드가 동일 DB 자원을 경합하며 서로의 성능을 저하시키는 리소스 간섭 현상 실측.
+
+**해결**
+- 개별 Activity 조회 후 합산하는 방식 대신, 데이터 수집 단계(JS SDK)에서 `campaign_id`, `activity_id` 등 메타데이터를 이벤트 페이로드에 미리 포함하여 전송하는 **의도적 역정규화(Denormalization)** 단행.
+- Elasticsearch에서 단일 인덱스 쿼리와 버킷 집계만으로 캠페인 레벨 통계 산출 가능 — 백엔드 N+1 집계 연산 제거.
+- 분석용 저장소(ES)와 처리용 저장소(MySQL)의 책임 분리로 OLAP/OLTP 리소스 간섭 제거.
+
+**결과**
+- 대시보드 주요 KPI 조회 성능 **440% 향상 (실측)**.
+- 피크 타임에도 데이터 발생부터 대시보드 반영까지의 지연 시간 최소화.
+
+---
+
+## 9. AI 에이전트 최적화: RAG와 Function Calling의 결합
+
+```mermaid
+flowchart TD
+    User --> Server["AI 에이전트"]
+    Server -->|"1. 의도 분석"| LLM["Gemini"]
+    LLM -->|"2. 도구 선택 및 호출"| Tool["get_global_dashboard<br/>get_cohort_analysis 등"]
+    Tool -->|"3. Safety Guard"| Cache["LTV 배치 캐시"]
+    Cache --> LLM --> User
+```
+
+**문제**
+- Campaign/Activity 단위 질문("이 캠페인의 전환율은?")은 현재 대시보드 데이터를 RAG 컨텍스트로 주입하여 LLM이 바로 답변 가능.
+- 하지만 "이번 달 전체 캠페인 중 LTV/CAC 비율이 가장 높은 곳은?" 같은 Overview 수준의 질문은 컨텍스트에 없는 데이터를 요구. 모든 캠페인 데이터를 프롬프트에 Full Injection하면 캠페인당 Activity 수 × KPI 수 × 행동 로그 집계 데이터가 모두 포함되어 컨텍스트 크기가 선형으로 증가 — 컨텍스트 윈도우 제한 및 토큰 비용 급증.
+- LLM이 원천 데이터 없이 수치를 추론할 경우 Hallucination 위험, 실시간 DB 직접 접근은 OLTP 부하 가중 우려.
+
+**해결**
+- 정적 지식 검색(RAG)과 **Native Function Calling**을 결합한 하이브리드 추론 엔진 설계.
+- Overview 수준 질문 시 LLM이 스스로 필요한 도구(`get_global_dashboard`, `get_campaign_dashboard`, `get_cohort_analysis` 중 선택)를 호출 — 질문의 의도에 맞는 데이터만 가져오는 구조.
+- **Safety Guard Layer**: LLM 도구 호출 시 실시간 DB 조회를 차단하고 사전 계산된 LTV Batch 캐시 테이블만 참조하도록 강제 — 분석 쿼리의 OLTP 부하를 구조적으로 차단.
+
+**결과**
+- Full Context 주입 대비 토큰 소모 절감 (추정: 약 80% — Activity KPI·행동 로그 집계를 포함한 전체 컨텍스트 대비, Function Calling 시 특정 질문에 필요한 집계 데이터만 조회하는 구조적 차이에서 기인).
+- 실시간 집계 쿼리 대신 LTV Batch 캐시 우선 참조로 메인 DB 부하 경감 (추정: 약 70% — 월별 사전 계산된 배치 테이블이 실시간 Purchase 테이블 집계를 대체).
+- 구조화된 API 응답 기반 추론으로 수치 관련 Hallucination 방어.
+
+---
+
+## 10. 비즈니스 가치 창출: 코호트 기반 LTV 분석 파이프라인
+
+```mermaid
+flowchart LR
+    Cohort["유입 코호트 정의"] --> Track["재구매 이력 추적"]
+    Track --> Calc["LTV / CAC 산출"]
+    Calc --> Batch["배치 캐시 적재"]
+    Batch --> Insight["AI 전략 리포트 연동"]
+```
+
+**문제**
+- 선착순 이벤트로 유입된 고객의 단기 전환 성과를 넘어, 마케팅 투자가 장기 수익성(LTV)으로 이어지는지 판단할 수 있는 정량적 지표 부재.
+- 유입 고객별 재구매 이력을 대시보드 조회 시마다 실시간으로 집계하는 방식은 쿼리 비용과 서비스 가용성 모두 문제.
+- 30일/90일/365일 단위의 생애 가치 성장을 시계열로 가공하는 프로세스 부재.
+
+**해결**
+- 실시간 집계는 서비스 DB에 부하를 주므로 Read Replica 분리를 검토했으나, LTV 코호트 집계 자체가 전체 구매 이력을 스캔하는 무거운 쿼리라 분리된 읽기 전용 인스턴스에서도 서비스에 영향을 줄 수 있다고 판단 → 서비스 트래픽이 없는 새벽 시간대에 실행하는 **일 단위 배치** 방식으로 결정.
+- 유입 시점(Cohort)을 기준으로 고객군을 그룹화하고, 기간별 누적 매출 및 획득 비용(CAC)을 자동 추적하는 **코호트 분석 엔진** 설계.
+- 배치 결과를 대시보드 및 AI 에이전트(Section 9)와 연동하여 캠페인 ROI를 정량 수치 기반으로 즉각 판단할 수 있는 의사결정 보조 시스템 구성.
+
+**결과**
+- 캠페인 효율성(LTV/CAC Ratio)을 정량화하여 수익성 기반의 마케팅 예산 재분배 의사결정 지원.
+- 배치 캐시 활용으로 코호트 분석 조회 시 DB 직접 집계 없이 안정적인 지표 제공 구조 확보.
