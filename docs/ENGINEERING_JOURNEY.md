@@ -302,3 +302,35 @@ flowchart LR
 **결과**
 - 캠페인 효율성(LTV/CAC Ratio)을 정량화하여 수익성 기반의 마케팅 예산 재분배 의사결정 지원.
 - 배치 캐시 활용으로 코호트 분석 조회 시 DB 직접 집계 없이 안정적인 지표 제공 구조 확보.
+
+---
+
+## 11. 배치 연산 최적화: Java 집계 → SQL 오프로딩
+
+```mermaid
+flowchart LR
+    subgraph BEFORE["BEFORE: Java 인메모리 집계"]
+        DB1[("purchases 전체 로드")] --> Java["Java 루프\n(월별 필터 + 집계)"]
+    end
+
+    subgraph AFTER["AFTER: SQL 집계 오프로딩"]
+        DB2[("purchases")] -->|"WHERE user_id IN (...)\nAND purchase_at BETWEEN"| SQL["DB 엔진\nSUM / COUNT / COUNT DISTINCT"]
+        SQL --> Result["집계 결과 1행 반환"]
+    end
+```
+
+**문제**
+- 코호트 LTV 배치 작업 시 기존 구현은 `findByUserIdIn()`으로 코호트 전체 구매 이력을 메모리에 적재한 뒤, Java 루프로 월별 매출·주문 수·활성 유저 수를 직접 집계하는 방식.
+- 복합 인덱스 `(user_id, purchase_at)`가 구성되어 있었으나, 월별 범위 조건(`purchase_at BETWEEN`)이 Java 레이어에서만 적용되어 인덱스의 두 번째 컬럼이 활용되지 않는 구조적 낭비 존재.
+- 코호트 크기가 클수록 전체 구매 이력이 JVM 힙에 상주하여 GC 압박과 메모리 사용량이 선형으로 증가.
+
+**해결**
+- Java 루프 집계를 `NamedParameterJdbcTemplate` SQL 집계 쿼리로 이관.
+  - `SUM(price * quantity)`, `COUNT(*)`, `COUNT(DISTINCT user_id)`를 DB 엔진에서 직접 계산.
+  - `WHERE purchase_at >= :start AND purchase_at < :end` 조건을 SQL 레이어로 이동하여 복합 인덱스 `(user_id, purchase_at)` 풀 활용.
+- 증분 계산(offset > 0) 시 누적 LTV를 DB 재집계 없이 이전 달 배치 레코드 값에 이번 달 증분만 덧셈(`prevStat.getLtvCumulative().add(monthlyRevenue)`)하는 방식으로 월별 쿼리 수 최소화.
+
+**결과**
+- EXPLAIN ANALYZE 기준 스캔 rows 456 → 1 — 인덱스가 `user_id` 범위 필터에 이어 `purchase_at` 범위까지 풀 활용.
+- 배치 처리 시간 약 68% 단축 (로컬 환경 실측).
+- 메모리 상주 데이터 제거로 코호트 크기 확장 시에도 JVM 힙 사용량 안정적 유지.
