@@ -274,6 +274,56 @@ public class BehaviorEventService {
         return stats;
     }
 
+    /**
+     * 특정 기간 동안 특정 트리거(예: PAGE_VIEW) 이벤트를 특정 횟수 이상 발생시킨 유저와 상품 목록을 조회합니다.
+     */
+    public java.util.Map<Long, java.util.List<Long>> getHighlyEngagedUsersForProduct(
+            LocalDateTime start, LocalDateTime end, String triggerType, int threshold) throws IOException {
+
+        SearchResponse<Void> response = elasticsearchClient.search(s -> s
+                .index("axon.event.*")
+                .size(0)
+                .query(q -> q.bool(b -> b
+                        .filter(buildTriggerTypeFilter(triggerType))
+                        .filter(buildTimeRangeFilter(start, end))
+                ))
+                .aggregations("by_user", a -> a
+                        .terms(t -> t.field("userId").size(10000))
+                        .aggregations("by_product", sub -> sub
+                                .terms(t -> t.field("properties.productId").size(1000))
+                                .aggregations("filter_by_count", filterAgg -> filterAgg
+                                        .bucketSelector(bs -> bs
+                                                .bucketsPath(bp -> bp.dict(java.util.Map.of("count", "_count")))
+                                                .script(script -> script.inline(in -> in.source("params.count >= " + threshold)))
+                                        )
+                                )
+                        )
+                ),
+                Void.class
+        );
+
+        java.util.Map<Long, java.util.List<Long>> result = new java.util.HashMap<>();
+
+        if (response.aggregations() != null && response.aggregations().containsKey("by_user")) {
+            for (co.elastic.clients.elasticsearch._types.aggregations.LongTermsBucket userBucket :
+                    response.aggregations().get("by_user").lterms().buckets().array()) {
+
+                Long userId = Long.valueOf(userBucket.key());
+                java.util.List<Long> productIds = new java.util.ArrayList<>();
+
+                for (co.elastic.clients.elasticsearch._types.aggregations.LongTermsBucket productBucket :
+                        userBucket.aggregations().get("by_product").lterms().buckets().array()) {
+                    productIds.add(Long.valueOf(productBucket.key()));
+                }
+
+                if (!productIds.isEmpty()) {
+                    result.put(userId, productIds);
+                }
+            }
+        }
+        return result;
+    }
+
     // == private helpers
     private Long getEventCount(Long activityId, String triggerType, LocalDateTime start, LocalDateTime end)
             throws IOException {

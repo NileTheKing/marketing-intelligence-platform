@@ -18,6 +18,7 @@ public class CampaignActivityKafkaProducerDto {
     private Long campaignActivityId;
     private Long userId;
     private Long productId;
+    private Long couponId;
     private Long timestamp;
     private Long quantity;
     private BigDecimal price;
