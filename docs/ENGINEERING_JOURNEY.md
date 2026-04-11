@@ -134,37 +134,42 @@ sequenceDiagram
 
 ---
 
-## 5. 적재 신뢰성: 장애 파급 차단 및 트랜잭션 연쇄 롤백 전략
+## 5. 비동기 적재 신뢰성: 정합성 한계 극복과 장애 격리(Fault Tolerance) 파이프라인
 
 ```mermaid
 flowchart TD
-    Consumer["Kafka Consumer (20개 배치)"] --> Loop["개별 메시지 처리 루프"]
-    subgraph ParentTX ["참여 기록 트랜잭션"]
-        Loop --> Entry["1. 참여 기록 저장<br/>(CampaignActivityEntry)"]
-        Entry --> Event["구매 이벤트 발행"]
-        subgraph ChildTX ["구매 트랜잭션 (REQUIRES_NEW)"]
-            Event --> Purchase["2. 구매 처리<br/>(Purchase 저장 + UserSummary 갱신)"]
-        end
+    subgraph Receiver ["메인 트랜잭션 (Entry DB)"]
+        Kafka["Kafka Consumer"] --> Entry["1. 참여 기록 (CampaignActivityEntry)"]
+        Entry -->|"BEFORE_COMMIT"| Buffer["2. 인메모리 버퍼 큐 (ConcurrentLinkedQueue)"]
     end
-    ChildTX --"예외 발생"--> Rollback["참여 기록까지 연쇄 롤백"]
-    ChildTX --"성공"--> Commit["최종 커밋"]
-    Rollback --> DLT["데드 레터 토픽(DLT) 격리"]
+    
+    subgraph Processor ["사후 정산 스케줄러 (비동기)"]
+        Buffer -->|"100ms Polling"| Batch["3. Micro-Batch Insert (50건)"]
+        Batch --"성공"--> Commit["정상 완료 (Throughput 극대화)"]
+        Batch --"단건 제약조건 위반 등"--> Fallback["4. 개별 단건 재시도 (REQUIRES_NEW 방화벽)"]
+        Fallback --"최종 실패"--> DLQ["5. DLQ 격리 (Poison Pill 차단)"]
+    end
+    
+    subgraph Audit ["새벽 대사 (Reconciliation) 배치"]
+        Entry --"네트워크/타임아웃 롤백 시"--> Ghost{"Ghost 유령 데이터 검출"}
+        Ghost -->|"NOT EXISTS 쿼리 전수조사"| Alert["6. 알람 및 수동 정산 (log.error)"]
+    end
 ```
 
 **문제**
-- Kafka 메시지 소비 시 **'참여 기록 저장'**과 **'구매 처리(구매 내역 저장 및 유저 요약 갱신)'**가 연쇄적으로 수행되는 구조임.
-- 20개 단위 배치 처리 중 단 1건의 구매 처리 예외가 전체 배치를 롤백시켜 정상적인 타 유저의 적재까지 중단시키는 '배치 오염' 발생.
-- 초기 `AFTER_COMMIT` 검토 시 구매 실패에도 참여 기록만 남는 데이터 불일치 위험 확인 및 정합성 사수를 위한 연쇄 롤백 구조의 필요성 진단.
+- **스레드 병목 및 강결합 현상:** 메인 수신 스레드가 메모리 버퍼 적재뿐만 아니라 DB 일괄 저장(`flushBatch`)까지 직접 수행함에 따라, DB 락(Lock) 등 지연 발생 시 앞단 Kafka 수신부까지 대기가 걸리는 결합 문제 확인.
+- **배치 오염 (Batch Contamination):** 트래픽 완화를 위해 50건 단위 배치(Micro-Batch) 구조를 도입했으나, 단 1건의 제약조건 오류 발생 시 전체 트랜잭션 배치가 롤백되어 타 유저의 정상 데이터까지 저장이 중단되는 리스크 존재.
+- **Ghost Data (고아 데이터) 이슈:** 선착순 응답 속도를 위해 `BEFORE_COMMIT` 시점에 이벤트를 조기 전송하는데, 간헐적인 DB 커밋 타임아웃 발생 시 '참여 기록(Entry)은 롤백되었으나 결제 기록(Purchase)만 남는' 데이터 정합성 불일치 가능성 내포.
 
-**해결**
-- **정합성 사수**: `BEFORE_COMMIT` 이벤트를 활용해 구매 실패 시 해당 참여 기록까지 함께 롤백되도록 설계하여 "구매 없는 참여" 발생 원천 차단.
-- **트랜잭션 격리**: `PurchaseService`에 `REQUIRES_NEW`를 적용해 배치 내 각 메시지를 독립 트랜잭션으로 격리하고 단건 장애의 배치 전체 파급 방지.
-- **장애 복구**: 최종 실패 건은 데드 레터 토픽(DLT)으로 분리하여 데이터 유실을 방지하고, 정상 데이터는 즉시 커밋하여 파이프라인 가용성 확보.
+**과정 및 해결**
+- **스레드 분리(Decoupling):** 수신 스레드는 큐(`ConcurrentLinkedQueue`)에 데이터를 담는 역할만 수행하고 즉시 반환되도록 분리. 실제 DB 일괄 적재는 100ms 주기의 독립 스케줄러 스레드가 전담하도록 설계하여 수신부와 영속성 처리부의 결합도를 낮춤.
+- **`REQUIRES_NEW` 적용 및 DLQ 도입:** 배치 삽입 실패 시, 50건의 데이터를 개별 `REQUIRES_NEW` 트랜잭션으로 분할하여 재시도하는(Fallback) 로직 추가. 여기서도 실패하는 문제 데이터는 Dead Letter Queue (DLQ)로 전송하여 정상 데이터의 처리 흐름을 보장.
+- **사후 대사(Reconciliation) 스케줄러 구현:** 성능을 위해 타협했던 'Ghost Data' 발생 가능성을 보완하기 위해, 유휴 시간대(새벽 3시)에 작동하는 비동기 대사 스케줄러 추가. `NOT EXISTS` 쿼리로 고아 데이터를 찾아내고 로깅하여 관리자가 인지 및 후속 처리할 수 있도록 조치.
 
 **결과**
-- 일부 데이터 결함에도 전체 적재 프로세스가 중단되지 않음을 확인하여 데이터 유실률 0% 달성.
-- 배치 처리의 성능(Throughput)을 유지하면서도 개별 유저 단위의 정합성을 단일 DB 수준으로 보장함.
-- DLT 보존 체계를 통해 장애 원인 분석 및 재처리 기반을 마련하여 운영 안정성 확보.
+- **가용성 향상:** 카프카 수신 스레드가 DB 트랜잭션 지연에 직접적인 영향을 받지 않게 되어, 피크 타임에도 메시지 수신 파이프라인의 처리 속도 유지.
+- **장애 격리:** 개별 트랜잭션 격리(`REQUIRES_NEW`)와 DLQ 구조를 통해 데이터 결함이 전체 배치 실패로 번지는 현상(Cascading Failure)을 방지.
+- **정합성과 성능의 균형 확보:** 완전한 실시간 정합성 대신 빠른 응답 속도를 확보하되, 1차 장애 격리 및 2차 사후 대사(배치) 등 방어 로직을 추가하여 시스템 안정성을 보완.
 
 ---
 
