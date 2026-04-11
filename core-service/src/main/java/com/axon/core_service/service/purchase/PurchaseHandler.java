@@ -46,10 +46,8 @@ public class PurchaseHandler {
             purchaseBuffer.offer(info);
             log.debug("[Purchase] Event buffered. Buffer size: {}", purchaseBuffer.size());
 
-            // 50개 모이면 즉시 처리
-            if (purchaseBuffer.size() >= batchSize) {
-                flushBatch();
-            }
+            // 50개 모이면 수신 스레드가 직접 DB를 찌르던 동기화 블로킹 로직 제거!
+            // (이제 수신 스레드는 메모리에 넣자마자 빛의 속도로 퇴근하고, 처리는 스케줄러가 전담합니다)
         }
     }
 
@@ -75,7 +73,8 @@ public class PurchaseHandler {
     @Scheduled(fixedDelay = 100)
     public void scheduledFlush() {
 
-        if (!purchaseBuffer.isEmpty()) {
+        // 단일 처리가 아닌, 큐가 빌 때까지 50개씩 계속 퍼나르도록 while 루프 적용 (책임의 완벽한 분리)
+        while (!purchaseBuffer.isEmpty()) {
             flushBatch();
         }
     }
