@@ -96,4 +96,25 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT p.campaignActivityId FROM Purchase p WHERE p.userId = :userId AND p.campaignActivityId IS NOT NULL")
         List<Long> findPurchasedCampaignActivityIdsByUserId(@Param("userId") Long userId);
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Reconciliation Queries (대사/정산)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        /**
+         * [Ghost 데이터 색인]
+         * 특정 기간 동안 발생한 Event 구매 건 중, CampaignActivityEntry(참여 내역) 레코드가 없는 고아 데이터 조회
+         */
+        @Query("SELECT p FROM Purchase p " +
+               "WHERE p.purchaseType = 'CAMPAIGNACTIVITY' " +
+               "AND p.purchaseAt >= :startDate AND p.purchaseAt < :endDate " +
+               "AND p.campaignActivityId IS NOT NULL " +
+               "AND NOT EXISTS (" +
+               "    SELECT 1 FROM CampaignActivityEntry c " +
+               "    WHERE c.campaignActivity.id = p.campaignActivityId " +
+               "    AND c.userId = p.userId" +
+               ")")
+        List<Purchase> findGhostPurchases(
+                @Param("startDate") LocalDateTime startDate,
+                @Param("endDate") LocalDateTime endDate);
 }

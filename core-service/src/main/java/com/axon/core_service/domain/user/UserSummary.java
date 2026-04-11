@@ -37,6 +37,10 @@ public class UserSummary {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "rfm_segment")
+    private RfmSegment rfmSegment;
+
     /**
      * Create a UserSummary associated with the given User.
      *
@@ -78,5 +82,12 @@ public class UserSummary {
         this.lastLoginAt = loggedInAt != null
             ? LocalDateTime.ofInstant(loggedInAt, ZoneId.of("Asia/Seoul"))
             : null;
+    }
+
+    /**
+     * Update the user's RFM segment.
+     */
+    public void updateRfmSegment(RfmSegment rfmSegment) {
+        this.rfmSegment = rfmSegment;
     }
 }

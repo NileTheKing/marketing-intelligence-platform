@@ -9,17 +9,18 @@ import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.CohortAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StopWatch;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +31,44 @@ public class CohortLtvBatchService {
     private final PurchaseRepository purchaseRepository;
     private final LTVBatchRepository ltvBatchRepository;
     private final CohortAnalysisService cohortAnalysisService;
+    private final NamedParameterJdbcTemplate namedJdbc;
+
+    private record MonthlyAggResult(BigDecimal monthlyRevenue, int monthlyOrders, int activeUsers) {}
+
+    private MonthlyAggResult queryMonthlyStats(List<Long> userIds, LocalDateTime start, LocalDateTime end) {
+        String sql = """
+                SELECT
+                  COALESCE(SUM(price * quantity), 0) AS monthly_revenue,
+                  COUNT(*)                            AS monthly_orders,
+                  COUNT(DISTINCT user_id)             AS active_users
+                FROM purchases
+                WHERE user_id IN (:userIds)
+                  AND purchase_at >= :start
+                  AND purchase_at < :end
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("userIds", userIds)
+                .addValue("start", start)
+                .addValue("end", end);
+        return namedJdbc.queryForObject(sql, params, (rs, rowNum) -> new MonthlyAggResult(
+                rs.getBigDecimal("monthly_revenue"),
+                rs.getInt("monthly_orders"),
+                rs.getInt("active_users")
+        ));
+    }
+
+    private BigDecimal queryCumulativeLtv(List<Long> userIds, LocalDateTime until) {
+        String sql = """
+                SELECT COALESCE(SUM(price * quantity), 0) AS ltv_cumulative
+                FROM purchases
+                WHERE user_id IN (:userIds)
+                  AND purchase_at < :until
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("userIds", userIds)
+                .addValue("until", until);
+        return namedJdbc.queryForObject(sql, params, BigDecimal.class);
+    }
 
     /**
      * 배치 작업 실행 (매월 1일 새벽 3시)
@@ -84,6 +123,9 @@ public class CohortLtvBatchService {
      * - 이전 달 데이터를 재활용하여 누적 계산
      */
     private LTVBatch processActivityCohort(Long activityId, LocalDateTime collectedAt) {
+        StopWatch sw = new StopWatch();
+        sw.start();
+
         CampaignActivity activity = campaignActivityRepository.findById(activityId)
                 .orElseThrow(() -> new IllegalArgumentException("Activity not found: " + activityId));
 
@@ -164,7 +206,8 @@ public class CohortLtvBatchService {
             );
         }
 
-        log.info("Calculated stats for activity {} month {}", activityId, newOffset);
+        sw.stop();
+        log.info("Activity {} month {} processed in {}ms", activityId, newOffset, sw.getTotalTimeMillis());
         return newStat;
     }
 
@@ -184,32 +227,12 @@ public class CohortLtvBatchService {
         LocalDateTime monthStart = cohortStartDate.plusMonths(monthOffset);
         LocalDateTime monthEnd = cohortStartDate.plusMonths(monthOffset + 1);
 
-        // 해당 고객들의 모든 구매 이력 조회
+        // SQL 집계로 월별 통계 및 누적 LTV 계산 (인덱스 idx_purchase_user_history 활용)
+        MonthlyAggResult monthlyStats = queryMonthlyStats(cohortUserIds, monthStart, monthEnd);
+        BigDecimal ltvCumulative = queryCumulativeLtv(cohortUserIds, monthEnd);
+
+        // 재구매 분석용 구매 이력 조회 (cohortAnalysisService 의존)
         List<Purchase> allPurchases = purchaseRepository.findByUserIdIn(cohortUserIds);
-
-        // 월별 증분 데이터 (해당 월에만 발생)
-        BigDecimal monthlyRevenue = BigDecimal.ZERO;
-        int monthlyOrders = 0;
-        Set<Long> activeUsersSet = new HashSet<>();
-
-        for (Purchase purchase : allPurchases) {
-            if ((purchase.getPurchaseAt().isAfter(monthStart) || purchase.getPurchaseAt().equals(monthStart))
-                    && purchase.getPurchaseAt().isBefore(monthEnd)) {
-                BigDecimal purchaseValue = purchase.getPrice().multiply(BigDecimal.valueOf(purchase.getQuantity()));
-                monthlyRevenue = monthlyRevenue.add(purchaseValue);
-                monthlyOrders++;
-                activeUsersSet.add(purchase.getUserId());
-            }
-        }
-
-        // 누적 LTV (코호트 시작 ~ 현재 월 종료)
-        BigDecimal ltvCumulative = BigDecimal.ZERO;
-        for (Purchase purchase : allPurchases) {
-            if (purchase.getPurchaseAt().isBefore(monthEnd)) {
-                BigDecimal purchaseValue = purchase.getPrice().multiply(BigDecimal.valueOf(purchase.getQuantity()));
-                ltvCumulative = ltvCumulative.add(purchaseValue);
-            }
-        }
 
         return buildLTVBatch(
                 activity,
@@ -221,9 +244,9 @@ public class CohortLtvBatchService {
                 cohortUserIds,
                 allPurchases,
                 ltvCumulative,
-                monthlyRevenue,
-                monthlyOrders,
-                activeUsersSet.size()
+                monthlyStats.monthlyRevenue(),
+                monthlyStats.monthlyOrders(),
+                monthlyStats.activeUsers()
         );
     }
 
@@ -246,30 +269,11 @@ public class CohortLtvBatchService {
         LocalDateTime monthStart = cohortStartDate.plusMonths(monthOffset);
         LocalDateTime monthEnd = cohortStartDate.plusMonths(monthOffset + 1);
 
-        // 이번 달 구매 데이터만 조회 (증분 - 코호트 유저 전체 대상)
-        List<Purchase> monthlyPurchases = purchaseRepository.findByUserIdInAndPeriod(
-                cohortUserIds,
-                monthStart,
-                monthEnd
-        );
+        // SQL 집계로 월별 증분 통계 계산 (인덱스 idx_purchase_user_history 활용)
+        MonthlyAggResult monthlyStats = queryMonthlyStats(cohortUserIds, monthStart, monthEnd);
 
-        // 월별 증분 데이터
-        BigDecimal monthlyRevenue = BigDecimal.ZERO;
-        int monthlyOrders = 0;
-        Set<Long> activeUsersSet = new HashSet<>();
-
-        for (Purchase purchase : monthlyPurchases) {
-            // 코호트 고객인지 확인
-            if (cohortUserIds.contains(purchase.getUserId())) {
-                BigDecimal purchaseValue = purchase.getPrice().multiply(BigDecimal.valueOf(purchase.getQuantity()));
-                monthlyRevenue = monthlyRevenue.add(purchaseValue);
-                monthlyOrders++;
-                activeUsersSet.add(purchase.getUserId());
-            }
-        }
-
-        // 누적 LTV = 이전 달 누적 + 이번 달 증분
-        BigDecimal ltvCumulative = prevStat.getLtvCumulative().add(monthlyRevenue);
+        // 누적 LTV = 이전 달 누적 + 이번 달 증분 (DB 재집계 불필요)
+        BigDecimal ltvCumulative = prevStat.getLtvCumulative().add(monthlyStats.monthlyRevenue());
 
         // 재구매 분석 (전체 조회 필요)
         List<Purchase> allPurchases = purchaseRepository.findByUserIdIn(cohortUserIds);
@@ -284,9 +288,9 @@ public class CohortLtvBatchService {
                 cohortUserIds,
                 allPurchases,
                 ltvCumulative,
-                monthlyRevenue,
-                monthlyOrders,
-                activeUsersSet.size()
+                monthlyStats.monthlyRevenue(),
+                monthlyStats.monthlyOrders(),
+                monthlyStats.activeUsers()
         );
     }
 
