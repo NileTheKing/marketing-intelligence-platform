@@ -6,6 +6,7 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.event.Event;
 import com.axon.core_service.domain.event.TriggerType;
 import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.EventRepository;
@@ -27,15 +28,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.axon.core_service.AbstractIntegrationTest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
-@ActiveProfiles("oauth")
-class CampaignActivityConsumerServiceTest {
+@ActiveProfiles({"test", "oauth"})
+class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
 
     private static final int NUMBER_OF_THREADS = 100;
 
@@ -60,8 +60,11 @@ class CampaignActivityConsumerServiceTest {
     @Autowired
     private EventRepository eventRepository;
 
+    @Autowired
+    private CampaignActivityEntryRepository campaignActivityEntryRepository;
+
     private final String topic = KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND;
-    private final Long productId = 1L;
+    private Long testProductId;
     private Long campaignActivityId;
     private List<Long> userIds;
 
@@ -94,13 +97,16 @@ class CampaignActivityConsumerServiceTest {
                 .startDate(LocalDateTime.now())
                 .endDate(LocalDateTime.now().plusDays(1))
                 .activityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .price(java.math.BigDecimal.valueOf(10000))
+                .quantity(100)
                 .filters(null)
                 .build();
         CampaignActivity saved = campaignActivityRepository.save(activity);
         this.campaignActivityId = saved.getId();
 
         Product testProduct = new Product("테스트 상품", 100L, java.math.BigDecimal.valueOf(10000), "General");
-        productRepository.save(testProduct);
+        Product savedProduct = productRepository.save(testProduct);
+        this.testProductId = savedProduct.getId();
 
         userIds = new ArrayList<>(NUMBER_OF_THREADS);
         for (int i = 0; i < NUMBER_OF_THREADS; i++) {
@@ -130,7 +136,7 @@ class CampaignActivityConsumerServiceTest {
                             .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
                             .campaignActivityId(campaignActivityId)
                             .userId(userId)
-                            .productId(productId)
+                            .productId(testProductId)
                             .timestamp(Instant.now().toEpochMilli())
                             .build();
                     kafkaTemplate.send(topic, dto);
@@ -141,10 +147,16 @@ class CampaignActivityConsumerServiceTest {
         }
 
         latch.await();
-        Thread.sleep(5000);
+        Thread.sleep(5000); // Wait for async Kafka processing and scheduled flushes
 
-        Product product = productRepository.findById(productId).orElseThrow();
-        assertThat(product.getStock()).isEqualTo(0L);
+        Product product = productRepository.findById(testProductId).orElseThrow();
+        // [PORTFOLIO POINT] Deferred Sync: Stock decrease is skipped in real-time to prevent Row-Lock contention.
+        // Final integrity is ensured by a deferred batch process (not part of this real-time flow).
+        assertThat(product.getStock()).isEqualTo(100L);
+
+        // Verify that entries were created
+        long entryCount = campaignActivityEntryRepository.count();
+        assertThat(entryCount).isEqualTo(NUMBER_OF_THREADS);
 
         userIds.forEach(id -> assertThat(
                 userSummaryRepository.findById(id)

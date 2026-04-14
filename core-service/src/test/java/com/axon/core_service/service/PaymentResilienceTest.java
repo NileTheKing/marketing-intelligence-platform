@@ -9,7 +9,7 @@ import com.axon.messaging.dto.payment.ReservationTokenPayload;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.axon.core_service.AbstractIntegrationTest;
 import com.axon.core_service.scheduler.PaymentRecoveryScheduler;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -29,13 +29,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import org.junit.jupiter.api.BeforeEach;
 
-// ... imports ...
-
-@SpringBootTest(properties = {
-        "axon.entry-service-url=http://localhost:8081",
-        "spring.kafka.consumer.group-id=test-group"
-})
-public class PaymentResilienceTest {
+class PaymentResilienceTest extends AbstractIntegrationTest {
 
     @Autowired
     private PaymentService paymentService;

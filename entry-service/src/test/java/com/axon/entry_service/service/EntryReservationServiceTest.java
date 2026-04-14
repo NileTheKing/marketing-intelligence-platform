@@ -13,11 +13,13 @@ import com.axon.entry_service.domain.ReservationResult;
 import com.axon.entry_service.domain.ReservationStatus;
 import java.time.Instant;
 import java.util.List;
+import java.util.Collections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -26,6 +28,9 @@ class EntryReservationServiceTest {
 
     @Mock
     private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private EntryReservationService reservationService;
@@ -39,7 +44,7 @@ class EntryReservationServiceTest {
 
     @Test
     void reserveSuccess() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(1L);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(1L);
 
         ReservationResult result = reservationService.reserve(1L, 100L, activeMeta, Instant.now());
 
@@ -49,7 +54,7 @@ class EntryReservationServiceTest {
 
     @Test
     void reserveDuplicatedWhenUserAlreadyExists() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(-1L);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(-1L);
 
         ReservationResult result = reservationService.reserve(1L, 100L, activeMeta, Instant.now());
 
@@ -58,7 +63,7 @@ class EntryReservationServiceTest {
 
     @Test
     void reserveSoldOutWhenLimitExceeded() {
-        when(redisTemplate.execute(any(RedisScript.class), anyList(), any())).thenReturn(-2L);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(-2L);
 
         ReservationResult result = reservationService.reserve(1L, 100L, activeMeta, Instant.now());
 

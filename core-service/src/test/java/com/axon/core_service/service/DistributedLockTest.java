@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.ApplicationEventPublisher;
+import com.axon.core_service.AbstractIntegrationTest;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -24,12 +25,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.axon.core_service.config.RedissonConfig;
 import org.springframework.context.annotation.Import;
 
-@SpringBootTest
-@Import(RedissonConfig.class)
-class DistributedLockTest {
+class DistributedLockTest extends AbstractIntegrationTest {
 
     @Autowired
     private CampaignActivityEntryService entryService;
