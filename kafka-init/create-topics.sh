@@ -42,10 +42,12 @@ echo "  Flow: Entry-service → Kafka → Core-service @KafkaListener"
 kafka-topics --create --if-not-exists \
   --topic "axon.campaign-activity.command" \
   --bootstrap-server broker_1:29092 \
-  --partitions 1 \
+  --partitions 3 \
   --replication-factor 1 \
+  --config min.insync.replicas=1 \
   --config retention.ms=2592000000 \
   --config compression.type=lz4
+# NOTE: In production (multi-broker), these should be --replication-factor 3 and --config min.insync.replicas=2
 
 echo "  ✅ Created: axon.campaign-activity.command (1 partition - local dev)"
 echo ""

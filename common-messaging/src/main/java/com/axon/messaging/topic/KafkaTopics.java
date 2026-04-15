@@ -8,19 +8,21 @@ public final class KafkaTopics {
     private KafkaTopics() {
     }
 
+    //logging topics
     public static final String BEHAVIOR_EVENT = "axon.event.behavior";
     public static final String COMMERCE_EVENT = "axon.event.commerce";
 
-    @Deprecated
-    public static final String EVENT_RAW = "axon.event.raw";
+    //cqrs topics
     public static final String CAMPAIGN_ACTIVITY_COMMAND = "axon.campaign-activity.command";
-    @Deprecated
-    public static final String USER_LOGIN = "axon.user.login";
-
-    @Deprecated
-    public static final String PAYMENT_RETRY_TOPIC = "axon.payment.retry";
 
     // Dead Letter Topics (DLT) for Fault Tolerance
     public static final String CAMPAIGN_ACTIVITY_COMMAND_DLT = "axon.campaign-activity.command.dlt";
     public static final String PURCHASE_FAILED_DLT = "axon.purchase.failed.dlt";
+
+    @Deprecated
+    public static final String EVENT_RAW = "axon.event.raw";
+    @Deprecated
+    public static final String PAYMENT_RETRY_TOPIC = "axon.payment.retry";
+    @Deprecated
+    public static final String USER_LOGIN = "axon.user.login";
 }
