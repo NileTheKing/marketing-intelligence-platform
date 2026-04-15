@@ -45,7 +45,23 @@ flowchart TD
 
 ---
 
-## 2. 비즈니스 확장성: 객체지향 설계를 통한 유연성 확보
+## 2. 인프라 최적화: Connection Storm 대응을 위한 커널 튜닝
+
+**문제**
+- k6를 통한 초기 3,000 VU 부하 테스트 시, 애플리케이션 사양은 충분함에도 불구하고 **Connection Refused** 및 **Connection Timeout**이 대량 발생하여 트래픽 유입 자체가 차단되는 현상 실측.
+- 진단 결과, 초단기 스파이크 트래픽 유입 시 TCP 3-way Handshake 과정에서 커널의 대기 큐가 가득 차 서버가 새로운 연결을 거부하는 **Connection Storm** 병목 확인.
+
+**해결**
+- **OS 커널 튜닝 (Accept Queue 증설)**: Peak 트래픽 시 네트워크 대기실 역할을 하는 `net.core.somaxconn`과 `net.ipv4.tcp_max_syn_backlog`를 128(기본값)에서 1,024로 증설하여 수용 능력 확보.
+- **ulimit 및 파일 디스크립터 최적화**: 대량의 동시 소켓 연결 처리를 위해 프로세스당 오픈 가능한 파일 디스크립터(File Descriptors) 수를 65,535로 상향하여 리소스 부족(Too many open files) 현상 예방.
+
+**결과**
+- **가용성 0.00% Error Rate 달성**: 3,000 VU 환경에서 시스템 리소스를 100% 활용하며 단 1건의 연결 거부 없이 트래픽 전량 수용 성공.
+- 인프라 레벨의 병목을 해결함으로써 애플리케이션의 본래 처리 성능(Throughput)을 온전히 발휘할 수 있는 환경 구축.
+
+---
+
+## 3. 비즈니스 확장성: 객체지향 설계를 통한 유연성 확보
 
 ```mermaid
 flowchart TD
@@ -70,7 +86,7 @@ flowchart TD
 
 ---
 
-## 3. 정합성 최적화: 비동기 환경의 한계 극복 (1)
+## 4. 정합성 최적화: 비동기 환경의 한계 극복 (1)
 
 ```mermaid
 flowchart TD
@@ -104,7 +120,7 @@ flowchart TD
 
 ---
 
-## 4. 정합성 최적화: 비동기 환경의 한계 극복 (2)
+## 5. 정합성 최적화: 비동기 환경의 한계 극복 (2)
 
 ```mermaid
 sequenceDiagram
@@ -134,7 +150,7 @@ sequenceDiagram
 
 ---
 
-## 5. 비동기 적재 신뢰성: 정합성 한계 극복과 장애 격리(Fault Tolerance) 파이프라인
+## 6. 비동기 적재 신뢰성: 정합성 한계 극복과 장애 격리(Fault Tolerance) 파이프라인
 
 ```mermaid
 flowchart TD
@@ -173,62 +189,79 @@ flowchart TD
 
 ---
 
-## 6. 정합성 최종 수비: 분산 시스템의 데이터 무결성 설계
-
-```mermaid
-flowchart TD
-    Kafka --> Consumer
-    Consumer --> Lock{"Redisson Lock<br/>(EventId)"}
-    Lock -->|성공| DB{"멱등성 체크<br/>(Unique Key)"}
-    DB -->|신규| Process["데이터 적재 및 커밋"]
-    DB -->|중복| Skip["중복 처리 스킵"]
-```
-
-**문제**
-- Kafka의 'At-least-once' 전달 특성으로 인해 네트워크 재시도 시 동일한 성공 메시지가 중복 소비될 가능성 상존.
-- 다중 Consumer 환경에서 동일 이벤트 ID에 동시 접근 시 레이스 컨디션으로 이중 결제나 이중 적재가 발생할 정합성 리스크 확인.
-- DB Unique 제약 조건만으로는 선행 작업(재고 차감 등)의 중복 실행을 막을 수 없어 상위 레벨의 동시성 제어 필요.
-
-**해결**
-- **Idempotent Consumer 패턴 구축**: Kafka EOS(`acks=all`, `idempotence=true`)를 활성화했으나, DB와 Kafka 간의 원자적 커밋이 불가능한 한계를 극복하기 위해 소비단에 **Redisson 분산 락**과 **DB Unique Key**를 조합한 이중 방어 로직 구축.
-- **Cross-System Idempotency**: 설령 네트워크 재시도로 동일 메시지가 N번 수신되더라도 DB 레벨에서 안전하게 무시(Ignore)되도록 설계하여 시스템의 생존력(Survivability) 확보.
-
-**결과**
-- **정합성 100% 실증**: 3,000 VU 부하 테스트 중 고의적으로 Consumer를 죽이는 **Pod Restart 상황**에서도 중복 적재/이중 결제 **0건** 유지.
-- **Zero Data Loss 달성**: 유실 방지를 위해 Producer 재시도를 **`MAX`**로 상향하면서도, 소비단의 철저한 멱등성 보장 덕분에 데이터 오염 없이 **'유실 없는 데이터 파이프라인'** 구축 성공.
-
----
-
-## 7. 쓰기 병목 해소: 지연 동기화를 통한 Throughput 극대화
+## 7. 정합성 최종 수비: 분산 시스템의 데이터 무결성 설계
 
 ```mermaid
 flowchart LR
-    P[("구매 로그 테이블")] --"Single Source of Truth"--> S["스케줄러 / 이벤트"]
-    S --"비동기 배치 정산"--> Stock[("재고 테이블")]
+    Producer["발행처 (Entry-Service)"] -->|1. 메시지 발행| Kafka[("Kafka Broker\n(Exactly-once)")]
+    Kafka -->|2. 메시지 수신| Consumer["처리처 (Core-Service)"]
+    
+    subgraph Idempotent_Process ["중복 처리 방지 (이중 방어)"]
+        Consumer -->|3. 락 획득| Redis[("Redis Lock\n(Redisson)")]
+        Redis -->|4. 성공 시| DB[(MySQL)]
+        DB -->|Unique Key 체크| Commit["최종 커밋"]
+    end
+    
+    Commit -->|5. ACK| Kafka
+    Redis -.->|이미 처리됨| Skip["중복 스킵"]
+    DB -->|중복 유입| Skip["중복 스킵"]
 ```
 
 **문제**
-
-- 구매 확정 시 상품 재고와 유저 요약을 실시간 업데이트할 때 발생하는 빈번한 DB Row-Lock 경합이 응답 지연의 주요 원인임을 확인.
-- 인기 상품(Hot-Spot)의 경우 특정 행에 트랜잭션이 집중되어 커넥션 풀이 고갈되는 성능 임계점 노출.
-- Strong Consistency를 유지하는 방식으로는 초당 수백 건의 쓰기 요청을 감당할 수 없음을 부하 테스트를 통해 진단.
+- 카프카의 **Exactly-once(EOS)** 설정을 사용하더라도, DB 처리는 끝났으나 오프셋이 기록되기 전 서버가 종료될 경우 동일 메시지를 재수신하여 중복 처리될 위험 인지.
+- 특히 다중 서버 환경에서 동일 결제 건에 대해 여러 컨슈머가 동시에 접근할 때 발생하는 데이터 경합 및 중복 적재 가능성 확인.
 
 **해결**
-
-- **Eventual Consistency(결과적 일관성) 모델 채택**: 실시간 재고 차감 시 발생하는 DB Row-Lock 경합(Hot-spot)을 피하기 위해, 메인 트랜잭션에서는 `Purchase` 로그 적재(Insert)에만 집중하고 재고 테이블 업데이트는 유예(Defer)하는 방식 채택.
-- **이원화된 Inventory 관리 전략**:
-    - **Single Source of Truth (MySQL Purchase Log)**: 휘발성 리스크가 있는 Redis 대신, 물리적인 구매 로그를 '진실의 원천'으로 설계. 설령 DB 장애나 Redis 데이터 오염이 발생하더라도 `SELECT COUNT(*) FROM purchases`를 통해 100% 정확한 잔여 재고 복구가 가능한 구조 확립.
-    - **Pre-allocated Stock (Quarantine)**: 이벤트 상품의 경우 일반 판매 재고와 격리된 **'이벤트 전용 재고'**로 운영하거나, 전체 재고 컨트롤러를 Redis로 일원화하여 성능과 정합성 사이의 균형 확보.
-    - **Hybrid 정산**: 피크 타임엔 Redis `INCR`로 1차 게이팅을 수행하고, 5분 주기 배치 스케줄러가 구매 로그를 역산하여 `products` 테이블의 최종 재고를 일괄 업데이트(Bulk Update)하여 DB 부하 최소화.
+- **애플리케이션 레벨의 멱등성 보강**: 인프라(Kafka)의 설정에만 의존하지 않고, 로직단에서 중복 유입을 안전하게 무시하거나 처리하도록 설계.
+- **분산 락(Redisson) 도입**: 결제 ID별로 락을 잡아, 여러 서버가 동시에 같은 주문을 처리하지 못하도록 전역적인 실행 순서 보장.
+- **DB Unique Key 활용**: 설령 락을 통과하더라도 물리적인 제약 조건을 통해 중복 저장을 원천 차단하고 안전하게 무시(Ignore)하도록 처리.
 
 **결과**
-
-- **성능**: 재고 테이블의 Row-Lock 경합을 완전히 제거하여 초당 수천 건의 트래픽에서도 DB 커넥션 풀 가동률 안정화.
-- **신뢰성**: 'RedisCounter - MySQL Log' 사이의 이중 검증(Audit) 파이프라인을 통해 인메모리 데이터의 휘발성 리스크 완벽 보완. (Audit 결과 불일치 시 Purchase 로그를 기준으로 자동 재정산하도록 설계)
+- 3,000 VU 부하 테스트 중 컨슈머를 강제로 재기동하는 극단적 시나리오에서도 중복 적재 및 이중 결제 0건 유지 확인.
+- 성능이 중요한 행동 로그와 정합성이 중요한 결제 명령의 파이프라인을 이원화하여, 신뢰성과 시스템 전체의 가용성 사이의 균형 확보.
 
 ---
 
-## 8. 조회 성능 최적화: 수집 시점 역정규화 설계
+## 8. 쓰기 병목 해소: 지연 동기화를 통한 Throughput 극대화
+
+```mermaid
+flowchart TD
+    subgraph FastPath ["1단계: 유입 제어 (Real-time)"]
+        User(("사용자")) --> Redis[("Redis Counter<br/>(고속 카운터)")]
+        Redis --> Gate{주문 승인}
+    end
+
+    subgraph AuditPath ["2단계: 데이터 대조 및 정산 (Batch)"]
+        Batch["재고 보정 스케줄러<br/>(5분 주기 배치)"]
+        Purchase[("MySQL 주문 로그<br/>(최종 정산 기준)")]
+        
+        Batch -.->|"1. 수치 대조"| Redis
+        Batch -.->|"2. 전체 집계"| Purchase
+        
+        Batch --"3. 재고 보정"--> Stock[("MySQL 상품 재고<br/>(최종 업데이트)")]
+    end
+    
+    Gate -.->|"결제 로그 저장"| Purchase
+```
+
+**문제**
+- 이벤트 시작 직후 특정 상품에 트래픽이 몰리면서, DB의 해당 상품 재고 행(Row)에 비관적 락(Pessimistic Lock)이 집중되는 현상 발생.
+- 락 점유 시간이 길어지며 다른 요청들이 대기하게 되고, 결국 DB 커넥션 풀이 고갈되면서 시스템 전체가 응답하지 않는 '성능 병목' 확인.
+
+**해결**
+- **재고 체크의 분리 (Redis Gate)**: 특정 상품 행에 집중되는 DB 비관적 락을 회피하기 위해, 유입 시점의 재고 검증은 Redis의 원자적 연산을 활용한 **고속 카운터**에서 먼저 처리하도록 개선.
+- **재고 차감 비동기화 (지연 정산)**: 메인 트랜잭션에서 무거운 재고 업데이트 로직을 분리. 결제 완료 시점에는 주문 로그만 빠르게 저장하고, 실제 재고 수량 차감은 **별도의 배치(Batch) 작업**을 통해 처리하여 DB 쓰기 부하 해소.
+- **데이터 보정(Reconciliation) 파이프라인**: 성능 위주의 Redis와 최종 장부인 MySQL 사이의 데이터 오차를 해결하기 위해, 실제 주문 로그를 기준으로 Redis와 DB 재고 수치를 주기적으로 대조하고 자동 보정하는 프로세스 구축.
+- **트래픽 격리**: 특정 인기 상품에 쏠리는 부하가 일반 상품 서비스까지 간섭하지 않도록 DB 자원 사용량을 논리적으로 격리하여 전체 시스템의 가용성 확보.
+
+**결과**
+- 기존 비관적 락 방식 대비 약 5.6배의 응답 속도 향상 확인 (704ms → 124ms).
+- 특정 상품에 트래픽이 몰려도 DB 커넥션 풀이 마르지 않고 안정적으로 유지됨을 확인.
+- Redis 카운터에 오차가 발생하더라도, 배치 작업이 실제 주문 내역을 기반으로 재고를 자동 복구함으로써 데이터 정합성 유지.
+
+---
+
+## 9. 조회 성능 최적화: 수집 시점 역정규화 설계
 
 ```mermaid
 flowchart LR
@@ -260,7 +293,7 @@ flowchart LR
 
 ---
 
-## 9. AI 에이전트 최적화: RAG와 Function Calling의 결합
+## 10. AI 에이전트 최적화: RAG와 Function Calling의 결합
 
 ```mermaid
 flowchart TD
@@ -291,7 +324,7 @@ flowchart TD
 
 ---
 
-## 10. 비즈니스 가치 창출: 코호트 기반 LTV 분석 파이프라인
+## 11. 비즈니스 가치 창출: 코호트 기반 LTV 분석 파이프라인
 
 ```mermaid
 flowchart LR
@@ -309,7 +342,7 @@ flowchart LR
 **해결**
 - 실시간 집계는 서비스 DB에 부하를 주므로 Read Replica 분리를 검토했으나, LTV 코호트 집계 자체가 전체 구매 이력을 스캔하는 무거운 쿼리라 분리된 읽기 전용 인스턴스에서도 서비스에 영향을 줄 수 있다고 판단 → 서비스 트래픽이 없는 새벽 시간대에 실행하는 **일 단위 배치** 방식으로 결정.
 - 유입 시점(Cohort)을 기준으로 고객군을 그룹화하고, 기간별 누적 매출 및 획득 비용(CAC)을 자동 추적하는 **코호트 분석 엔진** 설계.
-- 배치 결과를 대시보드 및 AI 에이전트(Section 9)와 연동하여 캠페인 ROI를 정량 수치 기반으로 즉각 판단할 수 있는 의사결정 보조 시스템 구성.
+- 배치 결과를 대시보드 및 AI 에이전트(Section 10)와 연동하여 캠페인 ROI를 정량 수치 기반으로 즉각 판단할 수 있는 의사결정 보조 시스템 구성.
 
 **결과**
 - 캠페인 효율성(LTV/CAC Ratio)을 정량화하여 수익성 기반의 마케팅 예산 재분배 의사결정 지원.
@@ -317,7 +350,7 @@ flowchart LR
 
 ---
 
-## 11. 배치 연산 최적화: Java 집계 → SQL 오프로딩
+## 12. 배치 연산 최적화: Java 집계 → SQL 오프로딩
 
 ```mermaid
 flowchart LR
@@ -346,3 +379,85 @@ flowchart LR
 - EXPLAIN ANALYZE 기준 스캔 rows 456 → 1 — 인덱스가 `user_id` 범위 필터에 이어 `purchase_at` 범위까지 풀 활용.
 - 배치 처리 시간 약 68% 단축 (로컬 환경 실측).
 - 메모리 상주 데이터 제거로 코호트 크기 확장 시에도 JVM 힙 사용량 안정적 유지.
+
+---
+
+## 13. 인프라·배포: 관리형 서비스 없이 K8s 직접 운영
+
+```mermaid
+flowchart TD
+    subgraph CI["CI — GitHub Actions"]
+        Push["main 브랜치 push"] --> Build["Gradle bootJar\n(Entry + Core)"]
+        Build --> Docker["Docker 이미지 빌드\n& Docker Hub Push\n(커밋 SHA 태그)"]
+    end
+
+    subgraph CD["CD — kubectl"]
+        Docker --> Apply["kubectl apply\n(deployment.yaml)"]
+        Apply --> SetImage["kubectl set image\n(커밋 SHA로 교체)"]
+        SetImage --> Rollout["rollout status 검증"]
+    end
+
+    subgraph K8s["KT Cloud K2P — Kubernetes Cluster"]
+        direction LR
+        subgraph Ingress["Nginx Ingress (NodePort 30080)"]
+            Ing1["Ingress Pod 1\nWorker 01"]
+            Ing2["Ingress Pod 2\nWorker 02"]
+        end
+        Ing1 & Ing2 --> Entry["entry-service\n(Virtual Threads)"]
+        Ing1 & Ing2 --> Core["core-service"]
+    end
+
+    subgraph Net["네트워크 — Static NAT"]
+        PublicIP["Public IP\n210.104.76.202"] -->|"1:1 NAT"| Worker2["Worker Node 02\n:30080"]
+    end
+
+    User(("외부 사용자")) --> PublicIP
+    Worker2 --> Ingress
+    Rollout -.->|"이미지 교체"| K8s
+```
+
+**구조적 선택: 관리형 LB 없이 NodePort + Static NAT**
+- KT Cloud K2P 환경에서 관리형 LoadBalancer 서비스 대신 NodePort(30080) + Static NAT 조합으로 외부 트래픽 유입 처리.
+- Worker Node 02에 Public IP를 1:1 NAT으로 고정 매핑 → `kube-proxy`가 Ingress Controller로 포워딩 → Nginx가 서비스별 라우팅(`/entry`, `/api`).
+- 관리형 LB를 사용하지 않아 인프라 비용 절감, 대신 네트워크 경로와 방화벽 룰(TCP 30080)을 직접 구성·관리.
+
+**CI/CD 파이프라인**
+- `main` 브랜치 push 시 GitHub Actions 자동 트리거.
+- Gradle bootJar 빌드 → Docker 이미지(커밋 SHA 태그) 빌드 & Docker Hub Push → `kubectl set image`로 클러스터 내 이미지 교체 → `rollout status`로 배포 완료 검증.
+- 커밋 SHA를 이미지 태그로 사용하여 배포 버전과 코드 이력의 1:1 추적 가능.
+
+**K8s 내부 미들웨어 연결**
+- Redis: `axon-redis-master` (ClusterIP) — FCFS 카운터·캐시·트리거 중복체크
+- Kafka: `axon-kafka` (KRaft, Headless) — 서비스 간 비동기 메시지 버스
+- Elasticsearch: `elasticsearch-master` (Headless) — 행동 로그 적재·집계
+- MySQL: AWS RDS Endpoint (외부 접속) — 캠페인·구매·유저 도메인 영속성
+
+**결과**
+- GitHub push → 클러스터 이미지 교체까지 자동화된 무중단 배포 파이프라인 구축.
+- 관리형 서비스 없이 네트워크 레이어부터 직접 구성하여 K8s 클러스터 전반에 대한 실질적 운영 이해 확보.
+
+---
+
+## 14. CRM 루프 전주기: FCFS 모객 → 세그멘테이션 → 자동 트리거
+
+> ⚠️ **TODO**: 외부 발송 연동(쿠폰 실제 지급, 알림 발송) 구현 완료 후 결과 수치 및 내용 보완 필요.
+
+```mermaid
+flowchart LR
+    FCFS["FCFS 이벤트\n모객"] --> SDK["JS SDK\n행동 수집"]
+    SDK --> ES[("Elasticsearch\n행동 로그")]
+    ES -->|"매 시간\nPAGE_VIEW 집계"| Trigger["BehaviorTriggerScheduler\n(≥3회 조회 감지)"]
+    Trigger -->|"Redis setIfAbsent\n중복 방지 TTL 30일"| Kafka[("Kafka\nCOUPON 발행")]
+    Purchase[("MySQL\n구매 이력")] -->|"일 단위"| RFM["RfmSegmentationScheduler\nVIP / LOYAL / AT_RISK / DORMANT"]
+    RFM --> LTV["LTV 코호트 배치\n(Section 11)"]
+    LTV --> AI["AI 전략 리포트\n(Section 10)"]
+```
+
+**구현 범위 (현재)**
+- **RFM 세그멘테이션**: 구매 이력 기반 4단계 분류 — VIP(Recency≤30일·Frequency≥3·Monetary≥10만), LOYAL, AT_RISK, DORMANT.
+- **행동 기반 트리거 감지**: ES에서 7일간 PAGE_VIEW 집계 → 임계값(3회) 초과 유저·상품 추출 → Redis `setIfAbsent`로 30일 내 중복 발급 방지 → Kafka `COUPON` 타입 메시지 발행.
+- **MarketingRule DB**: `behaviorType`, `thresholdCount`, `lookbackDays`, `rewardType` 컬럼으로 룰을 DB에서 동적 관리할 수 있는 구조 설계 완료.
+
+**TODO (미구현)**
+- 쿠폰 실제 지급 및 외부 알림 발송(이메일·카카오 등) 연동
+- MarketingRule 기반 동적 룰 적용 (현재 스케줄러에 하드코딩)
