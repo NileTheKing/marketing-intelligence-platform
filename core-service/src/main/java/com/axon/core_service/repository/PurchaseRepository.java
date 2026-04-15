@@ -23,6 +23,9 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
         // 캠페인별 구매 내역 조회
         List<Purchase> findByCampaignActivityId(Long campaignActivityId);
 
+        // 캠페인별 구매 성공 건수 조회 (Index 활용)
+        long countByCampaignActivityId(Long campaignActivityId);
+
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // Cohort Analysis Queries
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

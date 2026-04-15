@@ -7,6 +7,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
@@ -23,28 +24,46 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String broker_port;
     /**
-     * Create a ProducerFactory configured for String keys and JSON-serialized values using the configured broker address.
-     *
-     * @return a ProducerFactory that produces String-keyed, JSON-valued Kafka producers configured with the application's broker address
+     * Create a ProducerFactory for non-transactional, high-throughput messaging.
      */
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
-        Map<String, Object> data = new HashMap<>();
-        data.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, broker_port);
-        data.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        data.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        Map<String, Object> config = new HashMap<>();
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, broker_port);
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        // High reliability for all producers by default
+        config.put(ProducerConfig.ACKS_CONFIG, "all");
+        config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
 
-        return new DefaultKafkaProducerFactory<>(data);
+        return new DefaultKafkaProducerFactory<>(config);
     }
 
     /**
-     * Create a KafkaTemplate configured to send messages with String keys and JSON-serialized values to the configured Kafka broker.
-     *
-     * @return a KafkaTemplate for sending messages with String keys and JSON-serialized values
+     * Create a ProducerFactory specialized for transactional messaging.
      */
     @Bean
+    public ProducerFactory<String, Object> transactionalProducerFactory() {
+        DefaultKafkaProducerFactory<String, Object> factory = new DefaultKafkaProducerFactory<>(producerFactory().getConfigurationProperties());
+        factory.setTransactionIdPrefix("entry-tx-");
+        return factory;
+    }
+
+    /**
+     * Default KafkaTemplate for high-throughput, non-transactional messages (e.g., behavior logs).
+     */
+    @Bean
+    @Primary
     public KafkaTemplate<String, Object> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
+    }
+
+    /**
+     * Transactional KafkaTemplate for critical business commands (e.g., purchases, inventory).
+     */
+    @Bean(name = "transactionalKafkaTemplate")
+    public KafkaTemplate<String, Object> transactionalKafkaTemplate() {
+        return new KafkaTemplate<>(transactionalProducerFactory());
     }
 
     /**
