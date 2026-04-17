@@ -461,3 +461,35 @@ flowchart LR
 **TODO (미구현)**
 - 쿠폰 실제 지급 및 외부 알림 발송(이메일·카카오 등) 연동
 - MarketingRule 기반 동적 룰 적용 (현재 스케줄러에 하드코딩)
+
+---
+
+## 15. 테스트 전략: 레이어별 검증 설계
+
+> ⚠️ **TODO**: 테스트 코드 변경 진행 중 — 수치(클래스 수, 커버리지) 및 세부 시나리오 확정 후 보완 필요.
+
+**설계 원칙**
+단위 테스트와 통합 테스트를 계층별로 명확히 분리하여, 빠른 피드백과 실제 인프라 신뢰성 검증을 동시에 확보하는 전략을 택했습니다.
+
+**통합 테스트 — TestContainers 3-container**
+- `AbstractIntegrationTest` 베이스 클래스에 MySQL + Redis + Kafka 실제 컨테이너를 구성.
+- `@DynamicPropertySource`로 컨테이너 포트를 런타임에 주입 — 로컬 환경 의존성 제거.
+- E2E 대표 시나리오: 실제 Kafka 메시지 발행 → Core-service 소비 → MySQL 적재까지 검증 (`PurchaseFlowIntegrationTest`).
+
+**동시성·복원력 테스트**
+- 100 스레드 `CountDownLatch` 기반 Race Condition 검증 — Redisson 분산 락 정합성 확인 (`DistributedLockTest`).
+- `Awaitility` 비동기 완료 대기 + 100 스레드 동시 메시지 투입으로 마이크로배치 소비 신뢰성 검증 (`CampaignActivityConsumerServiceTest`).
+- PENDING → RESOLVED 상태 전이 및 Exception 삼킴 시나리오 — 결제 복원력 검증 (`PaymentResilienceTest`).
+
+**단위 테스트 — 비즈니스 규칙 / 부작용 격리**
+- `RfmSegmentationServiceTest`: 외부 의존성 0인 순수 비즈니스 로직 — VIP/LOYAL/AT_RISK/DORMANT 경계값 시나리오 검증.
+- `BehaviorTriggerSchedulerTest`: ES·Redis·Kafka 전부 Mock 처리 — "Redis 미등록 → Kafka 1회 발행", "Redis 중복 → 발행 0회" 부작용 격리 검증.
+- `CampaignControllerTest`: `MockMvcBuilders.standaloneSetup()`으로 Security 컨텍스트 없이 컨트롤러 레이어만 격리 — `ArgumentCaptor`로 서비스 호출 인자까지 검증.
+
+**정합성 검증**
+- `CampaignStockSyncSchedulerTest`: Redis ghost(15) vs MySQL(10) 불일치 상황을 의도적으로 구성 → MySQL SSOT 기준 정산 동작 검증.
+- `StockPerformanceBenchmarkTest`: `StopWatch` 기반 Deferred vs Row-Lock 방식 실행시간 비교 — 성능 회귀 감지.
+
+**커버리지**
+- JaCoCo HTML + XML 리포트 생성 (`build.gradle` 설정).
+- TODO: 커버리지 수치 확정 후 기재.
