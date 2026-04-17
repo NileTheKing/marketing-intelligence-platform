@@ -53,5 +53,9 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.data.redis.host", () -> redisHost);
         registry.add("spring.data.redis.port", () -> redisPort);
         registry.add("spring.data.redis.password", () -> "");
+
+        registry.add("spring.datasource.url", mysql::getJdbcUrl);
+        registry.add("spring.datasource.username", mysql::getUsername);
+        registry.add("spring.datasource.password", mysql::getPassword);
     }
 }
