@@ -156,7 +156,7 @@ Campaign processing uses Strategy Pattern: `CampaignStrategy` interface with imp
 
 ## Documentation References
 
-- Architecture / Engineering rationale: `docs/ENGINEERING_JOURNEY.md`
+- Architecture / Engineering rationale: `docs/PORTFOLIO_MASTER.md`
 - Performance improvement plan: `core-service/docs/performance-improvement-plan.md`
 - FCFS refactor plan: `docs/FCFS_Refactor.md`
 - Project task board: `docs/project-tasks.md`

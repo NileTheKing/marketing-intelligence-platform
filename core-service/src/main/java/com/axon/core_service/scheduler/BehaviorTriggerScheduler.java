@@ -1,5 +1,8 @@
 package com.axon.core_service.scheduler;
 
+import com.axon.core_service.domain.marketing.MarketingRule;
+import com.axon.core_service.domain.marketing.RewardType;
+import com.axon.core_service.repository.MarketingRuleRepository;
 import com.axon.core_service.service.BehaviorEventService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
@@ -22,46 +25,64 @@ import java.util.concurrent.TimeUnit;
 public class BehaviorTriggerScheduler {
 
     private final BehaviorEventService behaviorEventService;
+    private final MarketingRuleRepository marketingRuleRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    private static final String TRIGGER_TYPE = "PAGE_VIEW";
-    private static final int VIEW_THRESHOLD = 3;
-    private static final int LOOKBACK_DAYS = 7;
     private static final long COUPON_TTL_DAYS = 30;
 
-    // 매 시간 0분에 실행
+    /**
+     * 매 시간 0분에 실행.
+     * 활성화된 MarketingRule을 DB에서 로드한 뒤, 규칙별로 행동 조건을 평가하고
+     * 임계값을 충족한 유저에게 쿠폰을 발행합니다.
+     */
     @Scheduled(cron = "0 0 * * * *")
     public void runBehaviorCouponTrigger() {
         log.info("========== Behavior Coupon Trigger Batch Started ==========");
+
+        List<MarketingRule> activeRules = marketingRuleRepository.findByIsActiveTrue();
+        log.info("Loaded {} active marketing rules", activeRules.size());
+
+        for (MarketingRule rule : activeRules) {
+            if (rule.getRewardType() != RewardType.COUPON) {
+                log.debug("Skipping rule '{}': rewardType={}", rule.getRuleName(), rule.getRewardType());
+                continue;
+            }
+            processRule(rule);
+        }
+
+        log.info("========== Behavior Coupon Trigger Batch Completed ==========");
+    }
+
+    private void processRule(MarketingRule rule) {
+        log.info("Processing rule: id={}, name='{}', behaviorType={}, threshold={}, lookbackDays={}",
+                rule.getId(), rule.getRuleName(), rule.getBehaviorType(),
+                rule.getThresholdCount(), rule.getLookbackDays());
+
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime start = now.minusDays(LOOKBACK_DAYS);
+        LocalDateTime start = now.minusDays(rule.getLookbackDays());
 
         try {
-            // 1. ES를 통한 타겟 유저/상품 추출
             Map<Long, List<Long>> highlyEngagedUsers = behaviorEventService.getHighlyEngagedUsersForProduct(
-                    start, now, TRIGGER_TYPE, VIEW_THRESHOLD);
+                    start, now, rule.getBehaviorType(), rule.getThresholdCount());
 
             for (Map.Entry<Long, List<Long>> entry : highlyEngagedUsers.entrySet()) {
                 Long userId = entry.getKey();
 
                 for (Long productId : entry.getValue()) {
-                    // 2. Redis를 통한 중복 발급 방지 체크
-                    String redisKey = String.format("coupon:trigger:%d:%d", userId, productId);
-                    Boolean isAbsent = redisTemplate.opsForValue().setIfAbsent(redisKey, "1", COUPON_TTL_DAYS, TimeUnit.DAYS);
+                    String redisKey = String.format("coupon:trigger:%d:%d:%d", rule.getId(), userId, productId);
+                    Boolean isAbsent = redisTemplate.opsForValue()
+                            .setIfAbsent(redisKey, "1", COUPON_TTL_DAYS, TimeUnit.DAYS);
 
                     if (Boolean.TRUE.equals(isAbsent)) {
-                        // 3. 중복이 아니라면 쿠폰 발급 (카프카 발행)
-                        log.info("Triggering coupon for user {} on product {}", userId, productId);
-                        
-                        // 명시적으로 couponId 세팅 (MVP 구조상 productId를 쿠폰아이디로 1:1 매핑한다고 가정)
-                        Long couponId = productId; 
+                        log.info("Triggering coupon: ruleId={}, userId={}, productId={}, couponId={}",
+                                rule.getId(), userId, productId, rule.getRewardReferenceId());
 
                         CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
                                 .campaignActivityType(CampaignActivityType.COUPON)
                                 .userId(userId)
-                                .productId(productId) // 기존 트리거 맥락
-                                .couponId(couponId)   // 명시적 쿠폰 발급
+                                .productId(productId)
+                                .couponId(rule.getRewardReferenceId()) // DB에서 로드한 실제 쿠폰 ID
                                 .timestamp(System.currentTimeMillis())
                                 .build();
 
@@ -70,9 +91,7 @@ public class BehaviorTriggerScheduler {
                 }
             }
         } catch (Exception e) {
-            log.error("Error running Behavior Coupon Trigger Batch", e);
+            log.error("Error processing rule id={} name='{}': {}", rule.getId(), rule.getRuleName(), e.getMessage(), e);
         }
-
-        log.info("========== Behavior Coupon Trigger Batch Completed ==========");
     }
 }

@@ -26,7 +26,7 @@ public class CampaignActivityConsumerService {
 
     private final Map<CampaignActivityType, CampaignStrategy> strategies;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final int kafkaBatchBuffer = 20;  // Reduced from 50 to decrease transaction time and lock contention
+    private final int kafkaBatchBuffer = 50;
 
     // 메시지 버퍼 (Thread-safe Queue)
     private final ConcurrentLinkedQueue<CampaignActivityKafkaProducerDto> buffer = new ConcurrentLinkedQueue<>();
@@ -54,10 +54,6 @@ public class CampaignActivityConsumerService {
         buffer.offer(message);
         log.info("📥 [Kafka] Consumed message: userId={}, activityId={}, bufferSize={}",
             message.getUserId(), message.getCampaignActivityId(), buffer.size());
-
-        if(buffer.size() >= kafkaBatchBuffer) {
-            flushBatch();
-        }
     }
     /**
      * 100ms마다 자동으로 버퍼 플러시
