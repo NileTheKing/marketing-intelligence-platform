@@ -65,10 +65,10 @@ body.dashboard {
     gap: 0.25rem;
     border-right: 1px solid #334155;
 
-    /* Sticky Positioning */
+    /* Sticky Positioning - Below the Header (60px) */
     position: sticky;
-    top: 0;
-    height: 100vh;
+    top: 60px;
+    height: calc(100vh - 60px);
     overflow-y: auto;
 }
 
@@ -120,6 +120,7 @@ body.dashboard {
 /* Main Content Area */
 .dashboard-main {
     flex: 1;
+    min-width: 0; /* Important: Prevents flex child from overflowing */
     padding: 2rem;
     overflow-y: auto;
 }
@@ -229,9 +230,18 @@ body.dashboard {
     grid-column: span 6;
 }
 
+@media (max-width: 1440px) {
+    .charts-grid {
+        gap: 1rem;
+    }
+}
+
 @media (max-width: 1280px) {
     .chart-card.half {
         grid-column: span 12;
+    }
+    .dashboard-main {
+        padding: 1.5rem;
     }
 }
 
@@ -302,12 +312,15 @@ body.dashboard {
 
     .dashboard-sidebar {
         width: 100%;
+        height: auto; /* Reset inherited 100vh height */
         padding: 0.5rem 1rem;
         flex-direction: row;
         overflow-x: auto;
         border-bottom: 1px solid #334155;
         border-right: none;
         gap: 0.5rem;
+        position: sticky; /* Keep it below header */
+        top: 60px;
     }
 
     .sidebar-label {

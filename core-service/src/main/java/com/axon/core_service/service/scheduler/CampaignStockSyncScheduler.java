@@ -62,29 +62,50 @@ public class CampaignStockSyncScheduler {
         }
     }
 
+    private final com.axon.core_service.repository.PurchaseRepository purchaseRepository;
+
     /**
-     * Syncs a single campaign's stock from Redis to MySQL.
+     * Syncs a single campaign's stock from Redis to MySQL with an Audit step.
      */
     private void syncCampaignStock(CampaignActivity campaign) {
         String counterKey = "campaign:" + campaign.getId() + ":counter";
 
-        // Get sold count from Redis
+        // 1. Redis에서 판매량(게이트 통과 수) 조회
         String soldCountStr = redisTemplate.opsForValue().get(counterKey);
-        Long soldCount = soldCountStr != null ? Long.parseLong(soldCountStr) : 0L;
+        long redisSoldCount = soldCountStr != null ? Long.parseLong(soldCountStr) : 0L;
 
-        log.info("Syncing campaign {}: soldCount={}, limit={}",
-            campaign.getId(), soldCount, campaign.getLimitCount());
+        // 2. MySQL에서 실제 결제 성공 건수(진실의 원천) 조회 (Index Range Scan 활용)
+        long mysqlSoldCount = purchaseRepository.countByCampaignActivityId(campaign.getId());
 
-        // Sync to MySQL Product.stock
-        if (campaign.getProductId() != null) {
-            productService.syncCampaignStock(campaign.getProductId(), soldCount);
+        log.info("Auditing campaign {}: redisSoldCount={}, mysqlSoldCount={}, limit={}",
+            campaign.getId(), redisSoldCount, mysqlSoldCount, campaign.getLimitCount());
+
+        // 3. Audit (대사) 및 정합성 보정 로직
+        long finalSoldCount = mysqlSoldCount; // 무조건 DB 장부를 최종 진실로 간주 (SSOT)
+
+        if (redisSoldCount != mysqlSoldCount) {
+            log.error("🚨 [RECONCILIATION DISCREPANCY] 캠페인 {} 정합성 오류 발견! Redis({}) vs MySQL({}). " +
+                      "데이터 무결성을 위해 DB 장부 기준으로 재고를 정산합니다.", 
+                      campaign.getId(), redisSoldCount, mysqlSoldCount);
+            
+            // Ghost Data가 있다면(Redis > MySQL), 차이만큼 로깅하여 추후 분석 가능하게 함
+            if (redisSoldCount > mysqlSoldCount) {
+                log.warn("  👉 Ghost Data 추정: {}건 (입구는 통과했으나 실제 결제 로그가 남지 않음)", 
+                         redisSoldCount - mysqlSoldCount);
+            }
         }
 
-        // Update campaign status to ENDED
+        // 4. 실질적인 DB 재고 차감 (Sync to MySQL Product.stock)
+        if (campaign.getProductId() != null) {
+            productService.syncCampaignStock(campaign.getProductId(), finalSoldCount);
+        }
+
+        // 5. 캠페인 상태를 ENDED로 변경하여 중복 정산 방지
         campaign.updateStatus(CampaignActivityStatus.ENDED);
         campaignActivityRepository.save(campaign);
 
-        log.info("Campaign {} stock synced and marked as ENDED", campaign.getId());
+        log.info("Campaign {} stock audit & sync completed successfully (Final count: {})", 
+            campaign.getId(), finalSoldCount);
     }
 
     /**

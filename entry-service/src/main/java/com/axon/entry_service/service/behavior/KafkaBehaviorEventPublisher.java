@@ -7,15 +7,19 @@ import java.time.Instant;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class KafkaBehaviorEventPublisher implements BehaviorEventPublisher {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    public KafkaBehaviorEventPublisher(@Qualifier("kafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
+    }
 
     /**
      * Publish the given user behavior event to the behavior Kafka topic.

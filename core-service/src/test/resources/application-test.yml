@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: core-service-test
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  sql:
+    init:
+      mode: never
+  batch:
+    jdbc:
+      initialize-schema: always
+  main:
+    allow-bean-definition-overriding: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: axon-test-group
+      auto-offset-reset: earliest
+
+axon:
+  entry-service-url: ${ENTRY_SERVICE_URL:http://localhost:8081}
+
+jwt:
+  secret: 'this-is-a-test-secret-key-for-unit-tests-only-1234567890'
+
+gemini:
+  api:
+    key: "test-api-key"
+
+logging:
+  level:
+    root: INFO
+    com.axon: DEBUG
+    org.testcontainers: INFO
+    org.springframework.test: INFO
+    org.hibernate.SQL: DEBUG

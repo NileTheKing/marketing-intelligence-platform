@@ -2,13 +2,17 @@ package com.axon.entry_service.service;
 
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class CampaignActivityProducerService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    public CampaignActivityProducerService(@Qualifier("transactionalKafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
+    }
 
     /**
      * Publishes the given campaign activity message to the specified Kafka topic.

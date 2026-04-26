@@ -91,7 +91,7 @@ public class BehaviorEventService {
                 .size(0)
                 .trackTotalHits(t -> t.enabled(true)) // Fix: Enable accurate total hits count (no 10k limit)
                 .query(q -> q.bool(b -> b
-                        .filter(buildPageUrlFilter(activityId))
+                        .filter(buildActivityIdFilter(activityId))
                         .filter(buildMultiTriggerTypeFilter(triggerTypes))
                         .filter(buildTimeRangeFilter(start, end)))),
                 Void.class);
@@ -194,7 +194,7 @@ public class BehaviorEventService {
                 .index("axon.event.*")
                 .size(0)
                 .query(q -> q.bool(b -> b
-                        .filter(buildMultiActivityUrlFilter(activityIds))
+                        .filter(buildMultiActivityIdFilter(activityIds))
                         .filter(buildTimeRangeFilter(start, end))))
                 .aggregations("hourly_traffic", a -> a
                         .dateHistogram(h -> h
@@ -222,12 +222,11 @@ public class BehaviorEventService {
         return hourlyTraffic;
     }
 
-    private Query buildMultiActivityUrlFilter(java.util.List<Long> activityIds) {
+    private Query buildMultiActivityIdFilter(java.util.List<Long> activityIds) {
         return Query.of(q -> q
                 .bool(b -> {
                     for (Long id : activityIds) {
-                        b.should(s -> s
-                                .wildcard(w -> w.field("pageUrl.keyword").value("*/campaign-activity/" + id + "/*")));
+                        b.should(s -> s.term(t -> t.field("properties.activityId").value(id)));
                     }
                     return b;
                 }));
@@ -275,6 +274,56 @@ public class BehaviorEventService {
         return stats;
     }
 
+    /**
+     * 특정 기간 동안 특정 트리거(예: PAGE_VIEW) 이벤트를 특정 횟수 이상 발생시킨 유저와 상품 목록을 조회합니다.
+     */
+    public java.util.Map<Long, java.util.List<Long>> getHighlyEngagedUsersForProduct(
+            LocalDateTime start, LocalDateTime end, String triggerType, int threshold) throws IOException {
+
+        SearchResponse<Void> response = elasticsearchClient.search(s -> s
+                .index("axon.event.*")
+                .size(0)
+                .query(q -> q.bool(b -> b
+                        .filter(buildTriggerTypeFilter(triggerType))
+                        .filter(buildTimeRangeFilter(start, end))
+                ))
+                .aggregations("by_user", a -> a
+                        .terms(t -> t.field("userId").size(10000))
+                        .aggregations("by_product", sub -> sub
+                                .terms(t -> t.field("properties.productId").size(1000))
+                                .aggregations("filter_by_count", filterAgg -> filterAgg
+                                        .bucketSelector(bs -> bs
+                                                .bucketsPath(bp -> bp.dict(java.util.Map.of("count", "_count")))
+                                                .script(script -> script.inline(in -> in.source("params.count >= " + threshold)))
+                                        )
+                                )
+                        )
+                ),
+                Void.class
+        );
+
+        java.util.Map<Long, java.util.List<Long>> result = new java.util.HashMap<>();
+
+        if (response.aggregations() != null && response.aggregations().containsKey("by_user")) {
+            for (co.elastic.clients.elasticsearch._types.aggregations.LongTermsBucket userBucket :
+                    response.aggregations().get("by_user").lterms().buckets().array()) {
+
+                Long userId = Long.valueOf(userBucket.key());
+                java.util.List<Long> productIds = new java.util.ArrayList<>();
+
+                for (co.elastic.clients.elasticsearch._types.aggregations.LongTermsBucket productBucket :
+                        userBucket.aggregations().get("by_product").lterms().buckets().array()) {
+                    productIds.add(Long.valueOf(productBucket.key()));
+                }
+
+                if (!productIds.isEmpty()) {
+                    result.put(userId, productIds);
+                }
+            }
+        }
+        return result;
+    }
+
     // == private helpers
     private Long getEventCount(Long activityId, String triggerType, LocalDateTime start, LocalDateTime end)
             throws IOException {
@@ -284,7 +333,7 @@ public class BehaviorEventService {
                 .size(0)
                 .trackTotalHits(t -> t.enabled(true)) // Fix: Enable accurate total hits count (no 10k limit)
                 .query(q -> q.bool(b -> b
-                        .filter(buildPageUrlFilter(activityId))
+                        .filter(buildActivityIdFilter(activityId))
                         .filter(buildTriggerTypeFilter(triggerType))
                         .filter(buildTimeRangeFilter(start, end)))),
                 Void.class);
@@ -298,12 +347,11 @@ public class BehaviorEventService {
         return response.hits().total().value();
     }
 
-    private Query buildPageUrlFilter(Long activityId) {
-        // pageUrl 필터 쿼리 작성 wildcard
+    private Query buildActivityIdFilter(Long activityId) {
         return Query.of(q -> q
-                .wildcard(w -> w
-                        .field("pageUrl.keyword")
-                        .value("*/campaign-activity/" + activityId + "/*")));
+                .term(t -> t
+                        .field("properties.activityId")
+                        .value(activityId)));
     }
 
     private Query buildTriggerTypeFilter(String triggerType) {

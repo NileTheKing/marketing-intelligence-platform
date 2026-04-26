@@ -77,11 +77,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const ctx = document.getElementById('ltvGrowthChart');
         if (!ctx) return;
 
-        // Destroy existing chart
-        if (ltvGrowthChart) {
-            ltvGrowthChart.destroy();
-        }
-
         // Use monthly details if available (batch data), otherwise fallback to legacy format
         const hasMonthlyData = data.monthlyDetails && data.monthlyDetails.length > 0;
 
@@ -168,71 +163,85 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
-        ltvGrowthChart = new Chart(ctx, {
-            type: 'line',
-            data: chartData,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 12, family: "'Inter', sans-serif" }
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: '#1e293b',
-                        padding: 12,
-                        cornerRadius: 8,
-                        titleFont: { size: 13, weight: 600, family: "'Inter', sans-serif" },
-                        bodyFont: { size: 12, family: "'Inter', sans-serif" },
-                        callbacks: {
-                            label: function (context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                label += formatCurrency(context.parsed.y);
-
-                                // Add LTV/CAC ratio for monthly data
-                                if (hasMonthlyData && context.datasetIndex === 0) {
-                                    const monthIndex = context.dataIndex;
-                                    const ratio = data.monthlyDetails[monthIndex]?.ltvCacRatio || 0;
-                                    label += ` (LTV/CAC: ${ratio.toFixed(2)})`;
-                                }
-
-                                return label;
+        if (ltvGrowthChart) {
+            ltvGrowthChart.data = chartData;
+            ltvGrowthChart.update('none'); // Update without animation
+        } else {
+            ltvGrowthChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false, 
+                    transitions: {
+                        active: {
+                            animation: {
+                                duration: 0
                             }
                         }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { font: { family: "'Inter', sans-serif" }, color: '#64748b' }
                     },
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: '#f1f5f9', borderDash: [5, 5] },
-                        ticks: {
-                            font: { family: "'Inter', sans-serif" },
-                            color: '#64748b',
-                            callback: function (value) {
-                                return '₩' + (value / 1000000).toFixed(1) + 'M';
+                    resizeDelay: 0,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: { size: 12, family: "'Inter', sans-serif" }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            padding: 12,
+                            cornerRadius: 8,
+                            titleFont: { size: 13, weight: 600, family: "'Inter', sans-serif" },
+                            bodyFont: { size: 12, family: "'Inter', sans-serif" },
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += formatCurrency(context.parsed.y);
+
+                                    // Add LTV/CAC ratio for monthly data
+                                    if (hasMonthlyData && context.datasetIndex === 0) {
+                                        const monthIndex = context.dataIndex;
+                                        const ratio = data.monthlyDetails[monthIndex]?.ltvCacRatio || 0;
+                                        label += ` (LTV/CAC: ${ratio.toFixed(2)})`;
+                                    }
+
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { family: "'Inter', sans-serif" }, color: '#64748b' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#f1f5f9', borderDash: [5, 5] },
+                            ticks: {
+                                font: { family: "'Inter', sans-serif" },
+                                color: '#64748b',
+                                callback: function (value) {
+                                    return '₩' + (value / 1000000).toFixed(1) + 'M';
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
     function updateRatioInterpretation(data) {

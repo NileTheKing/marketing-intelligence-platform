@@ -5,6 +5,26 @@
 .idea/
 *.iml
 build/
+.gradle/
 common-messaging/.gradle/
+
 # Secret files
 application-oauth.yml
+application-local.yml
+.env
+*.log
+
+# test related files
+jwt-tokens.json
+
+# Build and IDE artifacts
+bin/
+*.class
+out/
+.settings/
+.project
+.classpath
+.project
+.factorypath
+# Private career documents
+docs/private/

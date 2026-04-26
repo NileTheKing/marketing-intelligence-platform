@@ -24,6 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.axon.core_service.domain.dto.dashboard.GlobalDashboardResponse;
 
@@ -217,23 +218,27 @@ public class DashboardController {
     @GetMapping(value = "/stream/campaign/{campaignId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamCampaignDashboard(@PathVariable Long campaignId) {
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+        AtomicReference<ScheduledFuture<?>> scheduledTask = new AtomicReference<>();
 
         log.info("SSE connection opened for campaign: {}", campaignId);
 
-        ScheduledFuture<?> scheduledTask = scheduler.scheduleAtFixedRate(() -> {
+        scheduledTask.set(scheduler.scheduleAtFixedRate(() -> {
             try {
                 CampaignDashboardResponse data = dashboardService.getDashboardByCampaign(
                         campaignId, DashboardPeriod.SEVEN_DAYS, null, null);
                 emitter.send(SseEmitter.event().name("dashboard-update").data(data));
+            } catch (IOException e) {
+                log.debug("SSE client disconnected for campaign: {}", campaignId);
+                if (scheduledTask.get() != null) scheduledTask.get().cancel(true);
             } catch (Exception e) {
                 log.error("Error streaming dashboard for campaign: {}", campaignId, e);
                 emitter.completeWithError(e);
             }
-        }, 0, 5, TimeUnit.SECONDS);
+        }, 0, 5, TimeUnit.SECONDS));
 
-        emitter.onCompletion(() -> scheduledTask.cancel(true));
-        emitter.onTimeout(() -> scheduledTask.cancel(true));
-        emitter.onError((ex) -> scheduledTask.cancel(true));
+        emitter.onCompletion(() -> { if (scheduledTask.get() != null) scheduledTask.get().cancel(true); });
+        emitter.onTimeout(() -> { if (scheduledTask.get() != null) scheduledTask.get().cancel(true); });
+        emitter.onError((ex) -> { if (scheduledTask.get() != null) scheduledTask.get().cancel(true); });
 
         return emitter;
     }
@@ -252,50 +257,39 @@ public class DashboardController {
     public SseEmitter streamActivityDashboard(
             @PathVariable Long activityId,
             @RequestParam(defaultValue = "7d") String period) {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE); // No timeout
+        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
         DashboardPeriod dashboardPeriod = DashboardPeriod.fromCode(period);
+        AtomicReference<ScheduledFuture<?>> scheduledTask = new AtomicReference<>();
 
         log.info("SSE connection opened for activity: {}, period: {}", activityId, period);
 
-        // Schedule periodic dashboard updates
-        ScheduledFuture<?> scheduledTask = scheduler.scheduleAtFixedRate(() -> {
+        scheduledTask.set(scheduler.scheduleAtFixedRate(() -> {
             try {
-                // Fetch latest dashboard data
                 DashboardResponse data = dashboardService.getDashboardByActivity(
-                        activityId,
-                        dashboardPeriod,
-                        null,
-                        null);
-
-                // Send data to client
-                emitter.send(SseEmitter.event()
-                        .name("dashboard-update")
-                        .data(data));
-
+                        activityId, dashboardPeriod, null, null);
+                emitter.send(SseEmitter.event().name("dashboard-update").data(data));
                 log.debug("Sent dashboard update for activity: {}", activityId);
-
             } catch (IOException e) {
-                log.warn("SSE connection closed for activity: {}", activityId);
-                emitter.completeWithError(e);
+                log.debug("SSE client disconnected for activity: {}", activityId);
+                if (scheduledTask.get() != null) scheduledTask.get().cancel(true);
             } catch (Exception e) {
                 log.error("Error streaming dashboard for activity: {}", activityId, e);
                 emitter.completeWithError(e);
             }
-        }, 0, 5, TimeUnit.SECONDS); // Initial delay 0, then every 5 seconds
+        }, 0, 2, TimeUnit.SECONDS));
 
-        // Cleanup when connection closes
         emitter.onCompletion(() -> {
-            scheduledTask.cancel(true);
+            if (scheduledTask.get() != null) scheduledTask.get().cancel(true);
             log.info("SSE completed for activity: {}", activityId);
         });
 
         emitter.onTimeout(() -> {
-            scheduledTask.cancel(true);
+            if (scheduledTask.get() != null) scheduledTask.get().cancel(true);
             log.warn("SSE timeout for activity: {}", activityId);
         });
 
         emitter.onError((ex) -> {
-            scheduledTask.cancel(true);
+            if (scheduledTask.get() != null) scheduledTask.get().cancel(true);
             log.error("SSE error for activity: {}", activityId, ex);
         });
 

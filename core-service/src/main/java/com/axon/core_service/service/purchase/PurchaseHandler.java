@@ -32,6 +32,7 @@ public class PurchaseHandler {
     private final PurchaseService purchaseService;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
+    private final DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
 
     // Purchase 이벤트 버퍼
     private final ConcurrentLinkedQueue<PurchaseInfoDto> purchaseBuffer = new ConcurrentLinkedQueue<>();
@@ -45,10 +46,7 @@ public class PurchaseHandler {
             purchaseBuffer.offer(info);
             log.debug("[Purchase] Event buffered. Buffer size: {}", purchaseBuffer.size());
 
-            // 50개 모이면 즉시 처리
-            if (purchaseBuffer.size() >= batchSize) {
-                flushBatch();
-            }
+            // 수신 스레드는 메모리에 넣고 즉시 반환 - DB 처리는 스케줄러가 전담
         }
     }
 
@@ -74,7 +72,8 @@ public class PurchaseHandler {
     @Scheduled(fixedDelay = 100)
     public void scheduledFlush() {
 
-        if (!purchaseBuffer.isEmpty()) {
+        // 단일 처리가 아닌, 큐가 빌 때까지 50개씩 계속 퍼나르도록 while 루프 적용 (책임의 완벽한 분리)
+        while (!purchaseBuffer.isEmpty()) {
             flushBatch();
         }
     }
@@ -175,6 +174,7 @@ public class PurchaseHandler {
                 // 1. 구매 저장 (REQUIRES_NEW Transaction in Service)
                 purchaseService.createPurchaseBatch(List.of(purchase));
 
+
                 // 2. 이벤트 발행
                 if (purchase.campaignActivityId() != null) {
                     eventPublisher.publishEvent(new CampaignActivityApprovedEvent(
@@ -186,9 +186,10 @@ public class PurchaseHandler {
                     ));
                 }
             } catch (Exception e) {
-                log.error("Individual save failed for user {}: {}", purchase.userId(), e.getMessage());
-                // 개별 실패는 무시하고 다음 건 진행
+                deadLetterHandler.handle(purchase, e);
+                // 개별 실패는 격리 처리하고 다음 건 진행
             }
+
         }
     }
 

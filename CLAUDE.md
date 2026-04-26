@@ -9,21 +9,26 @@ Axon CDP is a multi-module Spring Boot ecosystem implementing real-time campaign
 ### Key Architecture Components
 
 **Entry-service (port 8081)**: Lightweight validation and reservation service
-- Handles FCFS slot reservations via Redis counters and sets
+- Handles FCFS slot reservations via Redis atomic counters and Redisson distributed locks
 - Publishes events to Kafka topics: `axon.event.raw`, `axon.campaign-activity.command`
-- Implements fast validation using Redis-cached user data
-- Issues reservation tokens for payment flows
+- Implements fast validation using Redis-cached user data; calls Core-service for heavy validation
+- Issues reservation tokens for payment flows; **Virtual Threads enabled** (`spring.threads.virtual.enabled=true`)
 
-**Core-service (port 8080)**: Domain logic and persistence engine  
-- Consumes Kafka commands to process campaign activities
-- Manages MySQL persistence for campaigns, entries, users, productse
+**Core-service (port 8080)**: Domain logic and persistence engine
+- Consumes Kafka commands via micro-batch buffer (20-msg threshold + 100ms flush via `ConcurrentLinkedQueue`)
+- Manages MySQL persistence for campaigns, entries, users, products
 - Handles complex validation rules and user summary updates
 - Serves Thymeleaf UI with auto-injected behavior tracking
+- Exposes LLM-powered natural language dashboard queries (Gemini API, `gemini` profile)
 
-**Data Flow**: `Browser (JS tracker) → Entry-service (Redis FCFS) → Kafka → Core-service (MySQL) + Kafka Connect → Elasticsearch`
+**common-messaging**: Shared DTOs and Kafka topic constants used by both services
+- Key DTOs: `CampaignActivityKafkaProducerDto`, `UserBehaviorEventMessage`, `ReservationTokenPayload`, `UserCacheDto`
+- Topic constants centralized in `KafkaTopics`
+
+**Data Flow**: `Browser (JS tracker) → Entry-service (Redis FCFS + Virtual Threads) → Kafka → Core-service (micro-batch consumer, MySQL) + Kafka Connect → Elasticsearch`
 
 ### Critical Kafka Topics
-- `axon.event.raw`: Raw behavior events from JS tracker
+- `axon.event.raw`: Raw behavior events from JS tracker and backend synthetic events
 - `axon.campaign-activity.command`: FCFS reservation commands
 - `axon.campaign-activity.log`: Domain event logs
 - `axon.user.login`: User authentication events
@@ -74,20 +79,45 @@ curl http://localhost:8083/connectors
 
 ## Key Implementation Details
 
-### Redis FCFS Implementation
+### Redis FCFS + Distributed Lock
 - Participant tracking: Redis Sets with key pattern `campaignActivity:{id}:participants`
 - Counter management: Redis counters for order determination
-- Reservation tokens: Temporary reservations with TTL for payment flows
+- **Distributed lock**: Redisson-backed `@DistributedLock` AOP annotation (`DistributedLockAspect`) ensures atomic FCFS across multiple Entry-service instances — prevents over-booking
+- Reservation tokens: Temporary reservations with TTL, validated during payment confirm step
+
+### Micro-Batch Consumer Pattern
+`CampaignActivityConsumerService` buffers incoming Kafka messages in a `ConcurrentLinkedQueue` and flushes to `CampaignStrategy` implementations either when 20 messages accumulate or every 100ms via `@Scheduled`. This smooths DB write load without requiring Kafka batch listener configuration.
+
+### Campaign Strategy Pattern
+Campaign processing uses Strategy Pattern: `CampaignStrategy` interface with implementations `FirstComeFirstServeStrategy`, `CouponStrategy`. The consumer builds an unmodifiable `Map<CampaignActivityType, CampaignStrategy>` at startup (Spring auto-injects all strategy beans). Adding a new campaign type = new `CampaignStrategy` implementation only.
+
+### LLM Dashboard Queries (Gemini)
+- `GeminiLLMQueryService` implements `LLMQueryService` and is active on `gemini` or `prod` profiles
+- Accepts natural language queries, fetches live dashboard data, sends to `gemini-2.5-flash-lite` API
+- `MockLLMQueryService` is the fallback on other profiles
+- Requires `GEMINI_API_KEY` environment variable
 
 ### Kafka Serialization
 - Producer: `JsonSerializer` with type headers enabled
-- Consumer: `JsonDeserializer` with trusted packages set to "*"
+- Consumer: `JsonDeserializer` with trusted packages set to `"*"`
 - Shared DTOs defined in `common-messaging` module
 
 ### Database Configuration
-- **Core-service**: MySQL on localhost:3306, database `axon_db`
+- **Core-service**: MySQL on localhost:3306, database `axon_db`; HikariCP pool size 20
 - **Both services**: Redis on localhost:6379 for caching and FCFS logic
-- **Hibernate**: DDL auto-create in development (change to 'validate' for production)
+- **Hibernate**: `ddl-auto: update` in development (change to `validate` for production)
+- All credentials use env vars: `DB_USERNAME`, `DB_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET`, `PAYMENT_TOKEN_SECRET`, `GEMINI_API_KEY`
+
+### Active Spring Profiles
+- Core-service: `oauth`, `gemini` (see `spring.profiles.include` in application.yml)
+- Entry-service: `oauth`
+- Gemini LLM beans only load under `gemini` or `prod` profile
+
+### Schedulers (Core-service)
+- `CohortLtvBatchScheduler`: runs cohort LTV batch via `CohortLtvBatchService`
+- `PaymentRecoveryScheduler`: retries failed payments
+- `UserPurchaseScheduler`: syncs user purchase summaries
+- `CampaignStockSyncScheduler`: syncs campaign stock
 
 ## Critical Integration Points
 
@@ -95,16 +125,26 @@ curl http://localhost:8083/connectors
 - Auto-injected into Thymeleaf templates from `core-service/src/main/resources/static/js/behavior-tracker.js`
 - Sends events to Entry-service `/api/v1/behavior/events` endpoint
 - Configuration via `axon-tracker-config.js` for token/user providers
+- Backend also publishes synthetic purchase events to `axon.event.raw` with a unified schema (synthetic URL: `/campaign-activity/{id}/purchase`)
 
 ### Kafka Connect Pipeline
 - Elasticsearch Sink connectors: `elasticsearch-sink-behavior-events`, `elasticsearch-sink-connector`
 - Maps Kafka topics to ES indices: `behavior-events`, `axon.event.raw`
 - Handles schema-less JSON with automatic index creation
 
+### Payment Flow
+1. Entry-service validates FCFS slot → issues reservation token (Redis TTL)
+2. Client calls payment confirm → Entry-service validates token → publishes `CampaignActivityKafkaProducerDto` to Kafka
+3. Core-service consumer processes → writes `CampaignActivityEntry` to MySQL
+
 ### Service Communication
-- Entry-service → Core-service: Via Kafka asynchronous messaging only
-- JWT tokens shared between services (secret: configured in application.yml)
-- OAuth2 integration for user authentication (profiles include 'oauth')
+- Entry-service → Core-service: Via Kafka asynchronous messaging only (no direct HTTP for business logic)
+- Entry-service → Core-service: HTTP (`CoreValidationService`) for heavy user validation cache miss
+- JWT tokens shared between services (secret: `JWT_SECRET` env var)
+- OAuth2 integration for user authentication (profile: `oauth`)
+
+### Validation Strategy (Campaign Limits)
+`DynamicValidationService` uses `ValidationLimitFactoryService` to load filter rules per campaign activity and delegates to `ValidationLimitStrategy` implementations (e.g., `RecentPurchaseLimit`). Filter config stored as JSON in `FilterDetail` (JPA attribute converter).
 
 ## Testing Notes
 
@@ -112,43 +152,17 @@ curl http://localhost:8083/connectors
 - Known flaky test: `CampaignActivityConsumerServiceTest` concurrency test may fail due to race conditions
 - Tests use `@SpringBootTest` with test-specific Redis/MySQL cleanup
 - Mock external dependencies in unit tests; use TestContainers for integration tests if needed
-
-## Performance Improvement Roadmap
-
-### Current Issues
-1. **FCFS Race Condition**: Over-booking possible under concurrent load (check-then-act problem)
-2. **No Distributed Locking**: Redis operations not atomic across multiple servers
-3. **I/O Blocking**: Entry-service limited by platform thread pool
-
-### Planned Improvements (3 Phases)
-
-#### Phase 1: Distributed Lock (P0 - Urgent)
-- **Redisson integration**: Add distributed locking for FCFS operations
-- **AOP-based locks**: `@DistributedLock` annotation for clean separation
-- **Target**: Zero over-booking, 100% inventory accuracy
-
-#### Phase 2: Virtual Thread Migration (P1 - Short-term)
-- **JDK 21 Virtual Threads**: Replace WebFlux plan with simpler Virtual Thread approach
-- **Benefits**: 8x throughput improvement with 99% code reuse (vs WebFlux rewrite)
-- **Configuration**: `spring.threads.virtual.enabled=true` + Tomcat customizer
-
-#### Phase 3: JVM Tuning (P2 - Medium-term)
-- **ZGC adoption**: Sub-millisecond GC pauses for consistent latency
-- **Monitoring**: Prometheus + Grafana dashboards for JVM metrics
-- **Target**: < 1ms GC pause, 8,000+ req/s throughput
-
-**Detailed Plan**: See `core-service/docs/performance-improvement-plan.md`
-
-**Key Decisions**:
-- ❌ **WebFlux**: Rejected due to high complexity and full rewrite requirement
-- ✅ **Virtual Threads**: Chosen for 80% performance gain with 20% effort
-- ✅ **Redisson**: Industry-standard distributed lock with Redis
+- LLM tests: use `MockLLMQueryService` (default profile) to avoid Gemini API calls in CI
 
 ## Documentation References
 
-- **Performance improvement**: `core-service/docs/performance-improvement-plan.md` ⭐ NEW
-- Architecture flows: `docs/purchase-event-flow.md`, `docs/campaign-activity-limit-flow.md`
-- Behavior tracking: `docs/behavior-tracker.md`, `docs/snippets/behavior-tracker.js`
+- Architecture / Engineering rationale: `docs/PORTFOLIO_MASTER.md`
+- Performance improvement plan: `core-service/docs/performance-improvement-plan.md`
+- FCFS refactor plan: `docs/FCFS_Refactor.md`
+- Project task board: `docs/project-tasks.md`
+- Architecture flows: `docs/flow/` (purchase-event, campaign-activity-limit)
+- Behavior tracking: `docs/behavior-tracker.md`
 - Analytics pipeline: `docs/behavior-event-fluentd-plan.md`
 - Dashboard specifications: `docs/marketing-dashboard-spec.md`
-- Project roadmap: `docs/project-tasks.md`
+- Filter system: `docs/Filter_System_Architecture.md`
+- Payment resilience: `docs/payment-resilience-architecture.md`

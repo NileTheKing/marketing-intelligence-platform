@@ -249,7 +249,7 @@ public class StoreController {
         return "campaign-activities";
     }
 
-    @GetMapping("/campaignActivity/{id}")
+    @GetMapping("/campaign-activity/{id}")
     public String getCampaignActivityDetail(@PathVariable Long id, Model model) {
         // Fetch real campaign activity by ID
         CampaignActivity campaignActivity = campaignActivityRepository.findById(id)

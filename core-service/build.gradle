@@ -1,7 +1,8 @@
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '3.5.6'
-	id 'io.spring.dependency-management' version '1.1.7'
+        id 'java'
+        id 'org.springframework.boot' version '3.5.6'
+        id 'io.spring.dependency-management' version '1.1.7'
+        id 'jacoco'
 }
 
 group = 'com.axon'
@@ -9,11 +10,22 @@ version = '0.0.1-SNAPSHOT'
 description = 'axon core services'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+        toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+        }
 }
 
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        html.required = true
+        xml.required = true
+    }
+}
 configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
@@ -66,9 +78,28 @@ dependencies {
 	testImplementation 'com.h2database:h2'
 	testImplementation 'org.springframework.batch:spring-batch-test'
 	testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testImplementation "org.testcontainers:mysql"
+    testImplementation "org.testcontainers:kafka"
+    testImplementation "org.testcontainers:junit-jupiter"
+    testImplementation "org.testcontainers:testcontainers"
+    testImplementation "org.springframework.boot:spring-boot-testcontainers"
+    testImplementation "com.redis:testcontainers-redis:2.2.3"
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.testcontainers:testcontainers-bom:1.20.0"
+    }
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+
+    // Intelligent Colima Auto-Detection
+    // Only apply the socket override if we detect a Colima-based Docker environment.
+    def dockerHostEnv = System.getenv("DOCKER_HOST") ?: ""
+    if (dockerHostEnv.contains(".colima")) {
+        environment "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock"
+    }
 }

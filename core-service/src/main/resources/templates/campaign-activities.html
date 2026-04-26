@@ -41,7 +41,7 @@
                     class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
                     <!-- Event Card -->
                     <a th:each="activity, stat : ${fcfsCampaignActivities}"
-                        th:href="@{/campaignActivity/{id}(id=${activity.id})}"
+                        th:href="@{/campaign-activity/{id}(id=${activity.id})}"
                         th:style="${stat.index >= 4} ? 'display: none;' : ''"
                         th:classappend="${stat.index >= 4} ? 'hidden-activity' : ''"
                         class="bg-[#f8f8f8] p-8 rounded-sm flex items-center justify-between group cursor-pointer hover:bg-[#f0f0f0] transition-colors event-card">

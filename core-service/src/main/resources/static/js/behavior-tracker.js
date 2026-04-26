@@ -121,7 +121,6 @@
    */
   BehaviorTracker.prototype.registerHandlers = function registerHandlers() {
     this.registerPageViewHandlers();
-        this.registerClickHandlers();
     this.registerClickHandlers();
   };
 

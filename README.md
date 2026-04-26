@@ -1,493 +1,224 @@
-# Axon: Customer Data Platform for Marketing Intelligence
+<h1 align="center">Axon: 실시간 대규모 트래픽 처리 및 마케팅 분석 플랫폼</h1>
+<p align="center">
+  <b>선착순 이벤트 제어와 고객 생애 가치(LTV) 분석을 결합한 통합 CRM 솔루션</b><br>
+  대규모 트래픽 환경에서의 데이터 정합성 보장 및 비동기 파이프라인 구축
+</p>
 
-**Languages**: [English](#english) | [한국어](#korean)
-
----
-
-<a name="english"></a>
-## 🌎 English Version
-
-> **Scale-ready, Event-driven Architecture for High-Concurrency Commerce & Real-time Marketing Analytics**
-
-Axon CDP transforms every user behavior (event participation, purchases, clicks, scrolls) in e-commerce into valuable marketing insights. Built for **massive traffic spikes** (FCFS events, flash sales), it ensures **data consistency** under high concurrency while providing real-time dashboards for marketers.
-
----
-
-## 🎯 Key Features
-
-### 1. High-Concurrency Event Processing
-- **Deterministic FCFS**: Guarantees zero over-booking using **Redisson Distributed Locks** and **Redis Atomic Counters**
-- **2-Stage Token System**: Reservation token → Payment confirmation workflow prevents double bookings
-- **Spike Buffering**: Entry Service absorbs traffic bursts and buffers to Kafka before reaching core logic
-
-### 2. Real-time Behavior Tracking
-- **Lightweight JS Tracker**: Collects page views, clicks, scrolls without impacting site performance
-- **No-ETL Pipeline**: Client-side data normalization eliminates server-side parsing overhead
-- **Instant Indexing**: Kafka Connect streams events to Elasticsearch in sub-second latency
-
-### 3. Advanced Marketing Dashboard
-- **Funnel Analysis**: Visualizes conversion rates from Visit → Click → Purchase
-- **Cohort & LTV Analysis**: Tracks user retention, lifetime value (30d/90d/365d), and CAC metrics
-- **Real-time Widgets**: Live inventory, participant count, conversion rate updates
-
-### 4. LLM-Powered Marketing Assistant
-- **Context-Aware AI**: Gemini-based chatbot understands current campaign context
-- **Safe Data Access**: Uses verified dashboard APIs instead of risky SQL generation
-- **Actionable Insights**: Generates hypothesis-driven recommendations (e.g., "High page views but low conversion suggests price resistance — try limited-time 15% coupon popup")
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-21-orange?style=flat-square&logo=java" />
+  <img src="https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?style=flat-square&logo=springboot" />
+  <img src="https://img.shields.io/badge/Apache%20Kafka-KRaft-black?style=flat-square&logo=apachekafka" />
+  <img src="https://img.shields.io/badge/Elasticsearch-8.x-005571?style=flat-square&logo=elasticsearch" />
+  <img src="https://img.shields.io/badge/Redis-Lua-DC382D?style=flat-square&logo=redis" />
+</p>
 
 ---
 
-## 🏗️ System Architecture
+## 프로젝트 개요
+Axon은 대규모 프로모션 시 발생하는 **급격한 접속자 유입 상황에서도 시스템 안정성을 유지**하고, 유입된 고객 데이터를 실시간으로 분석하여 **마케팅 의사결정을 돕는 지능형 플랫폼**입니다. 요청 수집과 비즈니스 로직 처리를 물리적으로 분리한 **부하 충격 완화 구조**를 통해 대규모 스파이크 트래픽을 안정적으로 수용합니다.
+
+---
+
+## 비즈니스 시나리오 및 성과
+> "3,000명의 접속자가 2초 만에 200개의 한정 상품에 응모하며 대량의 행동 로그를 생성하는 극한 상황"을 가정하여 검증을 수행했습니다.
+
+| 측정 항목 | 결과 수치 | 비고 |
+| :--- | :---: | :--- |
+| **최대 가용량** | **2,900 RPS / 3,000 VU** | 스파이크 구간 피크 처리량 실측 |
+| **응답 품질** | **Avg 1.2s / p95 3.99s** | 극한 부하 상황의 지연 시간 관리 |
+| **통합 로그 처리량** | **20,000+ EPS** | 인프라/미들웨어/애플리케이션 로그 통합 적재 |
+| **선착순 정합성** | **오버부킹 0건** | 10,655건 응모 중 정확히 200건만 당첨 |
+| **데이터 무결성** | **Loss 0%** | 21,310건의 행동 로그 전량 유실 없이 적재 완료 |
+| **시스템 안정성** | **에러율 0.00%** | 비즈니스 응답(410, 409) 제외 서버 에러 0건 |
+
+<details>
+<summary><b>부하 테스트 데이터 상세 해석</b></summary>
+
+- **꼬리 지연 시간(Tail Latency) 방어**: 3,000명의 동시 접속자가 쏟아지는 상황에서도 p95 지연 시간을 3.99s 이내로 관리하여, 시스템 응답 불능 없이 모든 요청을 완주했습니다.
+- **복합 워크로드 수용**: 전체 트래픽의 93%를 차지하는 행동 로그 수집(62%)과 선착순 응모(31%)가 혼재된 상황에서, 나머지 7%의 결제 및 인증 트래픽까지 서버 붕괴 없이 안정적으로 처리했습니다.
+- **의도된 비즈니스 응답**: k6 결과상의 `http_req_failed(30.4%)`는 시스템 오류가 아닌, 품절(410) 및 중복 참여 차단(409)이라는 설계된 비즈니스 로직의 정상 작동 결과입니다.
+</details>
+
+---
+
+## 시스템 아키텍처
+
+### 서비스 논리 구조
+요청 수집(Entry)과 비즈니스 처리(Core) 서비스를 분리하여 부하 충격을 완화하고, Kafka를 통해 데이터 처리 속도를 조절하는 **배압 조절(Backpressure)** 구조를 채택했습니다.
 
 ```mermaid
-graph TD
-    Client[User Browser] -->|Traffic| Tracker[Axon JS Tracker]
-    Tracker -->|Normalized Events| Entry[Entry Service :8081]
-
-    subgraph "Ingestion Layer"
-        Entry -->|Fast Cache| Redis[(Redis)]
-        Entry -->|Buffer| Kafka_Raw[Kafka: axon.event.raw]
-        Entry -->|FCFS Command| Kafka_Cmd[Kafka: axon.campaign-activity.command]
+graph TB
+    subgraph Client["브라우저"]
+        Browser["UI (Thymeleaf/JS)"]
+        JSTracker["자체 행동 수집 SDK"]
     end
 
-    subgraph "Core Domain"
-        Kafka_Cmd -->|Consume| Core[Core Service :8080]
-        Core -->|Distributed Lock| Redisson[(Redisson)]
-        Core -->|Transactional Write| MySQL[(MySQL)]
+    subgraph Entry["Entry Service (유입 제어)"]
+        EntryController["Entry Controller"]
+        FastValidation["조건 검증 (Redis)"]
+        FCFSLogic["선착순 제어 (Redis Lua)"]
+        EntryKafka["Kafka Producer"]
     end
 
-    subgraph "Data & Analytics"
-        Kafka_Raw -->|Kafka Connect| ES[(Elasticsearch)]
-        MySQL -->|Read Replica| Dashboard[Admin Dashboard]
-        ES -->|Aggregation Query| Dashboard
-        Dashboard -->|API Call| LLM[Gemini LLM]
-    end
-```
-
-| Module | Responsibility | Tech Stack |
-|--------|----------------|------------|
-| **`entry-service`** | Traffic gateway, FCFS validation, behavior logging | Spring Boot, Netty, Redis, Kafka |
-| **`core-service`** | Business logic, domain persistence, analytics | Spring Boot (Virtual Threads), JPA, Redisson, Spring Batch |
-| **`common-messaging`** | Shared DTOs, Kafka topics, domain events | Java Library |
-| **`infrastructure`** | K8s manifests, Helm charts, CI/CD | Docker, GitHub Actions |
-| **`axon-tracker`** | Lightweight JS SDK for behavior tracking | Vanilla JS (< 5KB gzipped) |
-
----
-
-## 🛠️ Tech Stack
-
-**Backend**:
-- Java 21 (LTS), Spring Boot 3.5.5, Spring Batch, Spring Security
-- Apache Kafka (KRaft mode), MySQL 8.0, Redis (Cluster-ready), Elasticsearch 8.x
-
-**DevOps**:
-- Kubernetes (K8s), Docker, GitHub Actions, KT Cloud, Nginx Ingress
-
-**Observability**:
-- Prometheus, Grafana, Kibana, Fluentbit
-
-**Frontend**:
-- Thymeleaf, Chart.js, TailwindCSS, Vanilla JS
-
-**AI/ML**:
-- Gemini 2.0 Flash (Marketing Intelligence)
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Java 21+
-- Docker & Docker Compose
-
-### 1. Start Infrastructure
-Spin up Kafka, MySQL, Redis, Elasticsearch, and supporting services.
-```bash
-docker-compose up -d
-```
-
-### 2. Run Services
-**Entry Service (Port 8081)**
-```bash
-./gradlew :entry-service:bootRun
-```
-
-**Core Service (Port 8080)**
-```bash
-./gradlew :core-service:bootRun
-```
-
-### 3. Access Dashboard
-Navigate to `http://localhost:8080/admin/dashboard/1` to view the real-time marketing dashboard.
-
----
-
-## 🧪 Testing & Simulation
-
-Axon includes a powerful simulation suite for complex scenarios.
-
-| Script | Purpose |
-|--------|---------|
-| `run-dashboard-test.sh` | Generates full user journey (Visit → Purchase) and populates dashboard |
-| `generate-ltv-simulation.sh` | Simulates future repurchases (30d/90d/365d) for Cohort/LTV analysis |
-| `time-travel-activity.sh` | Moves campaign dates to the past to test expired scenarios |
-| `generate-full-funnel.sh` | Core script for behavior event + FCFS reservation workflow |
-
-**Example: Full Test Run**
-```bash
-# Generate 100 visitors for Activity ID 1
-./core-service/scripts/run-dashboard-test.sh 1 100
-
-# Simulate LTV for 30-day cohort
-./core-service/scripts/generate-ltv-simulation.sh 1
-```
-
----
-
-## ⚡ Performance Engineering
-
-### Concurrency Control
-We addressed **"Over-booking"** in FCFS events by implementing **Redisson Distributed Locks**.
-- **Before**: Database `check-then-act` caused race conditions under load
-- **After**: `RLock` ensures atomic reservations across distributed instances
-- **Result**: Zero over-booking even under 8,000 concurrent users
-
-### Throughput Optimization
-- **Virtual Threads (JDK 21)**: Replaced complex reactive chains with blocking-style Virtual Threads
-  - 8x throughput improvement with 99% code reuse (vs WebFlux rewrite)
-  - Simpler debugging compared to Reactor stack traces
-- **Async Event Publishing**: `@ApplicationEvent` + Kafka ensures main transaction is never blocked by logging
-
-### Batch Processing
-Axon combines **`@Scheduled`** and **Spring Batch** for heavy analytics:
-- `@Scheduled` triggers jobs periodically (e.g., every 100 minutes)
-- Spring Batch processes large datasets in chunks (100 rows per transaction)
-- Example: `UserPurchaseScheduler.java` → `BatchConfig.java` (Reader-Processor-Writer pattern)
-
----
-
-## 📊 Data Architecture
-
-### Hybrid Query Engine
-- **MySQL (Read Replica)**: Transactional data (purchases, user profiles) for accurate financial metrics
-- **Elasticsearch**: Massive behavior logs (page views, clicks) for real-time aggregation
-- **Redis**: FCFS counters, reservation tokens, campaign metadata caching (1-hour TTL)
-
-### Real-time Streaming Pipeline
-```
-Browser (Tracker) → Entry Service → Kafka → Kafka Connect → Elasticsearch
-                                  ↓
-                             Core Service → MySQL
-```
-- **Kafka Connect**: Streams `axon.event.raw` to Elasticsearch with < 1s latency
-- **No-ETL Design**: Tracker sends pre-normalized JSON schema, eliminating server-side parsing
-
----
-
-## 📈 Marketing KPIs Provided
-
-- **Funnel Conversion**: Visit → Click → Reservation → Purchase (%)
-- **Cohort Analysis**: Retention rates (D1, D7, D30) and LTV by acquisition date
-- **CAC (Customer Acquisition Cost)**: Campaign spend / new users
-- **ROAS (Return on Ad Spend)**: Revenue / ad spend
-- **Real-time Metrics**: Current participants, remaining inventory, conversion velocity
-
----
-
-## 🤖 LLM Marketing Intelligence
-
-**Example Interaction**:
-> **Marketer**: "Recent signups increased but repurchase rate is low. How to turn them into loyal customers?"
-
-> **Axon AI**:
-> - **Cohort Analysis**: Last month's "Fall Sale" cohort has only 12% D30 retention (avg: 25%). First purchase < ₩30,000 → low repurchase probability.
-> - **Action Items**:
->   1. Send "₩5,000 off + free shipping" coupon within 3 days post-purchase (predicts 2.5x LTV increase)
->   2. Show "₩10,000 more for VIP perks" message at checkout to increase AOV
->   3. Send personalized email with trending keywords ("knit", "coat") to at-risk segments
-
-**How It Works**:
-1. **Safe Tool Use**: LLM calls verified dashboard APIs (no raw SQL injection risk)
-2. **Context Awareness**: Auto-detects current campaign ID and timeframe
-3. **Domain Knowledge**: Marketing-specific prompts generate hypothesis-driven insights
-
----
-
-## 📚 Documentation
-
-- [Performance Improvement Plan](docs/performance-improvement-plan.md)
-- [Behavior Tracker Specification](docs/behavior-tracker.md)
-- [Marketing Dashboard Development](docs/marketing-dashboard-development-plan.md)
-- [Campaign Activity Flow](docs/campaign-activity-limit-flow.md)
-
----
-
-## 🏆 Key Achievements
-
-✅ **Zero Over-booking**: Distributed locking ensures 100% inventory accuracy under 8,000 concurrent users
-✅ **Sub-second Analytics**: Elasticsearch aggregation queries return in < 200ms
-✅ **8x Throughput**: Virtual Threads handle 8,000+ req/s vs 1,000 req/s (platform threads)
-✅ **High Availability**: 2+ replicas for all critical services (Kafka, MySQL, Redis)
-✅ **Auto-scaling**: HPA triggers scale-out when CPU > 70%
-
----
-
-**Axon Team** | *Built for Scale, Designed for Insight.*
-
----
----
-
-<a name="korean"></a>
-## 🇰🇷 한국어 버전
-
-> **대용량 트래픽 환경에서도 안정적인 고객 데이터 플랫폼**
-
-Axon은 쇼핑몰 내에서 발생하는 모든 사용자 행동(이벤트 참여, 구매, 클릭, 스크롤 등)을 수집하고 분석하여, 가치 있는 데이터로 가공합니다. 데이터를 이용한 마케팅 의사결정을 지원하는 **고객 데이터 플랫폼(CDP)**입니다.
-
-백엔드 중점 설계로 대규모 트래픽 환경에서도 **서비스 안정성(OLTP)**과 **분석 성능(OLAP)**을 동시에 확보하는 아키텍처를 설계했습니다. 성능 최적화와 데이터 정합성을 깊이 있게 고민하였으며, 이를 통해 마케터에게 실질적인 비즈니스 인사이트를 제공합니다.
-
----
-
-## 🎯 핵심 기능
-
-### 1. 고동시성 이벤트 처리
-**"선착순, 추첨 등 폭주하는 트래픽을 안정적으로 받아냅니다."**
-
-- **Redis 기반 2단계 토큰 시스템**: 선착순/응모 이벤트의 대량 트래픽 상황에서도 데이터 무결성 보장 및 안정적 재고 관리
-- **분산 락(Redisson)**: 멀티 쓰레드 환경에서 동시성 문제를 차단하여 중복 참여 방지
-- **부하 분산을 위한 서버 분리**: Entry Service가 트래픽을 받고, Kafka를 통해 Core Service로 메시지 전달
-- **Virtual Thread 기반 고성능 처리**: Java 21 Virtual Thread로 기존 스레드 모델 대비 수천 배 많은 동시 접속 처리
-- **고가용성**: 최소 2개 이상의 인스턴스로 서버 다운 방지 (Kafka, Redis, MySQL)
-- **수평적 Auto-Scaling**: 트래픽 몰릴 때 자동으로 파드 스케일 아웃
-
-### 2. 실시간 행동 추적
-**"순도 높은 고객 행동 데이터를 사이트 성능 저하 없이 수집합니다."**
-
-- **경량 JS 트래커(Axon SDK)**: 페이지 뷰, 클릭 데이터를 수집하여 Elasticsearch에 실시간 적재
-- **ETL 최소화 (No-ETL)**: 브라우저에서 표준 JSON 스키마로 변환하여 전송 → 서버는 별도 파싱 없이 바로 DB/Elasticsearch로 흘려보냄 (Pass-through)
-- **백엔드 성능 최적화**: 데이터 검증 및 정제 책임을 클라이언트로 분산시켜 백엔드 CPU 사용률 감소
-
-### 3. 고급 마케팅 대시보드
-**"대규모 스트림 데이터를 실시간으로 분석하여 인사이트를 제공합니다."**
-
-- **퍼널(Funnel) 분석**: 유입부터 구매까지의 전환율을 단계별로 시각화
-- **코호트(Cohort) 분석**: 사용자 그룹별 LTV(생애 가치), 재구매율(Retention), CAC(고객 획득 비용) 등 핵심 KPI 제공
-- **실시간 위젯**: 잔여 재고 및 현재 참여자 수 등 변동 데이터를 초 단위로 시각화
-- **하이브리드 쿼리 엔진**:
-  - 정확한 매출은 **MySQL(Read Replica)**에서 조회
-  - 방대한 행동 로그는 **Elasticsearch**에서 집계 쿼리 수행
-  - 최적의 성능과 정합성 동시 확보
-
-### 4. 마케터 전용 LLM 인텔리전스
-**"마케터의 질문을 이해하고, 데이터 기반 행동 가이드를 제시합니다."**
-
-- **안전한 도구 사용**: LLM이 SQL을 직접 생성하지 않음. 검증된 대시보드 API를 호출하여 정확한 데이터 제공
-- **맥락 기반 답변**: 현재 캠페인 상황을 자동 인식하여 "이거 어때?"라는 짧은 질문에도 구체적 분석과 개선 제안 제공
-- **인사이트 생성**: 수치만 전달하는 것이 아니라, 마케팅 도메인 지식을 녹여낸 가설 기반 조언 생성
-
-**예시 1: 재구매율 개선**
-> **마케터**: "최근 신규 가입자는 늘었는데 재구매율이 낮아. 충성 고객으로 만들려면 어떻게 해야 해?"
-
-> **Axon AI**:
-> - **최근 유입 코호트 분석**: 지난달 '가을 정기 세일'로 유입된 신규 고객들의 첫 구매 후 30일 내 재구매율(Retention)이 12%에 불과합니다. (평균 25%). LTV 분석 결과, 첫 구매 금액이 3만 원 미만인 고객군은 재구매 확률이 현저히 떨어지는 패턴을 보입니다.
-> - **충성도 증대 액션 아이템**:
->   1. 첫 구매 경험 강화: 첫 구매 후 3일 이내에 "재구매 시 무료배송 + 5천 원 할인 쿠폰"을 문자로 발송하여 2차 구매를 유도하세요. (재구매 시 LTV 2.5배 상승 예측)
->   2. 객단가(AOV) 상승 유도: 장바구니 단계에서 "1만 원 더 담으면 VIP 등급 혜택" 메시지를 노출하여 첫 결제 금액을 높이세요.
->   3. 맞춤 상품 추천: 이탈 위험이 높은 고객군이 가장 많이 검색한 키워드(예: '니트', '코트') 기반으로 개인화된 추천 상품 메일을 발송하세요.
-
-**예시 2: 캠페인 전략 수립**
-> **마케터**: "작년 크리스마스 캠페인 실적이 기대보다 낮았는데, 이번 크리스마스에는 어떤 전략을 써야 할까?"
-
-> **Axon AI**:
-> - **작년 크리스마스 캠페인 실패 요인 분석**: 작년 데이터 분석 결과, '상세 페이지 조회'에서 '구매 시도'로 넘어가는 단계의 이탈률이 85%로 매우 높았습니다. 특히 20대 여성 고객층의 이탈이 두드러졌는데, 이는 당시 경쟁사 대비 할인율이 낮았거나 매력적인 혜택 부재가 원인으로 추정됩니다.
-> - **올해 크리스마스 추천 전략**:
->   1. 퍼널 개선: 상세 페이지에서 이탈을 막기 위해 "선착순 한정 15% 추가 쿠폰" 팝업을 노출하여 구매 결심을 유도하세요.
->   2. 타겟팅 강화: 작년 이탈했던 20대 여성을 타겟으로 "인스타그래머블한 패키지"나 "1+1 기프트 세트" 구성을 제안합니다.
->   3. 골든 타임 공략: 작년 구매 데이터상 오후 8시~10시에 결제가 집중되었습니다. 이 시간에 맞춰 타임 세일 푸시 알림을 발송하세요.
-
----
-
-## 🏗️ 시스템 아키텍처
-
-### MSA & Event-Driven 구조
-
-```mermaid
-graph TD
-    Client[사용자 브라우저] -->|페이지 로드| Tracker[Axon JS 트래커]
-    Tracker -->|정규화된 이벤트| Entry[Entry Service :8081]
-
-    subgraph "수집 레이어 (Ingestion Layer)"
-        Entry -->|빠른 캐싱| Redis[(Redis)]
-        Entry -->|버퍼링| Kafka_Raw[Kafka: axon.event.raw]
-        Entry -->|FCFS 명령| Kafka_Cmd[Kafka: axon.campaign-activity.command]
+    subgraph MQ["메시지 브로커"]
+        Kafka[("Apache Kafka")]
     end
 
-    subgraph "핵심 도메인 (Core Domain)"
-        Kafka_Cmd -->|소비| Core[Core Service :8080]
-        Core -->|분산 락| Redisson[(Redisson)]
-        Core -->|트랜잭션 쓰기| MySQL[(MySQL)]
+    subgraph Core["Core Service (로직/분석)"]
+        KafkaConsumer["Kafka Consumer (Batch)"]
+        CampaignLogic["비즈니스 로직"]
+        LLMController["AI 에이전트 (Gemini)"]
+        DashboardLogic["분석/대시보드"]
+        MySQL[("MySQL")]
     end
 
-    subgraph "데이터 & 분석 (Data & Analytics)"
-        Kafka_Raw -->|Kafka Connect| ES[(Elasticsearch)]
-        MySQL -->|Read Replica| Dashboard[관리자 대시보드]
-        ES -->|집계 쿼리| Dashboard
-        Dashboard -->|API 호출| LLM[Gemini LLM]
+    subgraph Pipeline["데이터 파이프라인"]
+        KafkaConnect["Kafka Connect"]
+        ES[("Elasticsearch")]
     end
+
+    %% Flow
+    Browser --> EntryController
+    JSTracker --> EntryController
+    EntryController --> FastValidation
+    EntryController --> FCFSLogic
+    FCFSLogic --> EntryKafka
+    EntryKafka --> Kafka
+    Kafka --> KafkaConsumer
+    KafkaConsumer --> CampaignLogic
+    CampaignLogic --> MySQL
+    Kafka --> KafkaConnect
+    KafkaConnect --> ES
+    LLMController --> MySQL
+    DashboardLogic --> ES
+    DashboardLogic --> MySQL
 ```
 
-**설계 원칙**:
-- **Entry Service**: 트래픽 수용 게이트웨이 역할 (Core Service 부하 조절)
-- **Core Service**: 비즈니스 로직 처리 및 영속성 관리
-- **비동기 통신**: Kafka를 통해 서비스 간 결합도를 낮추고 확장성 확보
-- **시스템 보호**: Entry Service가 버퍼 역할을 하여 Core Service 안정성 보장
+### 인프라 및 클라우드 구성
+<p align="center">
+  <img src="./docs/assets/recordings/archi.png" width="850" />
+</p>
+
+- **Cloud Platform**: KT Cloud K2P (Kubernetes to Production) 환경 기반.
+- **Network & Security**: Public IP를 특정 워커 노드에 1:1 매핑(Static NAT)하고, 방화벽 설정을 통해 특정 포트만 허용하는 구조.
+- **배포 자동화 (CI/CD)**: GitHub Actions를 통해 메인 브랜치 푸시 시 Docker 이미지 빌드 및 K2P 클러스터 자동 배포 수행.
 
 ---
 
-## 🛠️ 기술 스택
+## 핵심 엔지니어링 사례
+> 상세한 기술적 의사결정 과정은 [Architecture Deep-Dive 포트폴리오](./docs/PORTFOLIO_DIAGRAMS.md)에서 확인하실 수 있습니다.
 
-**언어 & 프레임워크**:
-- Java 21 (LTS)
-- Spring Boot 3.5.5, Spring Batch, Spring Security
+### 1. 비동기 환경의 순서 정합성 해결을 위한 로직 전진 배치
+초기 설계 시 선착순 판단을 Core 서비스에 두었으나, Kafka 비동기 소비 특성상 요청-처리 순서 불일치 현상이 발견되었습니다. 이를 해결하기 위해 검증 로직을 시스템 최전방인 **Entry 서비스로 전진 배치**하여 유입 시점에 즉각 당첨을 확정하는 구조로 개선했습니다. 더불어 Redis Lua 스크립트를 도입하여 중복 체크와 수량 차감을 단일 연산으로 처리함으로써 오버부킹 0건을 달성했습니다.
 
-**데이터베이스**:
-- MySQL 8.0, Redis, Elasticsearch 8.x, JPA (Hibernate)
+### 2. 트랜잭션 격리 및 장애 파급 차단을 통한 데이터 신뢰성 확보
+대량 저장 중 단 1건의 오류가 전체 배치를 롤백시키는 '배치 오염'을 방지하기 위해 `REQUIRES_NEW` 속성을 적용하여 개별 트랜잭션을 물리적으로 분리했습니다. 실패 건만 Dead Letter Queue(DLQ)로 격리하고 나머지 데이터는 보존하는 폴백 전략을 구축하여, 비정상 데이터 유입 시에도 파이프라인 중단 없이 데이터 유실 0%를 실증했습니다.
 
-**메시징**:
-- Apache Kafka (KRaft 모드)
+### 3. 쓰기 병목 해소를 위한 지연 동기화 설계
+구매 확정 시 상품 재고와 유저 요약 정보를 실시간 업데이트할 때 발생하는 DB Row Lock 경합을 해결하기 위해 **결과적 일관성(Eventual Consistency)** 모델을 채택했습니다. 메인 트랜잭션에서는 구매 로그만 남기고, 재고 차감 등 무거운 쓰기 작업은 스케줄러가 사후 정산하게 하여 커넥션 풀 안정화 및 처리량 극대화에 성공했습니다.
 
-**클라우드 & DevOps**:
-- Kubernetes (K8s), Docker, GitHub Actions, KT Cloud, Nginx Ingress
+### 4. 수집 시점 역정규화를 통한 조회 성능 개선
+수백만 건의 로그를 대시보드에서 조인 조회할 때 발생하는 N+1 문제를 해결하기 위해, 데이터 수집(SDK) 단계에서 메타데이터를 결합하여 전송하는 **의도적 역정규화(Denormalization)** 설계를 적용했습니다. 이를 통해 Elasticsearch 단일 인덱스 쿼리만으로 통계를 산출하여 대시보드 조회 성능을 **440% 향상**시켰습니다.
 
-**관측성(Observability)**:
-- Grafana, Elasticsearch, Kibana, Prometheus, Fluentbit
-
-**프론트엔드**:
-- Thymeleaf, Chart.js, TailwindCSS, Vanilla JS
-
-**AI/ML**:
-- Gemini 2.0 Flash
+### 5. 데이터 무결성 최후의 보루: 사후 대사(Reconciliation) 아키텍처
+극단적인 1ns 응답 속도 확보를 위해 이벤트 전송과 영속성을 비동기로 분리(BEFORE_COMMIT)하면서 생겨날 수 있는 트랜잭션 롤백 시차 등의 'Ghost Data(고아 데이터)' 리스크를 방어하기 위해, 유휴 시간대(새벽 3시)에 작동하는 비동기 대사 스케줄러를 구축했습니다. 1차 방어막(REQUIRES_NEW)과 2차 백그라운드 정산 로직을 통해 시스템 가용성과 무결성의 타협점을 완벽히 검증했습니다.
 
 ---
 
-## 🚀 빠른 시작
+## 주요 기능
 
-### 사전 요구사항
-- Java 21 이상
-- Docker & Docker Compose
+### 1. 마케팅 인텔리전스 (Analytics & AI)
 
-### 1. 인프라 실행
-Kafka, MySQL, Redis, Elasticsearch 등 모든 인프라를 실행합니다.
-```bash
-docker-compose up -d
-```
+#### 계층형 성과 대시보드
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_overview.png" width="850" />
+  <br><em>Level 1: 전역 성과 - 전체 캠페인 통합 매출 및 효율 지표</em>
+</p>
 
-### 2. 서비스 실행
-**Entry Service (포트 8081)**
-```bash
-./gradlew :entry-service:bootRun
-```
+<p align="center">
+  <img src="./docs/assets/recordings/campaign_admin.png" width="850" />
+  <br><em>Level 2: 캠페인 성과 - 개별 캠페인 내 활동들의 성과 기여도 비교</em>
+</p>
 
-**Core Service (포트 8080)**
-```bash
-./gradlew :core-service:bootRun
-```
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_11.png" width="850" />
+  <br><em>Level 3: 활동 심층 분석 - 실시간 참여 지표 및 유입 트렌드 모니터링</em>
+</p>
 
-### 3. 대시보드 접속
-`http://localhost:8080/admin/dashboard/1` 으로 접속하여 실시간 마케팅 대시보드를 확인합니다.
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_cohort.png" width="850" />
+  <br><em>코호트 및 LTV 분석 - 유입 고객의 재구매율 및 장기 가치 추적</em>
+</p>
 
----
+- **코호트 및 LTV 분석**: 마케팅 유입 시점(Cohort)을 기준으로 생애 가치(LTV)와 획득 비용(CAC)을 장기 추적하는 의사결정 지표 제공.
+- **RFM 세그먼테이션 스케줄러**: 최근성(Recency), 구매 빈도(Frequency), 누적 금액(Monetary) 데이터를 기반으로 매일 유저 등급(VIP, 이탈 우려 등)을 재분류하는 자동화 파이프라인.
 
-## 🧪 테스트 & 시뮬레이션
+#### 하이브리드 AI 전략 에이전트 (Gemini 2.5 Flash-lite)
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_llm.gif" width="800" />
+</p>
 
-Axon은 복잡한 시나리오를 검증하기 위한 강력한 시뮬레이션 도구를 제공합니다.
+- **데이터 기반 리포팅**: 실시간 지표(RAG)와 분석 도구(Tool Calling)를 결합하여 "LTV/CAC 기반 예산 재분배 전략" 등 구체적인 리포트 생성.
+- **최적화 성과**: 필요한 데이터만 선택 호출하는 구조를 통해 데이터 전수 주입 방식 대비 **토큰 소모량 80% 절감** 및 DB 조회 부하 경감.
 
-| 스크립트 | 목적 |
-|---------|------|
-| `run-dashboard-test.sh` | 완전한 사용자 여정(방문 → 구매) 생성 및 대시보드 데이터 채우기 |
-| `generate-ltv-simulation.sh` | 미래 재구매 시뮬레이션 (30일/90일/365일 코호트 분석용) |
-| `time-travel-activity.sh` | 캠페인 날짜를 과거로 이동하여 만료 시나리오 테스트 |
-| `generate-full-funnel.sh` | 행동 이벤트 + FCFS 예약 워크플로우 핵심 스크립트 |
+#### 실시간 지표 스트리밍
+<p align="center">
+  <img src="./docs/assets/recordings/dashboard_sse.gif" width="850" />
+</p>
 
-**예시: 전체 테스트 실행**
-```bash
-# Activity ID 1에 대해 100명의 방문자 생성
-./core-service/scripts/run-dashboard-test.sh 1 100
+- **지연 없는 가시성**: SSE 프로토콜을 활용하여 이벤트 발생부터 대시보드 반영까지의 파이프라인 정합성 실시간 유지.
 
-# 30일 코호트에 대한 LTV 시뮬레이션
-./core-service/scripts/generate-ltv-simulation.sh 1
-```
+### 2. 운영 및 시스템 검증 (Operation & Verification)
 
----
+#### CRM 운영 관리 및 행동 기반 동적 쿠폰 트리거
+<p align="center">
+  <img src="./docs/assets/recordings/event_admin.png" width="850" />
+</p>
 
-## ⚡ 성능 엔지니어링
+- **코드 수정 없는 추적**: 자체 개발한 JS SDK를 통해 관리자 화면에서 클릭, 페이지 뷰 등 수집 조건을 동적으로 등록 및 제어.
+- **실시간 반응형 쿠폰 (Behavior Trigger)**: "특정 상품 5회 이상 열람" 등 유저의 고관여 행동 패턴을 ES로 실시간 집계하여, 조건 달성 시 **Kafka를 통해 무지연(Zero-latency)으로 할인 쿠폰을 발급**하는 마케팅 통합 루프 구현.
+- **캠페인 생명주기 관리**: 마케팅 활동의 상태, 한정 수량, 예산 등을 실시간으로 관리하는 통합 운영 콘솔.
 
-### 동시성 제어
-**선착순 이벤트의 "Over-booking" 문제를 Redisson 분산 락으로 해결**
-- **문제**: 데이터베이스 `check-then-act` 방식은 부하 시 경합 조건(race condition) 발생
-- **해결**: `RLock`을 사용하여 분산 인스턴스 간 원자적 예약 보장
-- **결과**: 8,000명 동시 접속 시에도 중복 예약 0건
+#### 대규모 트래픽 수용성 검증
+<p align="center">
+  <img src="./docs/assets/recordings/k6_spike.gif" width="850" />
+</p>
 
-### 처리량 최적화
-- **Virtual Threads (JDK 21)**: 복잡한 리액티브 체인을 블로킹 스타일 Virtual Thread로 대체
-  - WebFlux 대비 8배 처리량 향상 (코드 99% 재사용)
-  - Reactor 스택 트레이스보다 간단한 디버깅
-- **비동기 이벤트 발행**: `@ApplicationEvent` + Kafka로 메인 트랜잭션이 로깅에 블로킹되지 않도록 분리
+- **극한 환경 가용성 실증**: 3,000 VU(Peak 2,900 RPS) 부하 상황에서도 5XX 에러 0건을 유지하며 시스템 안정성 검증 완료.
 
-### 배치 처리
-Axon은 **`@Scheduled`**와 **Spring Batch**를 조합하여 무거운 분석 작업을 수행합니다:
-- `@Scheduled`: 주기적으로 Job 실행 (예: 100분마다)
-- Spring Batch: 대량 데이터를 청크(100개) 단위로 트랜잭션 처리
-- 예시: `UserPurchaseScheduler.java` → `BatchConfig.java` (Reader-Processor-Writer 패턴)
-- **DB 부하 감소**: 코호트 분석 같은 무거운 집계 쿼리를 배치로 별도 실행하며, Read-Only Replica에서만 데이터 조회
-
----
-
-## 📊 데이터 아키텍처
-
-### 하이브리드 쿼리 엔진
-- **MySQL (Read Replica)**: 트랜잭션 데이터 (구매, 사용자 프로필) - 정확한 매출 지표
-- **Elasticsearch**: 대규모 행동 로그 (페이지 뷰, 클릭) - 실시간 집계
-- **Redis**: FCFS 카운터, 예약 토큰, 캠페인 메타데이터 캐싱 (TTL 1시간)
-
-### 실시간 스트리밍 파이프라인
-```
-브라우저(Tracker) → Entry Service → Kafka → Kafka Connect → Elasticsearch
-                                   ↓
-                              Core Service → MySQL
-```
-- **Kafka Connect**: `axon.event.raw` 토픽을 1초 미만 지연으로 Elasticsearch에 스트리밍
-- **No-ETL 설계**: Tracker가 미리 정규화된 JSON 스키마를 전송하여 서버 파싱 제거
+<table>
+  <tr>
+    <td><img src="./docs/assets/recordings/k6_result_stat.png" width="450" /></td>
+    <td><img src="./docs/assets/recordings/k6_result_db.png" width="450" /></td>
+  </tr>
+  <tr align="center">
+    <td><b>[k6 최종 결과] 3,000 VU 완주</b></td>
+    <td><b>[정합성 검증] 유입 대비 처리량 일치</b></td>
+  </tr>
+</table>
 
 ---
 
-## 📈 제공하는 마케팅 KPI
-
-- **퍼널 전환율**: 방문 → 클릭 → 예약 → 구매 (%)
-- **코호트 분석**: 재구매율(D1, D7, D30) 및 획득 날짜별 LTV
-- **CAC (Customer Acquisition Cost)**: 캠페인 비용 / 신규 사용자
-- **ROAS (Return on Ad Spend)**: 매출 / 광고 비용
-- **실시간 지표**: 현재 참여자 수, 잔여 재고, 전환 속도
-
----
-
-## 🏆 주요 성과
-
-✅ **Zero Over-booking**: 분산 락을 통해 8,000명 동시 접속 시에도 100% 재고 정확도 보장
-✅ **초 단위 분석**: Elasticsearch 집계 쿼리 200ms 미만 응답
-✅ **8배 처리량**: Virtual Thread로 8,000+ req/s 처리 (기존 1,000 req/s)
-✅ **고가용성**: 모든 핵심 서비스 2개 이상 복제본 운영 (Kafka, MySQL, Redis)
-✅ **자동 스케일링**: CPU 70% 초과 시 HPA가 파드 자동 증설
+## 기술 스택
+- **Application**: Java 21, Spring Boot 3.x, Virtual Threads
+- **Messaging**: Apache Kafka (KRaft), Redis
+- **Storage**: MySQL 8 (Master-Slave), Elasticsearch 8
+- **Infrastructure**: Kubernetes (K2P), Nginx Ingress Controller
+- **Monitoring**: Prometheus, Grafana, Fluent Bit, Kibana
 
 ---
 
-## 📚 문서
+## 빠른 시작 (Getting Started)
+본 프로젝트는 클라우드 환경(K2P)을 기반으로 설계되었으나, 로컬 검증을 위해 Docker Compose를 통한 원클릭 인프라 구축을 지원합니다.
 
-- [성능 개선 계획서](docs/performance-improvement-plan.md)
-- [행동 추적 명세서](docs/behavior-tracker.md)
-- [마케팅 대시보드 개발 계획](docs/marketing-dashboard-development-plan.md)
-- [캠페인 활동 플로우](docs/campaign-activity-limit-flow.md)
-
----
-
-**Axon Team** | *대규모를 위해 설계되고, 인사이트를 위해 최적화되었습니다.*
+1. **인프라 환경 구성**
+   ```bash
+   docker-compose up -d
+   ```
+2. **서비스 실행**
+   ```bash
+   ./gradlew :entry-service:bootRun
+   ./gradlew :core-service:bootRun
+   ```
+3. **대시보드 접속**
+   - 브라우저에서 `http://localhost:8080/admin/dashboard/1` 접속 시 실시간 지표 및 AI 분석 기능을 확인할 수 있습니다.

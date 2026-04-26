@@ -56,6 +56,8 @@ class CampaignActivityControllerTest {
                 .startDate(startDate)
                 .endDate(endDate)
                 .activityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .price(java.math.BigDecimal.valueOf(10000))
+                .quantity(1)
                 .build();
 
         CampaignActivityResponse response = CampaignActivityResponse.builder()

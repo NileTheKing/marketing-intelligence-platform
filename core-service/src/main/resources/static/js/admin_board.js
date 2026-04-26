@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.adminModalHandler.showCreateActivityModal(selectedCampaignId);
                 } else {
                     // Fallback to navigating to the create activity page with campaign ID
-                    window.location.href = `/admin_create_campaignActivitys?campaignId=${selectedCampaignId}`;
+                    window.location.href = `/admin-create-campaign-activities?campaignId=${selectedCampaignId}`;
                 }
             } else {
                 alert('캠페인을 먼저 선택해주세요.');
