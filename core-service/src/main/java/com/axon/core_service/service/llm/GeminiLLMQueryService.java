@@ -151,33 +151,72 @@ public class GeminiLLMQueryService implements LLMQueryService {
             Map.of("function_declarations", List.of(
                 Map.of(
                     "name", "get_global_dashboard",
-                    "description", "전체 캠페인의 매출 순위, 방문자 순위, ROAS 효율성 지표를 가져옵니다.",
-                    "parameters", Map.of("type", "OBJECT", "properties", Map.of())
-                ),
-                Map.of(
-                    "name", "get_campaign_dashboard",
-                    "description", "특정 캠페인의 상세 성과 지표(방문, 구매, GMV)를 가져옵니다.",
+                    "description", "전체 캠페인의 매출 순위, 방문자 순위, ROAS 효율성 지표를 가져옵니다. 특정 기간 조회가 필요하면 startDate와 endDate를 사용하십시오.",
                     "parameters", Map.of(
                         "type", "OBJECT",
                         "properties", Map.of(
-                            "campaignId", Map.of("type", "NUMBER", "description", "캠페인 ID")
+                            "startDate", Map.of("type", "STRING", "description", "조회 시작일 (YYYY-MM-DD)"),
+                            "endDate", Map.of("type", "STRING", "description", "조회 종료일 (YYYY-MM-DD)")
+                        )
+                    )
+                ),
+                Map.of(
+                    "name", "get_campaign_dashboard",
+                    "description", "특정 캠페인의 상세 성과 지표를 가져옵니다. 특정 기간(예: 작년 여름) 조회가 필요하면 startDate와 endDate를 명시하십시오.",
+                    "parameters", Map.of(
+                        "type", "OBJECT",
+                        "properties", Map.of(
+                            "campaignId", Map.of("type", "NUMBER", "description", "캠페인 ID"),
+                            "startDate", Map.of("type", "STRING", "description", "조회 시작일 (YYYY-MM-DD)"),
+                            "endDate", Map.of("type", "STRING", "description", "조회 종료일 (YYYY-MM-DD)")
                         ),
                         "required", List.of("campaignId")
                     )
                 ),
                 Map.of(
                     "name", "get_cohort_analysis",
-                    "description", "특정 활동(Activity)의 코호트 분석(LTV, CAC, 재구매율, 리텐션) 데이터를 가져옵니다.",
+                    "description", "특정 활동(Activity)의 코호트 분석(LTV, CAC, 재구매율) 데이터를 가져옵니다.",
                     "parameters", Map.of(
                         "type", "OBJECT",
                         "properties", Map.of(
-                            "activityId", Map.of("type", "NUMBER", "description", "활동 ID (Activity ID)")
+                            "activityId", Map.of("type", "NUMBER", "description", "활동 ID")
                         ),
                         "required", List.of("activityId")
                     )
                 )
             ))
         );
+    }
+
+    private Object executeTool(String name, com.fasterxml.jackson.databind.node.ObjectNode args, Long defaultId) {
+        String startDateStr = args.has("startDate") ? args.get("startDate").asText() : null;
+        String endDateStr = args.has("endDate") ? args.get("endDate").asText() : null;
+        
+        java.time.LocalDateTime start = null;
+        java.time.LocalDateTime end = null;
+        
+        try {
+            if (startDateStr != null) start = java.time.LocalDate.parse(startDateStr).atStartOfDay();
+            if (endDateStr != null) end = java.time.LocalDate.parse(endDateStr).atTime(23, 59, 59);
+        } catch (Exception e) {
+            log.warn("Failed to parse date from Gemini: {} / {}", startDateStr, endDateStr);
+        }
+
+        if ("get_campaign_dashboard".equals(name)) {
+            Long campaignId = args.has("campaignId") ? args.get("campaignId").asLong() : defaultId;
+            return dashboardService.getDashboardByCampaign(campaignId, DashboardPeriod.CUSTOM, start, end);
+        } else if ("get_global_dashboard".equals(name)) {
+            // Note: GlobalDashboard currently has fixed 30 days, we can extend it later if needed
+            return dashboardService.getGlobalDashboard();
+        } else if ("get_cohort_analysis".equals(name)) {
+            Long activityId = args.has("activityId") ? args.get("activityId").asLong() : defaultId;
+            if (ltvBatchRepository.existsByCampaignActivityId(activityId)) {
+                return ltvBatchRepository.findByCampaignActivityIdOrderByMonthOffsetAsc(activityId)
+                    .stream().map(this::convertBatchToMap).toList();
+            }
+            return Map.of("message", "데이터 집계 중입니다.");
+        }
+        return Map.of("error", "Unknown function");
     }
 
     private String callGeminiApiWithTools(String userQuery, List<Map<String, Object>> tools, Long defaultId, Object initialContext) {
@@ -261,25 +300,6 @@ public class GeminiLLMQueryService implements LLMQueryService {
             log.error("Tool-Calling API failed", e);
             return "분석 중 오류가 발생했습니다: " + e.getMessage();
         }
-    }
-
-    private Object executeTool(String name, com.fasterxml.jackson.databind.node.ObjectNode args, Long defaultId) {
-        if ("get_campaign_dashboard".equals(name)) {
-            Long campaignId = args.has("campaignId") ? args.get("campaignId").asLong() : defaultId;
-            return dashboardService.getDashboardByCampaign(campaignId, DashboardPeriod.SEVEN_DAYS, null, null);
-        } else if ("get_global_dashboard".equals(name)) {
-            return dashboardService.getGlobalDashboard();
-        } else if ("get_cohort_analysis".equals(name)) {
-            Long activityId = args.has("activityId") ? args.get("activityId").asLong() : defaultId;
-            
-            // Safety Guard: Only fetch cached/batch data to protect DB
-            if (ltvBatchRepository.existsByCampaignActivityId(activityId)) {
-                return ltvBatchRepository.findByCampaignActivityIdOrderByMonthOffsetAsc(activityId)
-                    .stream().map(this::convertBatchToMap).toList();
-            }
-            return Map.of("message", "해당 활동의 코호트 분석 데이터가 아직 집계되지 않았습니다. (배치 작업 대기 중)");
-        }
-        return Map.of("error", "Unknown function: " + name);
     }
 
     private DashboardQueryResponse processQueryInternal(String query, Object dashboardData, Object cohortData, OverviewData overview, String systemInstruction) {

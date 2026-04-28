@@ -13,19 +13,14 @@
 
   const TriggerType = {
     PAGE_VIEW: 'PAGE_VIEW',
-    CLICK: 'CLICK'
+    CLICK: 'CLICK',
+    SCROLL: 'SCROLL',
+    STAY: 'STAY'
   };
 
   /**
    * Tracker that periodically loads event definitions, registers client-side handlers for configured triggers,
    * and prepares collected behavior events for delivery to the backend.
-   *
-   * Initializes the instance configuration from defaults and establishes initial runtime state:
-   * - config: merged configuration values
-   * - state.events: loaded event definitions
-   * - state.lastSentAt: per-event cooldown tracking
-   * - state.initialized / state.refreshing flags
-   * @constructor
    */
   function BehaviorTracker() {
     console.log('[AxonBehaviorTracker] constructor');
@@ -34,7 +29,10 @@
       events: [],
       lastSentAt: new Map(),
       initialized: false,
-      refreshing: false
+      refreshing: false,
+      entryTime: Date.now(),
+      maxScrollDepth: 0,
+      sentDepths: new Set()
     };
   }
 
@@ -55,6 +53,9 @@
     if (this.config.autoRefreshMs > 0) {
       setInterval(() => this.refreshEvents(), this.config.autoRefreshMs);
     }
+
+    // 체류 시간 추적을 위해 페이지 이탈 시 이벤트 전송
+    window.addEventListener('beforeunload', () => this.handleStayEvent());
 
     this.log('Behavior tracker initialized with config:', this.config);
     return this.state.initialized;
@@ -100,9 +101,7 @@
   BehaviorTracker.prototype.fetchActiveEvents = async function fetchActiveEvents() {
     const url = this.resolveUrl(this.config.eventsEndpoint);
     const headers = await this.buildAuthHeaders();
-    console.log('[AxonBehaviorTracker] headers', headers);
-
-    console.log('[AxonBehaviorTracker] fetch active events', url);
+    
     const response = await fetch(url, {
       method: 'GET',
       headers,
@@ -122,14 +121,20 @@
   BehaviorTracker.prototype.registerHandlers = function registerHandlers() {
     this.registerPageViewHandlers();
     this.registerClickHandlers();
+    this.registerScrollHandlers();
   };
 
   /**
    * History API를 감시해 PAGE_VIEW 이벤트를 감지한다.
    */
   BehaviorTracker.prototype.registerPageViewHandlers = function registerPageViewHandlers() {
-    console.log('[AxonBehaviorTracker] registerPageViewHandlers');
-    const check = () => this.handlePageView();
+    const check = () => {
+        // 페이지 이동 시 상태 초기화
+        this.state.entryTime = Date.now();
+        this.state.maxScrollDepth = 0;
+        this.state.sentDepths.clear();
+        this.handlePageView();
+    };
 
     window.addEventListener('load', check, { once: true });
     window.addEventListener('popstate', () => setTimeout(check, 0));
@@ -152,7 +157,6 @@
    * 현재 URL이 등록된 패턴과 일치하는지 확인하고, 해당 이벤트를 전송한다.
    */
   BehaviorTracker.prototype.handlePageView = function handlePageView() {
-    console.log('[AxonBehaviorTracker] handlePageView');
     const fullPath = window.location.pathname + window.location.search;
     const pathOnly = window.location.pathname;
     const matching = this.state.events.filter(
@@ -166,6 +170,61 @@
         pageUrl: window.location.href,
         referrer: document.referrer || null
       });
+    });
+  };
+
+  /**
+   * 스크롤 깊이를 감지하고 25% 단위로 이벤트를 전송한다.
+   */
+  BehaviorTracker.prototype.registerScrollHandlers = function registerScrollHandlers() {
+    let throttleTimer;
+    window.addEventListener('scroll', () => {
+      if (throttleTimer) return;
+      
+      throttleTimer = setTimeout(() => {
+        const winHeight = window.innerHeight;
+        const docHeight = document.documentElement.scrollHeight;
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const scrollPercent = Math.round((scrollTop + winHeight) / docHeight * 100);
+
+        [25, 50, 75, 100].forEach(depth => {
+            if (scrollPercent >= depth && !this.state.sentDepths.has(depth)) {
+                this.state.sentDepths.add(depth);
+                this.handleScrollDepth(depth);
+            }
+        });
+        
+        throttleTimer = null;
+      }, 200); // 200ms Throttling
+    });
+  };
+
+  BehaviorTracker.prototype.handleScrollDepth = function handleScrollDepth(depth) {
+    // SCROLL 타입의 이벤트가 정의되어 있는지 확인
+    const scrollEvents = this.state.events.filter(e => e.triggerType === TriggerType.SCROLL);
+    
+    // 만약 백엔드에 정의가 없더라도 기본 행동 로그로 전송 (Synthetic Event)
+    const baseEvent = scrollEvents.length > 0 ? scrollEvents[0] : { id: 0, name: 'Scroll Depth', triggerType: 'SCROLL' };
+    
+    this.sendEvent(baseEvent, {
+        depth: depth,
+        pageUrl: window.location.href
+    });
+  };
+
+  /**
+   * 체류 시간을 계산하여 전송한다 (이탈 시 호출).
+   */
+  BehaviorTracker.prototype.handleStayEvent = function handleStayEvent() {
+    const stayTimeSec = Math.round((Date.now() - this.state.entryTime) / 1000);
+    const stayEvents = this.state.events.filter(e => e.triggerType === TriggerType.STAY);
+    
+    const baseEvent = stayEvents.length > 0 ? stayEvents[0] : { id: 0, name: 'Stay Duration', triggerType: 'STAY' };
+    
+    // 이탈 시에는 fetch keepalive 옵션을 사용하여 유실 방지
+    this.sendEvent(baseEvent, {
+        durationSec: stayTimeSec,
+        pageUrl: window.location.href
     });
   };
 
@@ -187,7 +246,6 @@
    * 캡처 가능한 클릭 이벤트를 등록하고 전송한다.
    */
   BehaviorTracker.prototype.registerClickHandlers = function registerClickHandlers() {
-    console.log('[AxonBehaviorTracker] registerClickHandlers');
     const clickEvents = this.state.events.filter(
       (event) => event.triggerType === TriggerType.CLICK
     );
