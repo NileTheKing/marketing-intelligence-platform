@@ -24,7 +24,7 @@ topics:
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   - name: axon.campaign-activity.command
     partitions: 3
-    replicationFactor: 1
+    replicationFactor: 3
     config:
       retention.ms: 2592000000  # 30 days
       compression.type: lz4

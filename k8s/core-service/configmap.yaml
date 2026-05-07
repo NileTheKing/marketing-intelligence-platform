@@ -31,6 +31,8 @@ data:
         show-sql: false
       kafka:
         bootstrap-servers: axon-kafka:9092
+        listener:
+          concurrency: 3
       data:
         redis:
           host: axon-redis-master
