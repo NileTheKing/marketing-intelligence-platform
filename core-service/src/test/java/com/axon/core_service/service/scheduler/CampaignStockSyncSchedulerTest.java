@@ -16,7 +16,6 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import java.util.Optional;
 
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -51,6 +50,7 @@ class CampaignStockSyncSchedulerTest {
         
         when(campaign.getId()).thenReturn(campaignId);
         when(campaign.getProductId()).thenReturn(productId);
+
         when(campaignActivityRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
         
         // Redis는 15개 팔렸다고 주장 (Ghost Data 포함)
@@ -84,6 +84,7 @@ class CampaignStockSyncSchedulerTest {
         
         when(campaign.getId()).thenReturn(campaignId);
         when(campaign.getProductId()).thenReturn(productId);
+
         when(campaignActivityRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
         
         // Redis 데이터 유실 (null)

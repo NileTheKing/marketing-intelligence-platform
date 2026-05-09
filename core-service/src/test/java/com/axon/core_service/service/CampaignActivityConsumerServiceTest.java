@@ -123,7 +123,7 @@ class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("100개의 재고에 300개의 동시 요청이 발생하면, 재고는 0이 되고 100명만 성공해야 한다.")
+    @DisplayName("100건의 동시 구매 이벤트가 들어오면 모두 비동기 파이프라인에서 처리되어야 한다")
     void decreaseStock_ConcurrencyTest() throws InterruptedException {
         ExecutorService executorService = Executors.newFixedThreadPool(32);
         CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);

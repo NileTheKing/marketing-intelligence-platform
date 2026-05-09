@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +40,9 @@ class PurchaseHandlerTest {
 
     @Mock
     private TransactionTemplate transactionTemplate;
+
+    @Mock
+    private DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
 
     @InjectMocks
     private PurchaseHandler purchaseHandler;
@@ -94,5 +98,31 @@ class PurchaseHandlerTest {
         // - purchaseBuffer에 데이터가 들어갔는지 확인 (ReflectionTestUtils 사용 가능)
         ConcurrentLinkedQueue<?> purchaseBuffer = (ConcurrentLinkedQueue<?>) ReflectionTestUtils.getField(purchaseHandler, "purchaseBuffer");
         assertThat(purchaseBuffer).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("배치 처리 중 일반 예외가 발생해도 개별 재시도로 폴백해야 한다")
+    void flushBatch_WhenGenericExceptionOccurs_FallsBackToIndividualRetry() {
+        PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
+                1L,
+                1L,
+                1L,
+                1L,
+                Instant.now(),
+                PurchaseType.CAMPAIGNACTIVITY,
+                BigDecimal.valueOf(5000),
+                1,
+                Instant.now()
+        );
+
+        purchaseHandler.handle(purchaseInfo);
+        doThrow(new RuntimeException("boom"))
+                .when(userSummaryService).recordPurchaseBatch(anyMap());
+
+        purchaseHandler.flushBatch();
+
+        verify(purchaseService).createPurchaseBatch(argThat(purchases ->
+                purchases.size() == 1 && purchases.get(0).userId().equals(purchaseInfo.userId())));
+        verify(deadLetterHandler, never()).handle(any(), any());
     }
 }
