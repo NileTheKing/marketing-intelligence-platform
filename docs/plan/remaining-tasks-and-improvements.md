@@ -102,7 +102,43 @@
 
 ---
 
-## 4. 🤖 확장 기능 (Wishlist / Low)
+## 4. 🔗 외부 발송 연동 고도화 (Priority: Medium)
+
+> **현재 상태**: `BehaviorTriggerScheduler`가 행동 조건을 평가하고 Kafka로 `COUPON` 메시지를 발행하면, `CouponStrategy`가 내부 `UserCoupon`을 저장한다. 이메일, 카카오 알림, 외부 Webhook 호출처럼 외부 시스템으로 실제 발송하는 구현은 아직 없다.
+
+### 목표
+*   행동 조건 판정과 액션 실행을 Kafka 메시지 계약으로 분리한 현재 구조를 외부 Webhook 발송까지 확장한다.
+*   외부 발송 실패가 트리거 배치나 내부 쿠폰 발급 파이프라인을 막지 않도록 재시도와 DLQ로 격리한다.
+*   포트폴리오에서는 구현 전/후 표현 범위를 명확히 분리한다.
+
+### 구현 범위
+*   **도메인 확장**
+    - [ ] `RewardType`에 `WEBHOOK` 추가
+    - [ ] 외부 발송 대상 URL, 인증 헤더, payload 템플릿을 저장할 `WebhookEndpoint` 또는 `WebhookTemplate` 설계
+*   **이벤트 발행**
+    - [ ] `BehaviorTriggerScheduler`가 `WEBHOOK` 룰에 대해 `WEBHOOK_COMMAND` Kafka 메시지 발행
+    - [ ] 메시지에 `activityId`, `userId`, `ruleId`, `eventId`, `payload`를 포함하여 추적 가능하게 설계
+*   **외부 호출 처리**
+    - [ ] `WebhookConsumer` / `WebhookPublisher` 구현
+    - [ ] 외부 URL로 HTTP POST 호출
+    - [ ] 2xx는 성공 처리, 4xx/5xx/timeout은 실패 이력 저장
+*   **실패 처리**
+    - [ ] `retryCount`, `nextRetryAt`, `lastError` 기반 재시도 정책 추가
+    - [ ] 최대 재시도 초과 시 DLT 또는 실패 테이블로 격리
+    - [ ] 같은 `eventId`가 중복 처리되지 않도록 idempotency key 적용 검토
+*   **검증**
+    - [ ] WireMock 또는 MockWebServer로 외부 시스템을 대체한 통합 테스트 작성
+    - [ ] 2xx 성공, 5xx 재시도, timeout, DLT 이동 시나리오 검증
+    - [ ] 테스트 결과를 `docs/` 또는 k6/검증 리포트에 근거 파일로 남김
+
+### 포트폴리오 표현 기준
+*   **현재 표현 가능**: "Kafka 기반 내부 쿠폰 발급 파이프라인", "외부 발송 시스템 연동을 고려한 이벤트 인터페이스 설계"
+*   **구현 후 표현 가능**: "Webhook 기반 외부 시스템 연동", "외부 발송 실패를 retry/DLQ로 격리한 비동기 연동 구조"
+*   **구현 전 금지**: "이메일/카카오/외부 발송 시스템 연동 완료", "외부 API 연동 운영 경험"
+
+---
+
+## 5. 🤖 확장 기능 (Wishlist / Low)
 
 ### A. LLM 기반 자연어 쿼리 시스템
 *   **기능:** "지난주 아이폰 캠페인 성과 어때?"라고 물으면 요약된 텍스트나 차트를 보여줌.

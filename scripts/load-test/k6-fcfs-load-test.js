@@ -33,6 +33,7 @@ const ACTIVITY_ID = parseInt(__ENV.ACTIVITY_ID || '1');
 const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
 const USER_ID_START = parseInt(__ENV.USER_ID_START || '1000');
 const USER_ID_END = parseInt(__ENV.USER_ID_END || '9000');
+const FCFS_LIMIT_COUNT = parseInt(__ENV.FCFS_LIMIT_COUNT || '200');
 const USE_PRODUCTION_API = __ENV.USE_PRODUCTION_API === 'true';
 const USE_TOKEN_FILE = __ENV.USE_TOKEN_FILE !== 'false'; // 기본값: true
 
@@ -112,9 +113,12 @@ const spike_scenario = {
   },
 
   thresholds: {
-    'http_req_duration': ['p(95)<1000'],
-    'http_req_failed': ['rate<0.05'],
-    'fcfs_conflict_count': ['count==0'], // 중복 참여 0건!
+    // 409/410 are valid FCFS business outcomes, so use domain metrics
+    // instead of generic http_req_failed for the spike scenario.
+    'fcfs_success_count': [`count==${FCFS_LIMIT_COUNT}`],
+    'fcfs_error_count': ['count==0'],
+    'behavior_event_success_rate': ['rate==1'],
+    'reservation_duration': ['p(95)<5000'],
   },
 };
 
@@ -560,9 +564,7 @@ function handleReservationResponse(res, userId) {
   }
 
   check(res, {
-    'reservation success (200)': (r) => r.status === 200,
-    'reservation sold out (410)': (r) => r.status === 410,
-    'reservation conflict (409)': (r) => r.status === 409,
+    'reservation valid business outcome (200/409/410)': (r) => [200, 409, 410].includes(r.status),
   });
 }
 
@@ -577,7 +579,8 @@ export function teardown(data) {
   console.log('   - Check k6 output above for detailed metrics');
   console.log('   - fcfs_success_count: 신규 예약 성공 (should = limitCount)');
   console.log('   - fcfs_retry_count: 재결제 시나리오 (토큰 재사용)');
-  console.log('   - fcfs_conflict_count: 중복 참여 (should = 0)');
+  console.log('   - fcfs_conflict_count: 중복 참여 차단 (business rejection)');
+  console.log('   - fcfs_error_count: 알 수 없는 예약 에러 (should = 0)');
   console.log('='.repeat(70));
   console.log('🔍 Next Steps:');
   console.log('   1. Verify Redis counter:');

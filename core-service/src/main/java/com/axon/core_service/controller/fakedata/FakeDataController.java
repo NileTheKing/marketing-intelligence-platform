@@ -4,6 +4,7 @@ import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.utils.fakedata.FakePurchaseDataGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/fake/data")
 @RequiredArgsConstructor
+@Profile({"dev", "test"})
 public class FakeDataController {
     private final FakePurchaseDataGenerator fakePurchaseDataGenerator;
 

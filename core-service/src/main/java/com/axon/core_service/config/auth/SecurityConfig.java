@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -64,10 +65,19 @@ public class SecurityConfig {
                                                                 "/h2-console/**", "/favicon.ico", "/welcomepage",
                                                                 "/welcomepage.html", "/test/**")
                                                 .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/campaign/**", "/api/v1/dashboard/**",
+                                                                "/api/v1/store/**", "/api/v1/products/**")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/api/v1/campaign/**", "/api/v1/files/**")
+                                                .authenticated()
+                                                .requestMatchers(HttpMethod.PUT, "/api/v1/campaign/**")
+                                                .authenticated()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/v1/campaign/**")
+                                                .authenticated()
+                                                .requestMatchers(HttpMethod.DELETE, "/api/v1/campaign/**")
+                                                .authenticated()
                                                 .requestMatchers("/api/v1/**").permitAll()
                                                 .requestMatchers("/core/api/v1/**").authenticated() // Core API 인증 필수
-                                                .requestMatchers("/fake/data/**").permitAll() // TODO: 가짜 데이터 생성은 나중에
-                                                                                              // 반드시 제거할 것
                                                 .requestMatchers("/actuator/**").permitAll() // Prometheus metrics endpoint
                                                 // .requestMatchers("/admin/**").hasRole(Role.ADMIN.name())
                                                 .anyRequest().authenticated())
