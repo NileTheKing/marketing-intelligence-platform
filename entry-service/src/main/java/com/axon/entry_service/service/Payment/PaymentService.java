@@ -9,11 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
+    private static final long SEND_TIMEOUT_SECONDS = 5;
 
     private final CampaignActivityProducerService campaignActivityProducerService;
 
@@ -29,7 +31,8 @@ public class PaymentService {
                         .timestamp(Instant.now().toEpochMilli())
                         .build();
 
-                campaignActivityProducerService.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message);
+                campaignActivityProducerService.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message)
+                        .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 log.info("Kafka 전송 성공 (attempt {}): userId={}, campaignActivityId={}",
                         attempt, payload.getUserId(), payload.getCampaignActivityId());
                 return true;

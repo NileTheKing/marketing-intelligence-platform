@@ -13,6 +13,7 @@ import com.axon.entry_service.service.exception.FastValidationException;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.payment.ReservationTokenPayload;
 import com.axon.messaging.dto.validation.ValidationResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -38,7 +39,7 @@ public class EntryController {
     private final CouponEntryService couponEntryService;
 
     @PostMapping("/coupon")
-    public ResponseEntity<?> issueCoupon(@RequestBody EntryRequestDto requestDto,
+    public ResponseEntity<?> issueCoupon(@Valid @RequestBody EntryRequestDto requestDto,
             @RequestHeader("Authorization") String token,
             @AuthenticationPrincipal UserDetails userDetails) {
         long campaignActivityId = requestDto.getCampaignActivityId();
@@ -112,7 +113,7 @@ public class EntryController {
      */
 
     @PostMapping
-    public ResponseEntity<?> createEntry(@RequestBody EntryRequestDto requestDto,
+    public ResponseEntity<?> createEntry(@Valid @RequestBody EntryRequestDto requestDto,
             @RequestHeader("Authorization") String token,
             @AuthenticationPrincipal UserDetails userDetails) {
         log.info("요청 확인 {}", requestDto);
