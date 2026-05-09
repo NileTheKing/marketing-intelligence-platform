@@ -8,27 +8,12 @@ import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.core_service.domain.dto.campaignactivity.filter.converter.FilterDetailConverter;
 import com.axon.core_service.domain.product.Product;
 import com.axon.messaging.CampaignActivityType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -83,30 +68,14 @@ public class CampaignActivity extends BaseTimeEntity {
     private Integer quantity;
 
     @Column(name = "budget", precision = 12, scale = 2)
-    private BigDecimal budget; // Activity-specific marketing budget for ROAS calculation
+    private BigDecimal budget;
 
     @Column(name = "image_url")
     private String imageUrl;
 
-    /**
-     * Constructs a CampaignActivity with the specified association and attributes.
-     *
-     * @param campaign     the owning Campaign (may be null until associated)
-     * @param name         the activity's display name
-     * @param limitCount   maximum allowed count for the activity, or {@code null}
-     *                     for no limit
-     * @param status       initial lifecycle status of the activity
-     * @param startDate    activity start date and time (inclusive)
-     * @param endDate      activity end date and time (inclusive)
-     * @param activityType type categorizing the activity
-     * @param filters      list of filter rules applied to the activity (may be null
-     *                     or empty)
-     * @param price        product price for this activity
-     * @param quantity     available quantity
-     * @param budget       marketing budget allocated for this activity
-     * @param filters      list of filter rules applied to the activity (may be null
-     *                     or empty)
-     */
+    @Column(name = "synced_count", nullable = false)
+    private Integer syncedCount = 0;
+
     @Builder
     public CampaignActivity(Campaign campaign,
             Product product,
@@ -121,7 +90,8 @@ public class CampaignActivity extends BaseTimeEntity {
             Integer quantity,
             BigDecimal budget,
             String imageUrl,
-            com.axon.core_service.domain.coupon.Coupon coupon) {
+            Coupon coupon,
+            Integer syncedCount) {
         this.campaign = campaign;
         this.product = product;
         this.coupon = coupon;
@@ -136,13 +106,9 @@ public class CampaignActivity extends BaseTimeEntity {
         this.quantity = quantity;
         this.imageUrl = imageUrl;
         this.budget = budget;
+        this.syncedCount = syncedCount != null ? syncedCount : 0;
     }
 
-    /**
-     * Gets the id of the associated campaign.
-     *
-     * @return the campaign's id, or {@code null} if no campaign is associated
-     */
     public Long getCampaignId() {
         return campaign != null ? campaign.getId() : null;
     }
@@ -151,58 +117,34 @@ public class CampaignActivity extends BaseTimeEntity {
         return product != null ? product.getId() : null;
     }
 
-    /**
-     * Updates the activity's display name and participant limit.
-     *
-     * @param name       the new name for the activity
-     * @param limitCount the maximum allowed count for the activity; may be null to
-     *                   indicate no limit
-     */
     public void updateInfo(String name, Integer limitCount) {
         this.name = name;
         this.limitCount = limitCount;
     }
 
-    /**
-     * Sets the activity's status to the specified value.
-     *
-     * @param nextStatus the new status to assign to this activity
-     */
     public void changeStatus(CampaignActivityStatus nextStatus) {
         this.status = nextStatus;
     }
 
-    /**
-     * Updates the activity's start and end date range.
-     *
-     * @param startDate the new start date and time for the activity
-     * @param endDate   the new end date and time for the activity
-     */
     public void changeDates(LocalDateTime startDate, LocalDateTime endDate) {
         this.startDate = startDate;
         this.endDate = endDate;
     }
 
-    /**
-     * Replaces the activity's filters with the provided list.
-     *
-     * @param filters the new list of FilterDetail objects to assign to this
-     *                activity; may be null to remove all filters
-     */
     public void setFilters(List<FilterDetail> filters) {
         this.filters = filters;
     }
 
     public void updateProductInfo(Product product, BigDecimal price, Integer quantity) {
         this.product = product;
-        this.coupon = null; // Clear coupon if switching to product
+        this.coupon = null;
         this.price = price;
         this.quantity = quantity;
     }
 
-    public void updateCouponInfo(com.axon.core_service.domain.coupon.Coupon coupon) {
+    public void updateCouponInfo(Coupon coupon) {
         this.coupon = coupon;
-        this.product = null; // Clear product if switching to coupon
+        this.product = null;
         this.price = BigDecimal.ZERO;
         this.quantity = 0;
     }
@@ -223,13 +165,11 @@ public class CampaignActivity extends BaseTimeEntity {
         this.status = status;
     }
 
-    /**
-     * Associates this activity with the given Campaign.
-     *
-     * @param campaign the Campaign to associate with this activity; may be
-     *                 {@code null} to remove the association
-     */
     public void assignCampaign(Campaign campaign) {
         this.campaign = campaign;
+    }
+
+    public void updateSyncedCount(Integer count) {
+        this.syncedCount = count;
     }
 }

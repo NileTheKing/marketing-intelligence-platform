@@ -22,15 +22,14 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
             com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus status);
 
     /**
-     * Finds campaigns that ended between the given time range and have the specified status.
+     * Finds campaigns that already ended and still have the given status.
      *
-     * Used by CampaignStockSyncScheduler to find recently ended campaigns
-     * that need stock synchronization.
+     * Used by CampaignStockSyncScheduler to catch every ended ACTIVE campaign
+     * even if the scheduler execution is delayed.
      *
-     * @param startTime start of the time range (inclusive)
-     * @param endTime end of the time range (inclusive)
+     * @param endTime campaigns ending on or before this time
      * @param status the campaign activity status to filter by
-     * @return list of campaigns that ended in the time range with the given status
+     * @return list of campaigns that already ended with the given status
      */
-    List<CampaignActivity> findByEndDateBetweenAndStatus(LocalDateTime startTime, LocalDateTime endTime, CampaignActivityStatus status);
+    List<CampaignActivity> findByEndDateBeforeAndStatus(LocalDateTime endTime, CampaignActivityStatus status);
 }
