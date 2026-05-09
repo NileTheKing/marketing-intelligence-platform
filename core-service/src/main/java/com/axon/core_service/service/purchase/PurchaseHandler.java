@@ -159,8 +159,8 @@ public class PurchaseHandler {
             log.warn("Batch failed due to transaction rollback (likely duplicate). Marking for individual retry... Error: {}", e.getMessage());
             needRetry = true;
         } catch (Exception e) {
-            log.error("Error processing purchase batch: {}", e.getMessage(), e);
-            // 상위 트랜잭션 롤백 방지를 위해 예외를 던지지 않음 (필요시 던질 수도 있음)
+            log.error("Error processing purchase batch. Falling back to individual retry for {} purchases", purchases.size(), e);
+            needRetry = true;
         }
 
         if (needRetry) {

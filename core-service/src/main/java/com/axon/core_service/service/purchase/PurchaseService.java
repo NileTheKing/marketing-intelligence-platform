@@ -1,18 +1,15 @@
 package com.axon.core_service.service.purchase;
 
-
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.repository.PurchaseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-
 
 @Slf4j
 @Service
@@ -38,11 +35,12 @@ public class PurchaseService {
         try {
             purchaseRepository.save(purchase);
             log.info("Saved purchase record for userId={}, productId={}", info.userId(), info.productId());
-        } catch (DataIntegrityViolationException e) {
-            log.warn("Duplicate purchase detected: activity={}, user={}",
-                    info.campaignActivityId(), info.userId());
+        } catch (Exception e) {
+            log.warn("Failed to save purchase: activity={}, user={}, error={}",
+                    info.campaignActivityId(), info.userId(), e.getMessage());
         }
     }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void createPurchaseBatch(List<PurchaseInfoDto> purchases) {
         if (purchases.isEmpty()) {
@@ -65,21 +63,24 @@ public class PurchaseService {
 
         try {
             purchaseRepository.saveAll(purchaseEntities);
-            log.info("Saved {} purchase records", purchaseEntities.size());
-        } catch (DataIntegrityViolationException e) {
-            // Handle duplicates gracefully - process individually
-            log.warn("Duplicate purchases detected in batch, processing individually");
-            int saved = 0;
+            log.info("[Purchase] Saved {} purchase records successfully", purchaseEntities.size());
+        } catch (Exception e) {
+            log.warn("[Purchase] Batch failed, retrying individually. Error: {}", e.getMessage());
+            int savedCount = 0;
             for (Purchase purchase : purchaseEntities) {
                 try {
-                    purchaseRepository.save(purchase);
-                    saved++;
-                } catch (DataIntegrityViolationException ex) {
-                    log.debug("Skipping duplicate purchase: activity={}, user={}",
-                        purchase.getCampaignActivityId(), purchase.getUserId());
+                    saveSinglePurchaseInNewTransaction(purchase);
+                    savedCount++;
+                } catch (Exception ex) {
+                    log.debug("Skipping failed purchase: userId={}", purchase.getUserId());
                 }
             }
-            log.info("Saved {} purchase records ({} duplicates skipped)", saved, purchaseEntities.size() - saved);
+            log.info("[Purchase] Recovered {}/{} purchases via individual retry", savedCount, purchaseEntities.size());
         }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveSinglePurchaseInNewTransaction(Purchase purchase) {
+        purchaseRepository.save(purchase);
     }
 }
