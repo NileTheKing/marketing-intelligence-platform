@@ -248,6 +248,12 @@
       return;
     }
 
+    const payloadError = validatePayload(requestBody.triggerType, requestBody.triggerPayload);
+    if (payloadError) {
+      elements.payloadError.textContent = payloadError;
+      return;
+    }
+
     try {
       const response = await fetch(state.selectedEventId ? `${API_BASE}/${state.selectedEventId}` : API_BASE, {
         method: state.selectedEventId ? 'PUT' : 'POST',
@@ -268,6 +274,24 @@
       console.error(error);
       elements.payloadError.textContent = error.message;
     }
+  }
+
+  function validatePayload(triggerType, payload) {
+    if (triggerType === 'CLICK' || triggerType === 'FORM_SUBMISSION') {
+      if (!hasText(payload.selector) && !hasText(payload.trackId)) {
+        return '클릭/폼 이벤트는 selector 또는 trackId가 필요합니다.';
+      }
+    }
+
+    if (triggerType === 'PAGE_VIEW' && payload.urlPattern !== undefined && !hasText(payload.urlPattern)) {
+      return '페이지 뷰 urlPattern은 공백일 수 없습니다.';
+    }
+
+    return '';
+  }
+
+  function hasText(value) {
+    return typeof value === 'string' && value.trim().length > 0;
   }
 
   /**

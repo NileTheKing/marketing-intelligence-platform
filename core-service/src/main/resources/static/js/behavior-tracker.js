@@ -32,7 +32,14 @@
       refreshing: false,
       entryTime: Date.now(),
       maxScrollDepth: 0,
-      sentDepths: new Set()
+      sentDepths: new Set(),
+      clickHandlerRegistered: false,
+      diagnostics: {
+        configFetchFailures: 0,
+        eventSendFailures: 0,
+        invalidSelectors: 0,
+        unresolvedClickTargets: 0
+      }
     };
   }
 
@@ -73,6 +80,7 @@
       this.registerHandlers();
       return true;
     } catch (error) {
+      this.incrementDiagnostic('configFetchFailures');
       console.error('[AxonTracker] Failed to initialize tracker', error);
       return false;
     }
@@ -89,6 +97,7 @@
       this.state.events = events || [];
       this.log('Refreshed active events:', events);
     } catch (error) {
+      this.incrementDiagnostic('configFetchFailures');
       console.error('[AxonTracker] Failed to refresh events', error);
     } finally {
       this.state.refreshing = false;
@@ -246,13 +255,10 @@
    * 캡처 가능한 클릭 이벤트를 등록하고 전송한다.
    */
   BehaviorTracker.prototype.registerClickHandlers = function registerClickHandlers() {
-    const clickEvents = this.state.events.filter(
-      (event) => event.triggerType === TriggerType.CLICK
-    );
-
-    if (clickEvents.length === 0) {
+    if (this.state.clickHandlerRegistered) {
       return;
     }
+    this.state.clickHandlerRegistered = true;
 
     document.addEventListener('click', (event) => {
       const { target } = event;
@@ -260,17 +266,25 @@
         return;
       }
 
+      const clickEvents = this.state.events.filter(
+        (eventDefinition) => eventDefinition.triggerType === TriggerType.CLICK
+      );
+
       clickEvents.forEach((definition) => {
+        const trackId = definition.triggerPayload?.trackId;
         const selector = definition.triggerPayload?.selector;
-        if (!selector) {
+        if (!trackId && !selector) {
+          this.incrementDiagnostic('unresolvedClickTargets');
+          console.warn('[AxonTracker] CLICK event definition requires selector or trackId', definition);
           return;
         }
 
-        const matchedElement = target.closest(selector);
+        const matchedElement = this.resolveClickTarget(target, trackId, selector);
         if (matchedElement) {
           this.sendEvent(definition, {
             pageUrl: window.location.href,
             referrer: document.referrer || null,
+            trackId: trackId || null,
             selector,
             elementText: getSanitizedText(matchedElement),
             elementTag: matchedElement.tagName,
@@ -279,6 +293,30 @@
         }
       });
     });
+  };
+
+  /**
+   * trackId is preferred because it is independent from styling classes. selector is kept as a fallback.
+   */
+  BehaviorTracker.prototype.resolveClickTarget = function resolveClickTarget(target, trackId, selector) {
+    if (trackId) {
+      const trackedElement = findClosestByTrackId(target, trackId);
+      if (trackedElement) {
+        return trackedElement;
+      }
+    }
+
+    if (!selector) {
+      return null;
+    }
+
+    try {
+      return target.closest(selector);
+    } catch (error) {
+      this.incrementDiagnostic('invalidSelectors');
+      console.warn('[AxonTracker] Invalid CLICK selector', selector, error);
+      return null;
+    }
   };
 
   /**
@@ -334,6 +372,7 @@
 
       this.log('Sent behavior event', requestPayload);
     } catch (error) {
+      this.incrementDiagnostic('eventSendFailures');
       console.error('[AxonTracker] Failed to send behavior event', error);
     }
   };
@@ -375,6 +414,11 @@
     }
   };
 
+  BehaviorTracker.prototype.incrementDiagnostic = function incrementDiagnostic(key) {
+    this.state.diagnostics[key] = (this.state.diagnostics[key] || 0) + 1;
+    this.log('Tracker diagnostics', this.state.diagnostics);
+  };
+
   /**
    * Extracts visible text from a DOM element, trims surrounding whitespace, and truncates it to 200 characters.
    * @param {Element} element - The DOM element to read text from.
@@ -383,6 +427,17 @@
   function getSanitizedText(element) {
     const text = element.innerText || element.textContent || '';
     return text.trim().slice(0, 200);
+  }
+
+  function findClosestByTrackId(target, trackId) {
+    let current = target;
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+      if (current.getAttribute('data-track-id') === trackId) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return null;
   }
 
   /**

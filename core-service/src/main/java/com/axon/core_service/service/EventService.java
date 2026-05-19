@@ -31,13 +31,16 @@ public class EventService {
      */
     @CacheEvict(value = "activeEvents", allEntries = true)
     public EventResponse createEvent(EventRequest request) {
+        Map<String, Object> payload = sanitizePayload(request.getTriggerPayload());
+        validatePayload(request.getTriggerType(), payload);
+
         Event event = Event.builder()
                 .name(request.getName())
                 .description(request.getDescription())
                 .status(request.getStatus())
                 .triggerCondition(Event.TriggerCondition.of(
                         request.getTriggerType(),
-                        sanitizePayload(request.getTriggerPayload())
+                        payload
                 ))
                 .build();
 
@@ -55,10 +58,13 @@ public class EventService {
     @CacheEvict(value = "activeEvents", allEntries = true)
     public EventResponse updateEvent(Long eventId, EventRequest request) {
         Event event = getEventEntity(eventId);
+        Map<String, Object> payload = sanitizePayload(request.getTriggerPayload());
+        validatePayload(request.getTriggerType(), payload);
+
         event.updateDetails(request.getName(), request.getDescription());
         event.updateTriggerCondition(
                 request.getTriggerType(),
-                sanitizePayload(request.getTriggerPayload())
+                payload
         );
         if (request.getStatus() != null) {
             event.changeStatus(request.getStatus());
@@ -170,5 +176,26 @@ public class EventService {
         return payload == null || payload.isEmpty()
                 ? Map.of()
                 : Map.copyOf(payload);
+    }
+
+    private void validatePayload(TriggerType triggerType, Map<String, Object> payload) {
+        if (triggerType == TriggerType.CLICK || triggerType == TriggerType.FORM_SUBMISSION) {
+            boolean hasSelector = hasText(payload.get("selector"));
+            boolean hasTrackId = hasText(payload.get("trackId"));
+            if (!hasSelector && !hasTrackId) {
+                throw new IllegalArgumentException("%s event requires selector or trackId".formatted(triggerType));
+            }
+        }
+
+        if (triggerType == TriggerType.PAGE_VIEW) {
+            Object urlPattern = payload.get("urlPattern");
+            if (urlPattern != null && !hasText(urlPattern)) {
+                throw new IllegalArgumentException("PAGE_VIEW urlPattern must not be blank when provided");
+            }
+        }
+    }
+
+    private boolean hasText(Object value) {
+        return value instanceof String text && !text.isBlank();
     }
 }

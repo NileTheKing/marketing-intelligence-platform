@@ -1,8 +1,10 @@
 package com.axon.core_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.axon.core_service.domain.dto.event.EventDefinitionResponse;
+import com.axon.core_service.domain.dto.event.EventRequest;
 import com.axon.core_service.domain.event.Event;
 import com.axon.core_service.domain.event.EventStatus;
 import com.axon.core_service.domain.event.TriggerType;
@@ -73,5 +75,56 @@ class EventServiceTest {
                 .hasSize(2)
                 .extracting(EventDefinitionResponse::getName)
                 .containsExactly("Active Page View", "Active Click");
+    }
+
+    @Test
+    @DisplayName("CLICK 이벤트는 selector 또는 trackId 없이 생성할 수 없다")
+    void createClickEvent_requiresSelectorOrTrackId() {
+        EventRequest request = EventRequest.builder()
+                .name("Invalid Click")
+                .description("missing click target")
+                .status(EventStatus.ACTIVE)
+                .triggerType(TriggerType.CLICK)
+                .triggerPayload(Map.of())
+                .build();
+
+        assertThatThrownBy(() -> eventService.createEvent(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("CLICK event requires selector or trackId");
+    }
+
+    @Test
+    @DisplayName("CLICK 이벤트는 trackId만으로도 생성할 수 있다")
+    void createClickEvent_acceptsTrackId() {
+        EventRequest request = EventRequest.builder()
+                .name("Track Id Click")
+                .description("stable click target")
+                .status(EventStatus.ACTIVE)
+                .triggerType(TriggerType.CLICK)
+                .triggerPayload(Map.of("trackId", "purchase-button"))
+                .build();
+
+        eventService.createEvent(request);
+
+        List<EventDefinitionResponse> responses = eventService.getActiveEventDefinitions(TriggerType.CLICK);
+        assertThat(responses)
+                .extracting(EventDefinitionResponse::getName)
+                .contains("Track Id Click");
+    }
+
+    @Test
+    @DisplayName("PAGE_VIEW urlPattern은 값이 있으면 공백일 수 없다")
+    void createPageViewEvent_rejectsBlankUrlPattern() {
+        EventRequest request = EventRequest.builder()
+                .name("Invalid Page View")
+                .description("blank url pattern")
+                .status(EventStatus.ACTIVE)
+                .triggerType(TriggerType.PAGE_VIEW)
+                .triggerPayload(Map.of("urlPattern", " "))
+                .build();
+
+        assertThatThrownBy(() -> eventService.createEvent(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("PAGE_VIEW urlPattern must not be blank");
     }
 }
