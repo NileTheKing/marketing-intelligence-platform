@@ -4,6 +4,9 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.json.JsonData;
+import com.axon.core_service.domain.dashboard.CampaignFunnelDefinition;
+import com.axon.core_service.domain.dashboard.FunnelStep;
+import com.axon.messaging.CampaignActivityType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,54 +23,29 @@ public class BehaviorEventService {
     private final ElasticsearchClient elasticsearchClient;
 
     // public api
+    public Long getFunnelStepCount(Long activityId, CampaignActivityType activityType, FunnelStep step,
+            LocalDateTime start, LocalDateTime end) throws IOException {
+        return getEventCountByTriggerTypes(
+                activityId,
+                CampaignFunnelDefinition.triggerTypesFor(activityType, step),
+                start,
+                end);
+    }
+
     public Long getVisitCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        // TODO: ES query 작성
-        // - pageUrl wildcard /campaigns/{activityId}/*
-        // - triggerType = PAGE_VIEW
-        // - timestamp range
-        return getEventCount(activityId, "PAGE_VIEW", start, end);
+        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.VISIT, start, end);
     }
 
     public Long getEngageCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        // Maps to ENGAGE funnel step
-        // Currently: CLICK (FCFS)
-        // Future: APPLY (RAFFLE), CLAIM (COUPON)
-        return getEventCountByTriggerTypes(activityId, getEngageTriggerTypes(), start, end);
+        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.ENGAGE, start, end);
     }
 
     public Long getQualifyCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        // Maps to QUALIFY funnel step
-        // Currently: APPROVED (FCFS)
-        // Future: WON (RAFFLE), ISSUED (COUPON)
-        return getEventCountByTriggerTypes(activityId, getQualifyTriggerTypes(), start, end);
+        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.QUALIFY, start, end);
     }
 
     public Long getPurchaseCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getEventCount(activityId, "PURCHASE", start, end);
-    }
-
-    // == Trigger Type Mapping (extensible for future activity types)
-
-    /**
-     * Returns trigger types that map to ENGAGE funnel step.
-     * Extend this list when adding new activity types (RAFFLE, COUPON).
-     */
-    private java.util.List<String> getEngageTriggerTypes() {
-        return java.util.List.of(
-                "CLICK"     // FCFS
-                // Future: "APPLY", "CLAIM"
-        );
-    }
-
-    /**
-     * Returns trigger types that map to QUALIFY funnel step.
-     * Extend this list when adding new activity types (RAFFLE, COUPON).
-     */
-    private java.util.List<String> getQualifyTriggerTypes() {
-        return java.util.List.of(
-                "APPROVED"  // FCFS
-                // Future: "WON", "ISSUED"
-        );
+        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.PURCHASE, start, end);
     }
 
     /**
@@ -278,13 +256,15 @@ public class BehaviorEventService {
      * 특정 기간 동안 특정 트리거(예: PAGE_VIEW) 이벤트를 특정 횟수 이상 발생시킨 유저와 상품 목록을 조회합니다.
      */
     public java.util.Map<Long, java.util.List<Long>> getHighlyEngagedUsersForProduct(
-            LocalDateTime start, LocalDateTime end, String triggerType, int threshold) throws IOException {
+            LocalDateTime start, LocalDateTime end, String triggerType, int threshold, Long targetProductId)
+            throws IOException {
 
         SearchResponse<Void> response = elasticsearchClient.search(s -> s
                 .index("axon.event.*")
                 .size(0)
                 .query(q -> q.bool(b -> b
                         .filter(buildTriggerTypeFilter(triggerType))
+                        .filter(buildProductIdFilter(targetProductId))
                         .filter(buildTimeRangeFilter(start, end))
                 ))
                 .aggregations("by_user", a -> a
@@ -360,6 +340,17 @@ public class BehaviorEventService {
                 .term(t -> t
                         .field("triggerType.keyword") // Fixed: use keyword field
                         .value(triggerType)));
+    }
+
+    private Query buildProductIdFilter(Long targetProductId) {
+        if (targetProductId == null) {
+            return Query.of(q -> q.matchAll(m -> m));
+        }
+
+        return Query.of(q -> q
+                .term(t -> t
+                        .field("properties.productId")
+                        .value(targetProductId)));
     }
 
     private Query buildTimeRangeFilter(LocalDateTime start, LocalDateTime end) {

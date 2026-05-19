@@ -1,10 +1,13 @@
 package com.axon.core_service.service;
 
 import com.axon.core_service.domain.dashboard.DashboardPeriod;
+import com.axon.core_service.domain.dashboard.CampaignFunnelDefinition;
 import com.axon.core_service.domain.dashboard.FunnelStep;
+import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.dashboard.*;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.messaging.CampaignActivityType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -67,13 +70,14 @@ public class DashboardService {
     }
 
     private OverviewData buildOverviewDataByActivity(Long activityId, LocalDateTime start, LocalDateTime end) {
-        Long visits = getStepCount(activityId, FunnelStep.VISIT, start, end);
-        Long engages = getStepCount(activityId, FunnelStep.ENGAGE, start, end);
-        Long qualifies = getStepCount(activityId, FunnelStep.QUALIFY, start, end);
-        Long purchases = getStepCount(activityId, FunnelStep.PURCHASE, start, end);
-
-        com.axon.core_service.domain.campaignactivity.CampaignActivity activity = campaignActivityRepository
+        CampaignActivity activity = campaignActivityRepository
                 .findById(activityId).orElse(null);
+        CampaignActivityType activityType = activity != null ? activity.getActivityType() : null;
+
+        Long visits = getStepCount(activityId, activityType, FunnelStep.VISIT, start, end);
+        Long engages = getStepCount(activityId, activityType, FunnelStep.ENGAGE, start, end);
+        Long qualifies = getStepCount(activityId, activityType, FunnelStep.QUALIFY, start, end);
+        Long purchases = getStepCount(activityId, activityType, FunnelStep.PURCHASE, start, end);
 
         java.math.BigDecimal price = activity != null ? activity.getPrice() : java.math.BigDecimal.ZERO;
         java.math.BigDecimal budget = activity != null && activity.getBudget() != null
@@ -111,8 +115,11 @@ public class DashboardService {
             List<FunnelStep> funnelSteps,
             LocalDateTime start,
             LocalDateTime end) {
+        CampaignActivityType activityType = campaignActivityRepository.findById(activityId)
+                .map(CampaignActivity::getActivityType)
+                .orElse(null);
         return funnelSteps.stream()
-                .map(step -> new FunnelStepData(step, getStepCount(activityId, step, start, end)))
+                .map(step -> new FunnelStepData(step, getStepCount(activityId, activityType, step, start, end)))
                 .toList();
     }
 
@@ -146,14 +153,10 @@ public class DashboardService {
         return new RealtimeData(activityRealtime, LocalDateTime.now());
     }
 
-    private Long getStepCount(Long activityId, FunnelStep step, LocalDateTime start, LocalDateTime end) {
+    private Long getStepCount(Long activityId, CampaignActivityType activityType, FunnelStep step,
+            LocalDateTime start, LocalDateTime end) {
         try {
-            return switch (step) {
-                case VISIT -> behaviorEventService.getVisitCount(activityId, start, end);
-                case ENGAGE -> behaviorEventService.getEngageCount(activityId, start, end);
-                case QUALIFY -> behaviorEventService.getQualifyCount(activityId, start, end);
-                case PURCHASE -> behaviorEventService.getPurchaseCount(activityId, start, end);
-            };
+            return behaviorEventService.getFunnelStepCount(activityId, activityType, step, start, end);
         } catch (IOException e) {
             log.error("Failed to get count for step: {} in activity: {}", step, activityId, e);
             return 0L;
@@ -223,14 +226,18 @@ public class DashboardService {
         List<ActivityComparisonData> comparisonTable = new ArrayList<>();
         List<Long> activityIds = new ArrayList<>(); // This was used for heatmap, now moved to getHourlyHeatmap
 
-        for (com.axon.core_service.domain.campaignactivity.CampaignActivity activity : activities) {
+        for (CampaignActivity activity : activities) {
             activityIds.add(activity.getId());
             Map<String, Long> activityStats = stats.getOrDefault(activity.getId(), Collections.emptyMap());
 
-            Long visits = activityStats.getOrDefault("PAGE_VIEW", 0L);
-            Long engages = activityStats.getOrDefault("CLICK", 0L);
-            Long qualifies = activityStats.getOrDefault("APPROVED", 0L);
-            Long purchases = activityStats.getOrDefault("PURCHASE", 0L);
+            Long visits = CampaignFunnelDefinition.countForStep(
+                    activityStats, activity.getActivityType(), FunnelStep.VISIT);
+            Long engages = CampaignFunnelDefinition.countForStep(
+                    activityStats, activity.getActivityType(), FunnelStep.ENGAGE);
+            Long qualifies = CampaignFunnelDefinition.countForStep(
+                    activityStats, activity.getActivityType(), FunnelStep.QUALIFY);
+            Long purchases = CampaignFunnelDefinition.countForStep(
+                    activityStats, activity.getActivityType(), FunnelStep.PURCHASE);
 
             java.math.BigDecimal gmv = calculateGMV(activity.getId(), purchases);
 

@@ -34,7 +34,7 @@ public class BehaviorTriggerScheduler {
     /**
      * 매 시간 0분에 실행.
      * 활성화된 MarketingRule을 DB에서 로드한 뒤, 규칙별로 행동 조건을 평가하고
-     * 임계값을 충족한 유저에게 쿠폰을 발행합니다.
+     * 임계값을 충족한 유저에게 보상 이벤트를 발행합니다.
      */
     @Scheduled(cron = "0 0 * * * *")
     public void runBehaviorCouponTrigger() {
@@ -44,7 +44,7 @@ public class BehaviorTriggerScheduler {
         log.info("Loaded {} active marketing rules", activeRules.size());
 
         for (MarketingRule rule : activeRules) {
-            if (rule.getRewardType() != RewardType.COUPON) {
+            if (!isSupportedRewardType(rule.getRewardType())) {
                 log.debug("Skipping rule '{}': rewardType={}", rule.getRuleName(), rule.getRewardType());
                 continue;
             }
@@ -52,6 +52,10 @@ public class BehaviorTriggerScheduler {
         }
 
         log.info("========== Behavior Coupon Trigger Batch Completed ==========");
+    }
+
+    private boolean isSupportedRewardType(RewardType rewardType) {
+        return rewardType == RewardType.COUPON || rewardType == RewardType.WEBHOOK;
     }
 
     private void processRule(MarketingRule rule) {
@@ -64,27 +68,21 @@ public class BehaviorTriggerScheduler {
 
         try {
             Map<Long, List<Long>> highlyEngagedUsers = behaviorEventService.getHighlyEngagedUsersForProduct(
-                    start, now, rule.getBehaviorType(), rule.getThresholdCount());
+                    start, now, rule.getBehaviorType(), rule.getThresholdCount(), rule.getTargetProductId());
 
             for (Map.Entry<Long, List<Long>> entry : highlyEngagedUsers.entrySet()) {
                 Long userId = entry.getKey();
 
                 for (Long productId : entry.getValue()) {
-                    String redisKey = String.format("coupon:trigger:%d:%d:%d", rule.getId(), userId, productId);
+                    String redisKey = triggerKey(rule, userId, productId);
                     Boolean isAbsent = redisTemplate.opsForValue()
                             .setIfAbsent(redisKey, "1", COUPON_TTL_DAYS, TimeUnit.DAYS);
 
                     if (Boolean.TRUE.equals(isAbsent)) {
-                        log.info("Triggering coupon: ruleId={}, userId={}, productId={}, couponId={}",
-                                rule.getId(), userId, productId, rule.getRewardReferenceId());
+                        log.info("Triggering reward: type={}, ruleId={}, userId={}, productId={}, referenceId={}",
+                                rule.getRewardType(), rule.getId(), userId, productId, rule.getRewardReferenceId());
 
-                        CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
-                                .campaignActivityType(CampaignActivityType.COUPON)
-                                .userId(userId)
-                                .productId(productId)
-                                .couponId(rule.getRewardReferenceId()) // DB에서 로드한 실제 쿠폰 ID
-                                .timestamp(System.currentTimeMillis())
-                                .build();
+                        CampaignActivityKafkaProducerDto message = buildRewardMessage(rule, userId, productId);
 
                         kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message);
                     }
@@ -93,5 +91,30 @@ public class BehaviorTriggerScheduler {
         } catch (Exception e) {
             log.error("Error processing rule id={} name='{}': {}", rule.getId(), rule.getRuleName(), e.getMessage(), e);
         }
+    }
+
+    private String triggerKey(MarketingRule rule, Long userId, Long productId) {
+        String prefix = rule.getRewardType() == RewardType.WEBHOOK ? "webhook" : "coupon";
+        return String.format("%s:trigger:%d:%d:%d", prefix, rule.getId(), userId, productId);
+    }
+
+    private CampaignActivityKafkaProducerDto buildRewardMessage(MarketingRule rule, Long userId, Long productId) {
+        CampaignActivityKafkaProducerDto.CampaignActivityKafkaProducerDtoBuilder builder =
+                CampaignActivityKafkaProducerDto.builder()
+                        .userId(userId)
+                        .productId(productId)
+                        .couponId(rule.getRewardReferenceId())
+                        .timestamp(System.currentTimeMillis());
+
+        if (rule.getRewardType() == RewardType.WEBHOOK) {
+            return builder
+                    .campaignActivityType(CampaignActivityType.WEBHOOK)
+                    .campaignActivityId(rule.getId())
+                    .build();
+        }
+
+        return builder
+                .campaignActivityType(CampaignActivityType.COUPON)
+                .build();
     }
 }

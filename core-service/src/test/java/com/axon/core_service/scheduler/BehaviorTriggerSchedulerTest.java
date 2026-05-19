@@ -4,10 +4,13 @@ import com.axon.core_service.domain.marketing.MarketingRule;
 import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.repository.MarketingRuleRepository;
 import com.axon.core_service.service.BehaviorEventService;
+import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -44,12 +47,21 @@ class BehaviorTriggerSchedulerTest {
     private BehaviorTriggerScheduler scheduler;
 
     private MarketingRule couponRule(Long ruleId) {
+        return marketingRule(ruleId, RewardType.COUPON, null);
+    }
+
+    private MarketingRule webhookRule(Long ruleId) {
+        return marketingRule(ruleId, RewardType.WEBHOOK, null);
+    }
+
+    private MarketingRule marketingRule(Long ruleId, RewardType rewardType, Long targetProductId) {
         MarketingRule rule = MarketingRule.builder()
                 .ruleName("test-rule")
                 .behaviorType("PAGE_VIEW")
+                .targetProductId(targetProductId)
                 .thresholdCount(3)
                 .lookbackDays(7)
-                .rewardType(RewardType.COUPON)
+                .rewardType(rewardType)
                 .rewardReferenceId(999L)
                 .isActive(true)
                 .build();
@@ -73,7 +85,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = couponRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(
@@ -95,7 +107,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = couponRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(
@@ -118,7 +130,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = couponRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId1, productId2)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(30L), eq(TimeUnit.DAYS)))
@@ -127,5 +139,56 @@ class BehaviorTriggerSchedulerTest {
         scheduler.runBehaviorCouponTrigger();
 
         verify(kafkaTemplate, times(2)).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), any());
+    }
+
+    @Test
+    @DisplayName("Webhook 보상 룰도 Kafka WEBHOOK 이벤트로 발행해야 한다")
+    void runBehaviorCouponTrigger_webhookRule_publishesWebhookToKafka() throws Exception {
+        Long ruleId = 2L;
+        Long userId = 4L;
+        Long productId = 400L;
+        MarketingRule rule = webhookRule(ruleId);
+
+        when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
+                .thenReturn(Map.of(userId, List.of(productId)));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(
+                eq(String.format("webhook:trigger:%d:%d:%d", ruleId, userId, productId)),
+                eq("1"), eq(30L), eq(TimeUnit.DAYS)))
+                .thenReturn(true);
+
+        scheduler.runBehaviorCouponTrigger();
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), captor.capture());
+
+        CampaignActivityKafkaProducerDto message = (CampaignActivityKafkaProducerDto) captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(message.getCampaignActivityType()).isEqualTo(CampaignActivityType.WEBHOOK);
+        org.assertj.core.api.Assertions.assertThat(message.getCampaignActivityId()).isEqualTo(ruleId);
+        org.assertj.core.api.Assertions.assertThat(message.getCouponId()).isEqualTo(999L);
+    }
+
+    @Test
+    @DisplayName("targetProductId가 있으면 해당 상품 기준으로만 행동 조건을 평가한다")
+    void runBehaviorCouponTrigger_targetProductId_passesProductFilterToBehaviorQuery() throws Exception {
+        Long ruleId = 3L;
+        Long userId = 5L;
+        Long targetProductId = 555L;
+        MarketingRule rule = marketingRule(ruleId, RewardType.COUPON, targetProductId);
+
+        when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), eq(targetProductId)))
+                .thenReturn(Map.of(userId, List.of(targetProductId)));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(
+                eq(String.format("coupon:trigger:%d:%d:%d", ruleId, userId, targetProductId)),
+                eq("1"), eq(30L), eq(TimeUnit.DAYS)))
+                .thenReturn(true);
+
+        scheduler.runBehaviorCouponTrigger();
+
+        verify(behaviorEventService).getHighlyEngagedUsersForProduct(any(), any(), eq("PAGE_VIEW"), eq(3), eq(targetProductId));
+        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), any());
     }
 }
