@@ -61,22 +61,8 @@ public class PurchaseService {
                 ))
                 .toList();
 
-        try {
-            purchaseRepository.saveAll(purchaseEntities);
-            log.info("[Purchase] Saved {} purchase records successfully", purchaseEntities.size());
-        } catch (Exception e) {
-            log.warn("[Purchase] Batch failed, retrying individually. Error: {}", e.getMessage());
-            int savedCount = 0;
-            for (Purchase purchase : purchaseEntities) {
-                try {
-                    saveSinglePurchaseInNewTransaction(purchase);
-                    savedCount++;
-                } catch (Exception ex) {
-                    log.debug("Skipping failed purchase: userId={}", purchase.getUserId());
-                }
-            }
-            log.info("[Purchase] Recovered {}/{} purchases via individual retry", savedCount, purchaseEntities.size());
-        }
+        purchaseRepository.saveAll(purchaseEntities);
+        log.info("[Purchase] Saved {} purchase records successfully", purchaseEntities.size());
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

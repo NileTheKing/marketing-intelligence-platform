@@ -125,4 +125,29 @@ class PurchaseHandlerTest {
                 purchases.size() == 1 && purchases.get(0).userId().equals(purchaseInfo.userId())));
         verify(deadLetterHandler, never()).handle(any(), any());
     }
+
+    @Test
+    @DisplayName("개별 재시도까지 실패하면 DeadLetterHandler로 격리해야 한다")
+    void flushBatch_WhenIndividualRetryFails_SendsToDeadLetterHandler() {
+        PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
+                1L,
+                1L,
+                1L,
+                1L,
+                Instant.now(),
+                PurchaseType.CAMPAIGNACTIVITY,
+                BigDecimal.valueOf(5000),
+                1,
+                Instant.now()
+        );
+
+        purchaseHandler.handle(purchaseInfo);
+        doThrow(new RuntimeException("batch failure"))
+                .doThrow(new RuntimeException("single failure"))
+                .when(purchaseService).createPurchaseBatch(any());
+
+        purchaseHandler.flushBatch();
+
+        verify(deadLetterHandler).handle(eq(purchaseInfo), any(RuntimeException.class));
+    }
 }

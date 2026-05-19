@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class PurchaseHandler {
-    private static final int batchSize = 50;
+    private static final int batchSize = 20;
     private final ProductService productService;
     private final UserSummaryService userSummaryService;
     private final PurchaseService purchaseService;

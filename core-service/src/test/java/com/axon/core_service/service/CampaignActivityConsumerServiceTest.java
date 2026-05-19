@@ -31,8 +31,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.axon.core_service.AbstractIntegrationTest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Duration;
 
 @ActiveProfiles({"test", "oauth"})
 class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
@@ -147,21 +150,25 @@ class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
         }
 
         latch.await();
-        Thread.sleep(5000); // Wait for async Kafka processing and scheduled flushes
 
-        Product product = productRepository.findById(testProductId).orElseThrow();
-        // [PORTFOLIO POINT] Deferred Sync: Stock decrease is skipped in real-time to prevent Row-Lock contention.
-        // Final integrity is ensured by a deferred batch process (not part of this real-time flow).
-        assertThat(product.getStock()).isEqualTo(100L);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(250))
+                .untilAsserted(() -> {
+                    Product product = productRepository.findById(testProductId).orElseThrow();
+                    // [PORTFOLIO POINT] Deferred Sync: Stock decrease is skipped in real-time to prevent Row-Lock contention.
+                    // Final integrity is ensured by a deferred batch process (not part of this real-time flow).
+                    assertThat(product.getStock()).isEqualTo(100L);
 
-        // Verify that entries were created
-        long entryCount = campaignActivityEntryRepository.count();
-        assertThat(entryCount).isEqualTo(NUMBER_OF_THREADS);
+                    // Verify that entries were created
+                    long entryCount = campaignActivityEntryRepository.count();
+                    assertThat(entryCount).isEqualTo(NUMBER_OF_THREADS);
 
-        userIds.forEach(id -> assertThat(
-                userSummaryRepository.findById(id)
-                        .map(summary -> summary.getLastPurchaseAt())
-                        .orElse(null))
-                .isNotNull());
+                    userIds.forEach(id -> assertThat(
+                            userSummaryRepository.findById(id)
+                                    .map(summary -> summary.getLastPurchaseAt())
+                                    .orElse(null))
+                            .isNotNull());
+                });
     }
 }
