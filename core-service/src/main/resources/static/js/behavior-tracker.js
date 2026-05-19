@@ -5,6 +5,7 @@
     apiBaseUrl: '',
     eventsEndpoint: '/api/v1/events/active',
     collectEndpoint: '/api/v1/behavior/events',
+    diagnosticsEndpoint: '/api/v1/behavior/events/diagnostics',
     autoRefreshMs: 5 * 60 * 1000,
     debug: false,
     withCredentials: true,
@@ -274,7 +275,7 @@
         const trackId = definition.triggerPayload?.trackId;
         const selector = definition.triggerPayload?.selector;
         if (!trackId && !selector) {
-          this.incrementDiagnostic('unresolvedClickTargets');
+          this.incrementDiagnostic('unresolvedClickTargets', definition);
           console.warn('[AxonTracker] CLICK event definition requires selector or trackId', definition);
           return;
         }
@@ -313,7 +314,7 @@
     try {
       return target.closest(selector);
     } catch (error) {
-      this.incrementDiagnostic('invalidSelectors');
+      this.incrementDiagnostic('invalidSelectors', { selector });
       console.warn('[AxonTracker] Invalid CLICK selector', selector, error);
       return null;
     }
@@ -414,9 +415,38 @@
     }
   };
 
-  BehaviorTracker.prototype.incrementDiagnostic = function incrementDiagnostic(key) {
+  BehaviorTracker.prototype.incrementDiagnostic = function incrementDiagnostic(key, details = {}) {
     this.state.diagnostics[key] = (this.state.diagnostics[key] || 0) + 1;
     this.log('Tracker diagnostics', this.state.diagnostics);
+    this.sendDiagnostic(key, details);
+  };
+
+  BehaviorTracker.prototype.sendDiagnostic = function sendDiagnostic(reason, details = {}) {
+    if (!this.config.diagnosticsEndpoint) {
+      return;
+    }
+
+    const payload = {
+      reason,
+      occurredAt: new Date().toISOString(),
+      pageUrl: window.location.href,
+      sessionId: resolveSyncValue(this.config.sessionIdProvider),
+      eventId: details.id || details.eventId || null,
+      triggerType: details.triggerType || null,
+      details: sanitizeDiagnosticDetails(details)
+    };
+
+    const headers = { 'Content-Type': 'application/json' };
+    const url = this.resolveUrl(this.config.diagnosticsEndpoint);
+    fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      credentials: this.config.withCredentials ? 'include' : 'same-origin',
+      keepalive: true
+    }).catch((error) => {
+      this.log('Failed to send SDK diagnostic', reason, error);
+    });
   };
 
   /**
@@ -451,6 +481,31 @@
       return candidate();
     }
     return candidate ?? null;
+  }
+
+  function resolveSyncValue(candidate) {
+    if (typeof candidate !== 'function') {
+      return candidate ?? null;
+    }
+    try {
+      const value = candidate();
+      return value && typeof value.then === 'function' ? null : value;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function sanitizeDiagnosticDetails(details) {
+    if (!details || typeof details !== 'object') {
+      return {};
+    }
+    return {
+      id: details.id || details.eventId || null,
+      name: details.name || null,
+      triggerType: details.triggerType || null,
+      selector: details.selector || details.triggerPayload?.selector || null,
+      trackId: details.trackId || details.triggerPayload?.trackId || null
+    };
   }
 
   global.AxonBehaviorTracker = new BehaviorTracker();

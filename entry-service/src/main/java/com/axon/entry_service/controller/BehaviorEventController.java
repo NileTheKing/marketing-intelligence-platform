@@ -1,6 +1,7 @@
 package com.axon.entry_service.controller;
 
 import com.axon.entry_service.domain.behavior.UserBehaviorEvent;
+import com.axon.entry_service.dto.BehaviorDiagnosticRequest;
 import com.axon.entry_service.dto.BehaviorEventRequest;
 import com.axon.entry_service.service.behavior.BehaviorEventPublisher;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,7 +47,8 @@ public class BehaviorEventController {
         log.info("recordBehaviorEvent request={}", request);
         Long userId = resolveUserId(request, userDetails);
         
-        Map<String, Object> enrichedProperties = new HashMap<>(request.getProperties());
+        Map<String, Object> enrichedProperties = new HashMap<>(
+                request.getProperties() != null ? request.getProperties() : Map.of());
         enrichWithCampaignId(enrichedProperties);
 
         UserBehaviorEvent event = UserBehaviorEvent.builder()
@@ -60,6 +62,34 @@ public class BehaviorEventController {
                 .referrer(request.getReferrer())
                 .userAgent(extractUserAgent(servletRequest))
                 .properties(enrichedProperties)
+                .build();
+
+        publisher.publish(event);
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/diagnostics")
+    public ResponseEntity<Void> recordDiagnostic(@Valid @RequestBody BehaviorDiagnosticRequest request,
+                                                 HttpServletRequest servletRequest) {
+        Map<String, Object> properties = new HashMap<>(
+                request.getDetails() != null ? request.getDetails() : Map.of());
+        properties.put("reason", request.getReason());
+        properties.put("source", "axon-js-sdk");
+        if (request.getEventId() != null) {
+            properties.put("eventId", request.getEventId());
+        }
+        if (StringUtils.hasText(request.getTriggerType())) {
+            properties.put("triggerType", request.getTriggerType());
+        }
+
+        UserBehaviorEvent event = UserBehaviorEvent.builder()
+                .eventName("SDK Diagnostic")
+                .triggerType("SDK_DIAGNOSTIC")
+                .occurredAt(request.getOccurredAt() != null ? request.getOccurredAt() : Instant.now())
+                .sessionId(request.getSessionId())
+                .pageUrl(request.getPageUrl())
+                .userAgent(extractUserAgent(servletRequest))
+                .properties(properties)
                 .build();
 
         publisher.publish(event);
