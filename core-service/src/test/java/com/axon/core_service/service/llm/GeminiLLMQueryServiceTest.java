@@ -53,4 +53,28 @@ class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
                 argThat(actualEnd -> actualEnd.isEqual(expectedEnd))
         );
     }
+
+    @Test
+    @DisplayName("Gemini가 activity 기간 조회를 요청했을 때, Activity Dashboard에 정확한 날짜 범위가 전달되어야 한다")
+    void testExecuteActivityToolWithDateRange() {
+        // given
+        var args = objectMapper.createObjectNode();
+        args.put("activityId", 77L);
+        args.put("startDate", "2025-09-01");
+        args.put("endDate", "2025-09-30");
+
+        // when
+        ReflectionTestUtils.invokeMethod(geminiLLMQueryService, "executeTool", "get_activity_dashboard", args, 77L);
+
+        // then
+        LocalDateTime expectedStart = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
+        LocalDateTime expectedEnd = LocalDateTime.of(2025, 9, 30, 23, 59, 59);
+
+        verify(dashboardService).getDashboardByActivity(
+                eq(77L),
+                eq(DashboardPeriod.CUSTOM),
+                argThat(actualStart -> actualStart.isEqual(expectedStart)),
+                argThat(actualEnd -> actualEnd.isEqual(expectedEnd))
+        );
+    }
 }

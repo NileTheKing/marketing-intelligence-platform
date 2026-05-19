@@ -174,6 +174,19 @@ public class GeminiLLMQueryService implements LLMQueryService {
                     )
                 ),
                 Map.of(
+                    "name", "get_activity_dashboard",
+                    "description", "특정 활동(Activity)의 상세 퍼널 및 성과 지표를 가져옵니다. 특정 기간 조회가 필요하면 startDate와 endDate를 명시하십시오.",
+                    "parameters", Map.of(
+                        "type", "OBJECT",
+                        "properties", Map.of(
+                            "activityId", Map.of("type", "NUMBER", "description", "활동 ID"),
+                            "startDate", Map.of("type", "STRING", "description", "조회 시작일 (YYYY-MM-DD)"),
+                            "endDate", Map.of("type", "STRING", "description", "조회 종료일 (YYYY-MM-DD)")
+                        ),
+                        "required", List.of("activityId")
+                    )
+                ),
+                Map.of(
                     "name", "get_cohort_analysis",
                     "description", "특정 활동(Activity)의 코호트 분석(LTV, CAC, 재구매율) 데이터를 가져옵니다.",
                     "parameters", Map.of(
@@ -205,6 +218,9 @@ public class GeminiLLMQueryService implements LLMQueryService {
         if ("get_campaign_dashboard".equals(name)) {
             Long campaignId = args.has("campaignId") ? args.get("campaignId").asLong() : defaultId;
             return dashboardService.getDashboardByCampaign(campaignId, DashboardPeriod.CUSTOM, start, end);
+        } else if ("get_activity_dashboard".equals(name)) {
+            Long activityId = args.has("activityId") ? args.get("activityId").asLong() : defaultId;
+            return dashboardService.getDashboardByActivity(activityId, DashboardPeriod.CUSTOM, start, end);
         } else if ("get_global_dashboard".equals(name)) {
             // Note: GlobalDashboard currently has fixed 30 days, we can extend it later if needed
             return dashboardService.getGlobalDashboard();

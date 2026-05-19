@@ -56,4 +56,28 @@ class GeminiLLMQueryServiceUnitTest {
                 argThat(actualEnd -> actualEnd != null && actualEnd.isEqual(expectedEnd))
         );
     }
+
+    @Test
+    @DisplayName("Activity dashboard tool도 날짜 문자열을 LocalDateTime 범위로 정확히 변환해야 한다")
+    void testExecuteActivityToolWithDateRangeLogic() {
+        // given
+        var args = objectMapper.createObjectNode();
+        args.put("activityId", 77L);
+        args.put("startDate", "2025-09-01");
+        args.put("endDate", "2025-09-30");
+
+        // when
+        ReflectionTestUtils.invokeMethod(geminiLLMQueryService, "executeTool", "get_activity_dashboard", args, 77L);
+
+        // then
+        LocalDateTime expectedStart = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
+        LocalDateTime expectedEnd = LocalDateTime.of(2025, 9, 30, 23, 59, 59);
+
+        verify(dashboardService).getDashboardByActivity(
+                eq(77L),
+                eq(DashboardPeriod.CUSTOM),
+                argThat(actualStart -> actualStart != null && actualStart.isEqual(expectedStart)),
+                argThat(actualEnd -> actualEnd != null && actualEnd.isEqual(expectedEnd))
+        );
+    }
 }
