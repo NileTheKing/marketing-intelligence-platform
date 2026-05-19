@@ -1,0 +1,144 @@
+services:
+  controller:
+    image: confluentinc/cp-kafka:7.9.0
+    container_name: kafka-controller
+    networks:
+      - axon-network
+    environment:
+      KAFKA_PROCESS_ROLES: "controller"
+      KAFKA_NODE_ID: 1
+      KAFKA_CLUSTER_ID: "O69UWjQJRFCIpj8R7rV50A"
+      CLUSTER_ID: "O69UWjQJRFCIpj8R7rV50A"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@controller:9093"
+      KAFKA_LISTENERS: "CONTROLLER://:9093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+    volumes:
+      - controller_data:/var/lib/kafka/data
+
+  broker:
+    image: confluentinc/cp-kafka:7.9.0
+    container_name: broker_1
+    depends_on:
+      - controller
+    ports:
+      - "9092:9092"
+    networks:
+      - axon-network
+    environment:
+      KAFKA_PROCESS_ROLES: "broker"
+      KAFKA_NODE_ID: 2
+      CLUSTER_ID: "O69UWjQJRFCIpj8R7rV50A"
+      KAFKA_CLUSTER_ID: "O69UWjQJRFCIpj8R7rV50A"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@controller:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "PLAINTEXT_INTERNAL://:29092,PLAINTEXT_EXTERNAL://:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT_INTERNAL://broker_1:29092,PLAINTEXT_EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT_INTERNAL:PLAINTEXT,PLAINTEXT_EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT_INTERNAL"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    volumes:
+      - broker_data:/var/lib/kafka/data
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.9.0
+    container_name: kafka-init
+    depends_on:
+      broker:
+        condition: service_started
+    networks:
+      - axon-network
+    volumes:
+      - ./kafka-init/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/bash", "/create-topics.sh"]
+    restart: "no"
+
+  mysql:
+    image: mysql:8.0
+    container_name: axon-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    networks:
+      - axon-network
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-axon}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-axon_db}
+      MYSQL_USER: ${DB_USERNAME:-axon_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-axon1234}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:alpine
+    container_name: axon-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - axon-network
+    command: redis-server --requirepass ${REDIS_PASSWORD:-axon1234} --save ""
+    volumes:
+      - redis_data:/data
+
+  core-service:
+    build:
+      context: ./core-service
+      dockerfile: Dockerfile
+    container_name: axon-core
+    depends_on:
+      - mysql
+      - redis
+      - broker
+    ports:
+      - "8080:8080"
+    networks:
+      - axon-network
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/axon_db?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${DB_USERNAME:-axon_user}
+      DB_PASSWORD: ${DB_PASSWORD:-axon1234}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-axon1234}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: broker_1:29092
+      AXON_ENTRY_SERVICE_URL: http://entry-service:8081
+      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+  entry-service:
+    build:
+      context: ./entry-service
+      dockerfile: Dockerfile
+    container_name: axon-entry
+    depends_on:
+      - redis
+      - broker
+      - core-service
+    ports:
+      - "8081:8081"
+    networks:
+      - axon-network
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-axon1234}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: broker_1:29092
+      AXON_CORE_SERVICE_BASE_URL: http://core-service:8080
+      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
+      PAYMENT_TOKEN_SECRET: ${PAYMENT_TOKEN_SECRET:-change-this-payment-secret}
+
+networks:
+  axon-network:
+    driver: bridge
+
+volumes:
+  controller_data:
+  broker_data:
+  mysql_data:
+  redis_data:
