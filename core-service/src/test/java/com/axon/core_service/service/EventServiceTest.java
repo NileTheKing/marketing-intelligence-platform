@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.axon.core_service.domain.dto.event.EventDefinitionResponse;
 import com.axon.core_service.domain.dto.event.EventRequest;
 import com.axon.core_service.domain.event.Event;
+import com.axon.core_service.domain.event.EventDefinitionAuditAction;
 import com.axon.core_service.domain.event.EventStatus;
 import com.axon.core_service.domain.event.TriggerType;
+import com.axon.core_service.repository.EventDefinitionAuditRepository;
 import com.axon.core_service.repository.EventRepository;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +30,12 @@ class EventServiceTest {
     @Autowired
     private EventRepository eventRepository;
 
+    @Autowired
+    private EventDefinitionAuditRepository eventDefinitionAuditRepository;
+
     @BeforeEach
     void setUp() {
+        eventDefinitionAuditRepository.deleteAll();
         eventRepository.deleteAll();
 
         eventRepository.save(Event.builder()
@@ -110,6 +116,17 @@ class EventServiceTest {
         assertThat(responses)
                 .extracting(EventDefinitionResponse::getName)
                 .contains("Track Id Click");
+
+        Event created = eventRepository.findAllByTriggerCondition_TriggerTypeAndStatusOrderByIdAsc(
+                TriggerType.CLICK, EventStatus.ACTIVE).stream()
+                .filter(event -> event.getName().equals("Track Id Click"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(eventDefinitionAuditRepository.findByEventIdOrderByIdAsc(created.getId()))
+                .hasSize(1)
+                .first()
+                .extracting("action")
+                .isEqualTo(EventDefinitionAuditAction.CREATED);
     }
 
     @Test

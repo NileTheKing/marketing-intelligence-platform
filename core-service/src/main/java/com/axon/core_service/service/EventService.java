@@ -4,8 +4,11 @@ import com.axon.core_service.domain.dto.event.EventDefinitionResponse;
 import com.axon.core_service.domain.dto.event.EventRequest;
 import com.axon.core_service.domain.dto.event.EventResponse;
 import com.axon.core_service.domain.event.Event;
+import com.axon.core_service.domain.event.EventDefinitionAudit;
+import com.axon.core_service.domain.event.EventDefinitionAuditAction;
 import com.axon.core_service.domain.event.EventStatus;
 import com.axon.core_service.domain.event.TriggerType;
+import com.axon.core_service.repository.EventDefinitionAuditRepository;
 import com.axon.core_service.repository.EventRepository;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class EventService {
 
     private final EventRepository eventRepository;
+    private final EventDefinitionAuditRepository eventDefinitionAuditRepository;
 
     /**
      * Create a new Event from the provided request and persist it.
@@ -44,7 +48,9 @@ public class EventService {
                 ))
                 .build();
 
-        return EventResponse.from(eventRepository.save(event));
+        Event saved = eventRepository.save(event);
+        recordAudit(saved, EventDefinitionAuditAction.CREATED);
+        return EventResponse.from(saved);
     }
 
     /**
@@ -69,6 +75,7 @@ public class EventService {
         if (request.getStatus() != null) {
             event.changeStatus(request.getStatus());
         }
+        recordAudit(event, EventDefinitionAuditAction.UPDATED);
         return EventResponse.from(event);
     }
 
@@ -99,6 +106,7 @@ public class EventService {
     public EventResponse changeStatus(Long eventId, EventStatus status) {
         Event event = getEventEntity(eventId);
         event.changeStatus(status);
+        recordAudit(event, EventDefinitionAuditAction.STATUS_CHANGED);
         return EventResponse.from(event);
     }
 
@@ -151,6 +159,8 @@ public class EventService {
      */
     @CacheEvict(value = "activeEvents", allEntries = true)
     public void deleteEvent(Long eventId) {
+        Event event = getEventEntity(eventId);
+        recordAudit(event, EventDefinitionAuditAction.DELETED);
         eventRepository.deleteById(eventId);
     }
 
@@ -197,5 +207,9 @@ public class EventService {
 
     private boolean hasText(Object value) {
         return value instanceof String text && !text.isBlank();
+    }
+
+    private void recordAudit(Event event, EventDefinitionAuditAction action) {
+        eventDefinitionAuditRepository.save(EventDefinitionAudit.from(event, action));
     }
 }
