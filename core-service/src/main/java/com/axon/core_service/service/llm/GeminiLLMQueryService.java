@@ -71,8 +71,9 @@ public class GeminiLLMQueryService implements LLMQueryService {
             "만약 이 외에 다른 상품이나 캠페인 정보가 필요하다면, 직접 물어보지 말고 제공된 도구를 사용하십시오.", 
             campaignId);
 
-        String geminiResponse = callGeminiApiWithTools(query, getGlobalTools(), campaignId, dashboardData);
-        return new DashboardQueryResponse(geminiResponse, dashboardData.overview(), "GEMINI_HYBRID_CAMPAIGN");
+        GeminiToolResponse geminiResponse = callGeminiApiWithTools(query, getGlobalTools(), campaignId, dashboardData);
+        return new DashboardQueryResponse(geminiResponse.answer(), dashboardData.overview(), "GEMINI_HYBRID_CAMPAIGN",
+                geminiResponse.metadata());
     }
 
     private Object cohort_month_data(Long campaignActivityId) {
@@ -107,8 +108,9 @@ public class GeminiLLMQueryService implements LLMQueryService {
             "이 외의 정보가 필요하다면 제공된 도구를 사용하십시오.", 
             activityId);
 
-        String geminiResponse = callGeminiApiWithTools(query, getGlobalTools(), activityId, dashboardData);
-        return new DashboardQueryResponse(geminiResponse, dashboardData.overview(), "GEMINI_HYBRID_ACTIVITY");
+        GeminiToolResponse geminiResponse = callGeminiApiWithTools(query, getGlobalTools(), activityId, dashboardData);
+        return new DashboardQueryResponse(geminiResponse.answer(), dashboardData.overview(), "GEMINI_HYBRID_ACTIVITY",
+                geminiResponse.metadata());
     }
 
     private Map<String, Object> convertBatchToMap(LTVBatch batch) {
@@ -141,9 +143,10 @@ public class GeminiLLMQueryService implements LLMQueryService {
         GlobalDashboardResponse dashboardData = dashboardService.getGlobalDashboard();
 
         // 2. 도구 상자와 함께 전역 데이터를 지식(initialContext)으로 전달
-        String geminiResponse = callGeminiApiWithTools(query, getGlobalTools(), 0L, dashboardData);
+        GeminiToolResponse geminiResponse = callGeminiApiWithTools(query, getGlobalTools(), 0L, dashboardData);
         
-        return new DashboardQueryResponse(geminiResponse, dashboardData.overview(), "GEMINI_HYBRID_GLOBAL");
+        return new DashboardQueryResponse(geminiResponse.answer(), dashboardData.overview(), "GEMINI_HYBRID_GLOBAL",
+                geminiResponse.metadata());
     }
 
     private List<Map<String, Object>> getGlobalTools() {
@@ -235,7 +238,7 @@ public class GeminiLLMQueryService implements LLMQueryService {
         return Map.of("error", "Unknown function");
     }
 
-    private String callGeminiApiWithTools(String userQuery, List<Map<String, Object>> tools, Long defaultId, Object initialContext) {
+    private GeminiToolResponse callGeminiApiWithTools(String userQuery, List<Map<String, Object>> tools, Long defaultId, Object initialContext) {
         try {
             String url = GEMINI_URL + "?key=" + apiKey;
             String contextJson = initialContext != null ? objectMapper.writeValueAsString(initialContext) : "";
@@ -298,23 +301,43 @@ public class GeminiLLMQueryService implements LLMQueryService {
 
                 if (secondResponse == null || secondResponse.path("candidates").isEmpty()) {
                     log.error("Gemini Tool Response is empty or invalid: {}", secondResponse);
-                    return "분석 결과 생성에 실패했습니다 (API 응답 오류).";
+                    return GeminiToolResponse.error("분석 결과 생성에 실패했습니다 (API 응답 오류).");
                 }
 
                 JsonNode parts = secondResponse.path("candidates").get(0).path("content").path("parts");
                 if (parts.isEmpty()) {
                     log.error("Gemini Tool Response parts are empty: {}", secondResponse);
-                    return "분석 결과 생성 중 응답 형식이 올바르지 않습니다.";
+                    return GeminiToolResponse.error("분석 결과 생성 중 응답 형식이 올바르지 않습니다.");
                 }
 
-                return parts.get(0).path("text").asText();
+                return new GeminiToolResponse(parts.get(0).path("text").asText(), toolMetadata(funcName, args, defaultId));
             }
 
-            return firstPart.path("text").asText();
+            return new GeminiToolResponse(firstPart.path("text").asText(), Map.of(
+                    "toolUsed", false,
+                    "defaultId", defaultId
+            ));
 
         } catch (Exception e) {
             log.error("Tool-Calling API failed", e);
-            return "분석 중 오류가 발생했습니다: " + e.getMessage();
+            return GeminiToolResponse.error("분석 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    private Map<String, Object> toolMetadata(String functionName,
+                                             com.fasterxml.jackson.databind.node.ObjectNode args,
+                                             Long defaultId) {
+        return Map.of(
+                "toolUsed", true,
+                "toolName", functionName,
+                "arguments", objectMapper.convertValue(args, Map.class),
+                "defaultId", defaultId
+        );
+    }
+
+    private record GeminiToolResponse(String answer, Map<String, Object> metadata) {
+        private static GeminiToolResponse error(String answer) {
+            return new GeminiToolResponse(answer, Map.of("toolUsed", false, "error", true));
         }
     }
 
