@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -85,7 +87,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = couponRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(
@@ -107,7 +109,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = couponRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(
@@ -130,7 +132,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = couponRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId1, productId2)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(30L), eq(TimeUnit.DAYS)))
@@ -150,7 +152,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = webhookRule(ruleId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull()))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull(), isNull()))
                 .thenReturn(Map.of(userId, List.of(productId)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(
@@ -178,7 +180,7 @@ class BehaviorTriggerSchedulerTest {
         MarketingRule rule = marketingRule(ruleId, RewardType.COUPON, targetProductId);
 
         when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
-        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), eq(targetProductId)))
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), eq(targetProductId), isNull()))
                 .thenReturn(Map.of(userId, List.of(targetProductId)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(
@@ -188,7 +190,51 @@ class BehaviorTriggerSchedulerTest {
 
         scheduler.runBehaviorCouponTrigger();
 
-        verify(behaviorEventService).getHighlyEngagedUsersForProduct(any(), any(), eq("PAGE_VIEW"), eq(3), eq(targetProductId));
+        verify(behaviorEventService).getHighlyEngagedUsersForProduct(any(), any(), eq("PAGE_VIEW"), eq(3), eq(targetProductId), isNull());
         verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), any());
+    }
+
+    @Test
+    @DisplayName("SCROLL + propertyConditions(depth:75) 룰 → depth 조건이 ES 쿼리에 전달된다")
+    void runBehaviorCouponTrigger_scrollRuleWithDepthCondition_passesPropertyConditionsToBehaviorQuery() throws Exception {
+        Long ruleId = 4L;
+        Long userId = 6L;
+        Long productId = 600L;
+        Map<String, Object> depthCondition = Map.of("depth", 75);
+
+        MarketingRule rule = MarketingRule.builder()
+                .ruleName("scroll-depth-rule")
+                .behaviorType("SCROLL")
+                .thresholdCount(1)
+                .lookbackDays(7)
+                .rewardType(RewardType.COUPON)
+                .rewardReferenceId(888L)
+                .isActive(true)
+                .propertyConditions(depthCondition)
+                .build();
+        try {
+            var f = MarketingRule.class.getDeclaredField("id");
+            f.setAccessible(true);
+            f.set(rule, ruleId);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(
+                any(), any(), eq("SCROLL"), eq(1), isNull(), eq(depthCondition)))
+                .thenReturn(Map.of(userId, List.of(productId)));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(30L), eq(TimeUnit.DAYS)))
+                .thenReturn(true);
+
+        scheduler.runBehaviorCouponTrigger();
+
+        verify(behaviorEventService).getHighlyEngagedUsersForProduct(
+                any(), any(), eq("SCROLL"), eq(1), isNull(), eq(depthCondition));
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), captor.capture());
+        CampaignActivityKafkaProducerDto message = (CampaignActivityKafkaProducerDto) captor.getValue();
+        assertThat(message.getCampaignActivityType()).isEqualTo(CampaignActivityType.COUPON);
     }
 }

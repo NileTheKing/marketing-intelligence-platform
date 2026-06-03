@@ -68,7 +68,8 @@ public class BehaviorTriggerScheduler {
 
         try {
             Map<Long, List<Long>> highlyEngagedUsers = behaviorEventService.getHighlyEngagedUsersForProduct(
-                    start, now, rule.getBehaviorType(), rule.getThresholdCount(), rule.getTargetProductId());
+                    start, now, rule.getBehaviorType(), rule.getThresholdCount(),
+                    rule.getTargetProductId(), rule.getPropertyConditions());
 
             for (Map.Entry<Long, List<Long>> entry : highlyEngagedUsers.entrySet()) {
                 Long userId = entry.getKey();

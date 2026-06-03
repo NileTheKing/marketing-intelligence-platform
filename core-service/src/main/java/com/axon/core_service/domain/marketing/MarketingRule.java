@@ -5,11 +5,14 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Entity
 @Table(name = "marketing_rules")
@@ -47,6 +50,10 @@ public class MarketingRule {
     @Column(nullable = false)
     private boolean isActive;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "json")
+    private Map<String, Object> propertyConditions; // e.g. {"depth": 75} for SCROLL, {"durationSec": 30} for STAY
+
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -57,7 +64,8 @@ public class MarketingRule {
     @Builder
     public MarketingRule(String ruleName, String behaviorType, Long targetProductId,
                          int thresholdCount, int lookbackDays, RewardType rewardType,
-                         Long rewardReferenceId, boolean isActive) {
+                         Long rewardReferenceId, boolean isActive,
+                         Map<String, Object> propertyConditions) {
         this.ruleName = ruleName;
         this.behaviorType = behaviorType;
         this.targetProductId = targetProductId;
@@ -66,5 +74,6 @@ public class MarketingRule {
         this.rewardType = rewardType;
         this.rewardReferenceId = rewardReferenceId;
         this.isActive = isActive;
+        this.propertyConditions = propertyConditions;
     }
 }

@@ -256,17 +256,28 @@ public class BehaviorEventService {
      * 특정 기간 동안 특정 트리거(예: PAGE_VIEW) 이벤트를 특정 횟수 이상 발생시킨 유저와 상품 목록을 조회합니다.
      */
     public java.util.Map<Long, java.util.List<Long>> getHighlyEngagedUsersForProduct(
-            LocalDateTime start, LocalDateTime end, String triggerType, int threshold, Long targetProductId)
+            LocalDateTime start, LocalDateTime end, String triggerType, int threshold,
+            Long targetProductId) throws IOException {
+        return getHighlyEngagedUsersForProduct(start, end, triggerType, threshold, targetProductId, null);
+    }
+
+    public java.util.Map<Long, java.util.List<Long>> getHighlyEngagedUsersForProduct(
+            LocalDateTime start, LocalDateTime end, String triggerType, int threshold,
+            Long targetProductId, java.util.Map<String, Object> propertyConditions)
             throws IOException {
+
+        java.util.List<Query> filters = new java.util.ArrayList<>();
+        filters.add(buildTriggerTypeFilter(triggerType));
+        filters.add(buildProductIdFilter(targetProductId));
+        filters.add(buildTimeRangeFilter(start, end));
+        if (propertyConditions != null && !propertyConditions.isEmpty()) {
+            propertyConditions.forEach((key, value) -> filters.add(buildPropertyMinFilter(key, value)));
+        }
 
         SearchResponse<Void> response = elasticsearchClient.search(s -> s
                 .index("axon.event.*")
                 .size(0)
-                .query(q -> q.bool(b -> b
-                        .filter(buildTriggerTypeFilter(triggerType))
-                        .filter(buildProductIdFilter(targetProductId))
-                        .filter(buildTimeRangeFilter(start, end))
-                ))
+                .query(q -> q.bool(b -> b.filter(filters)))
                 .aggregations("by_user", a -> a
                         .terms(t -> t.field("userId").size(10000))
                         .aggregations("by_product", sub -> sub
@@ -351,6 +362,13 @@ public class BehaviorEventService {
                 .term(t -> t
                         .field("properties.productId")
                         .value(targetProductId)));
+    }
+
+    private Query buildPropertyMinFilter(String propertyKey, Object minValue) {
+        return Query.of(q -> q
+                .range(r -> r
+                        .field("properties." + propertyKey)
+                        .gte(JsonData.of(minValue))));
     }
 
     private Query buildTimeRangeFilter(LocalDateTime start, LocalDateTime end) {
