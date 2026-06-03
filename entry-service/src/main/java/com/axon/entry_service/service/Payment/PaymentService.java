@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
-    private static final long SEND_TIMEOUT_SECONDS = 5;
+    private static final long BROKER_ACK_TIMEOUT_SECONDS = 5;
+    private static final long RETRY_BACKOFF_MILLIS = 1000;
 
     private final CampaignActivityProducerService campaignActivityProducerService;
 
@@ -32,7 +33,7 @@ public class PaymentService {
                         .build();
 
                 campaignActivityProducerService.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message)
-                        .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                        .get(BROKER_ACK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 log.info("Kafka 전송 성공 (attempt {}): userId={}, campaignActivityId={}",
                         attempt, payload.getUserId(), payload.getCampaignActivityId());
                 return true;
@@ -43,7 +44,7 @@ public class PaymentService {
 
                 if (attempt < maxRetries) {
                     try {
-                        Thread.sleep(1000L * attempt); // 지수 백오프: 1s, 2s, 3s
+                        Thread.sleep(RETRY_BACKOFF_MILLIS * attempt);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         return false;
