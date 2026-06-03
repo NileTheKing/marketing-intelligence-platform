@@ -28,7 +28,7 @@ import java.util.Collections;
  * security.
  */
 
-@Profile("!prod")
+@Profile({"dev", "test"})
 @RestController
 @RequestMapping("/api/v1/test")
 @RequiredArgsConstructor

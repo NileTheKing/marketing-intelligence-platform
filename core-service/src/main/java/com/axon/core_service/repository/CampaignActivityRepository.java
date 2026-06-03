@@ -4,7 +4,11 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface CampaignActivityRepository extends JpaRepository<CampaignActivity, Long> {
 
@@ -18,8 +22,16 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
      */
     List<CampaignActivity> findAllByCampaign_Id(Long campaignId);
 
-    List<CampaignActivity> findAllByStatus(
-            com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus status);
+    @EntityGraph(attributePaths = {"product", "coupon"})
+    List<CampaignActivity> findAllByStatus(CampaignActivityStatus status);
+
+    @EntityGraph(attributePaths = "campaign")
+    @Query("SELECT ca FROM CampaignActivity ca WHERE ca.id = :id")
+    Optional<CampaignActivity> findWithCampaignById(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"product", "coupon"})
+    @Query("SELECT ca FROM CampaignActivity ca WHERE ca.id = :id")
+    Optional<CampaignActivity> findWithProductAndCouponById(@Param("id") Long id);
 
     /**
      * Finds campaigns that already ended and still have the given status.

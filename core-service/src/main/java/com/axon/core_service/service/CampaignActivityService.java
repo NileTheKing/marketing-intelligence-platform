@@ -112,7 +112,7 @@ public class CampaignActivityService {
 
         // Update Filters
         if (request.getFilters() != null) {
-            campaignActivity.setFilters(request.getFilters());
+            campaignActivity.replaceFilters(request.getFilters());
         }
 
         // Update Product/Coupon Info

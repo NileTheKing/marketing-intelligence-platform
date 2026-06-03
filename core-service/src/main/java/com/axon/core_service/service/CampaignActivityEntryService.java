@@ -18,9 +18,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -31,6 +29,7 @@ public class CampaignActivityEntryService {
 
     private final CampaignActivityEntryRepository campaignActivityEntryRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final CampaignActivityEntryRetryService campaignActivityEntryRetryService;
 
     @DistributedLock(key = "'lock:entry:' + #campaignActivity.id + ':' + #dto.userId", waitTime = 3, leaseTime = 5)
     @Transactional
@@ -179,17 +178,12 @@ public class CampaignActivityEntryService {
         int count = 0;
         for (CampaignActivityEntry entry : entries) {
             try {
-                saveSingleEntryInNewTransaction(entry);
+                campaignActivityEntryRetryService.saveSingleEntryInNewTransaction(entry);
                 count++;
             } catch (Exception ex) {
                 log.debug("Skipping failed entry: userId={}", entry.getUserId());
             }
         }
         return count;
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void saveSingleEntryInNewTransaction(CampaignActivityEntry entry) {
-        campaignActivityEntryRepository.save(entry);
     }
 }

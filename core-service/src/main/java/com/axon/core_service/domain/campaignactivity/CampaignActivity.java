@@ -131,7 +131,7 @@ public class CampaignActivity extends BaseTimeEntity {
         this.endDate = endDate;
     }
 
-    public void setFilters(List<FilterDetail> filters) {
+    public void replaceFilters(List<FilterDetail> filters) {
         this.filters = filters;
     }
 

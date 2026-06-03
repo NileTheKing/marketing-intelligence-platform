@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class LogDeadLetterHandler implements DeadLetterHandler<PurchaseInfoDto> {
+class LogDeadLetterHandler implements DeadLetterHandler<PurchaseInfoDto> {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Override

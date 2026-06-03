@@ -16,7 +16,7 @@ public class DashboardViewController {
     @GetMapping("/admin/dashboard/{activityId}")
     public String dashboardView(@PathVariable Long activityId, Model model) {
         // Fetch activity to get parent campaign info
-        var activity = campaignActivityRepository.findById(activityId).orElse(null);
+        var activity = campaignActivityRepository.findWithCampaignById(activityId).orElse(null);
         
         model.addAttribute("campaignId", activityId); // Keeping as campaignId for existing JS compatibility (this is actually activityId)
         model.addAttribute("activityId", activityId); // Explicitly adding activityId
@@ -39,7 +39,7 @@ public class DashboardViewController {
     @GetMapping("/admin/dashboard/cohort/{activityId}")
     public String cohortDashboardView(@PathVariable Long activityId, Model model) {
         model.addAttribute("activityId", activityId);
-        var activity = campaignActivityRepository.findById(activityId).orElse(null);
+        var activity = campaignActivityRepository.findWithCampaignById(activityId).orElse(null);
         if (activity != null) {
             model.addAttribute("activityName", activity.getName());
             model.addAttribute("campaignId", activity.getCampaign().getId()); // Add campaignId for chatbot context

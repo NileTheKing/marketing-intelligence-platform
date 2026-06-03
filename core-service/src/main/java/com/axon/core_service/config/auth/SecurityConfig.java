@@ -62,7 +62,7 @@ public class SecurityConfig {
                                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/", "/mainshop", "/css/**", "/image/**", "/images/**", "/js/**", "/uploads/**",
-                                                                "/h2-console/**", "/favicon.ico", "/welcomepage",
+                                                                        "/h2-console/**", "/favicon.ico", "/welcomepage",
                                                                 "/welcomepage.html", "/test/**")
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/campaign/**", "/api/v1/dashboard/**",
@@ -78,7 +78,7 @@ public class SecurityConfig {
                                                 .authenticated()
                                                 .requestMatchers("/api/v1/**").permitAll()
                                                 .requestMatchers("/core/api/v1/**").authenticated() // Core API 인증 필수
-                                                .requestMatchers("/actuator/**").permitAll() // Prometheus metrics endpoint
+                                                .requestMatchers("/actuator/health").permitAll()
                                                 // .requestMatchers("/admin/**").hasRole(Role.ADMIN.name())
                                                 .anyRequest().authenticated())
                                 .exceptionHandling(exceptions -> exceptions

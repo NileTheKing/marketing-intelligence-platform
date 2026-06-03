@@ -2,6 +2,7 @@ package com.axon.core_service.repository;
 
 
 import com.axon.core_service.domain.dashboard.LTVBatch;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +14,7 @@ public interface LTVBatchRepository extends JpaRepository<LTVBatch, Long> {
     /**
      * 특정 캠페인 활동의 모든 월별 통계 조회 (그래프용)
      */
+    @EntityGraph(attributePaths = "campaignActivity")
     List<LTVBatch> findByCampaignActivityIdOrderByMonthOffsetAsc(Long campaignActivityId);
 
     /**
