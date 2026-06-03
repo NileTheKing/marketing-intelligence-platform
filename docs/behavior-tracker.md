@@ -1,5 +1,9 @@
 # Behavior Tracker JS Snippet
 
+> 상태: reference
+> 용도: JS 행동 추적 스니펫 사용 가이드
+> 주의: 현재 behavior 파이프라인 사실과 포트폴리오 근거는 코드와 T3 기준으로 확인. Fluentd 전환 관련 문구는 과거 확장 아이디어일 수 있음.
+
 Axon 웹 페이지에서 사용자 행동(페이지 뷰, 버튼 클릭 등)을 감지하고 `entry-service` → Kafka 로 전송하기 위한 경량 스니펫입니다.  
 `docs/snippets/behavior-tracker.js`를 정적 자산으로 배포한 뒤, 모든 페이지(또는 필요한 화면)에서 초기화 코드를 실행하면 됩니다.
 

@@ -204,8 +204,8 @@ flowchart LR
     Kafka["Kafka\n결제완료 이벤트"] --> TX["① CampaignActivityEntry 저장\n(참여기록 트랜잭션)"]
     TX -->|"BEFORE_COMMIT\n커밋 직전 이벤트"| Q["인메모리 큐\noffer only"]
     Q -->|"100ms 스케줄러\n독립 스레드"| Batch["② Purchase 저장\n+ UserSummary 업데이트"]
-    Batch -->|"단건 실패"| Retry["REQUIRES_NEW\n개별 재시도"] --> DLQ["DLQ"]
-    Batch --> Lock["Redisson 락\n+ Unique Key"]
+    Batch -->|"단건 실패"| Retry["RetryService\nREQUIRES_NEW\n개별 재시도"] --> DLQ["DLQ"]
+    Batch --> Guard["MySQL Unique Key\n+ Reconciliation"]
 ```
 
 ### 처리량: Consumer 수신 스레드 분리
@@ -216,32 +216,32 @@ flowchart LR
 **해결**
 - **BEFORE_COMMIT + 독립 스케줄러** — Entry 저장 트랜잭션 커밋 직전 시점에 Purchase 데이터를 `ConcurrentLinkedQueue`에 offer만 하고 즉시 반환, 실제 DB 쓰기는 100ms 주기 독립 스케줄러 스레드가 전담
 - `LinkedBlockingQueue` 제외 — 큐가 꽉 찰 때 Kafka Listener 스레드가 대기 → `max.poll.interval.ms` 초과로 Consumer Group 리밸런싱 트리거. Non-blocking CAS 큐(`ConcurrentLinkedQueue`)여야 수신 스레드가 즉시 반환 가능
-- Transactional Outbox Pattern 제외 — Outbox 테이블 + CDC 폴러 필요로 인프라 복잡도 증가 대비 Reconciliation으로 충분
-- BEFORE_COMMIT 트레이드오프: Entry 커밋 후 서버 재시작 시 버퍼 내 Purchase 유실 가능 → 새벽 Reconciliation 배치(NOT EXISTS JPQL)로 Entry·Purchase 불일치 전수 탐지·보완
+- Transactional Outbox Pattern 제외 — Outbox 테이블 + CDC 폴러 필요로 인프라 복잡도 증가 대비 현재 규모에서는 Unique Key와 Reconciliation 탐지로 운영 리스크를 통제 가능하다고 판단
+- BEFORE_COMMIT 트레이드오프: Entry 커밋 후 서버 재시작 시 버퍼 내 Purchase 유실 가능 → 새벽 Reconciliation 배치(NOT EXISTS JPQL)로 Entry·Purchase 불일치 전수 탐지·경보
 
 **결과**
-- 수신부·영속성 처리부 결합도 제거, Entry·Purchase 정합성 자동 감시
+- 수신부·영속성 처리부 결합도 제거, Entry·Purchase 정합성 감시 경로 확보
 
-### 정합성: 배치 오염 차단 + 3중 멱등성
+### 정합성: 배치 오염 차단 + at-least-once 멱등 방어
 
 **문제**
 - 20건 배치 처리 중 단 1건의 제약조건 위반 발생 시 나머지 19건의 정상 데이터까지 전체 트랜잭션 롤백으로 유실되는 배치 오염 문제
 - Kafka at-least-once 특성상 네트워크 오류·Consumer 재기동 시 동일 결제 이벤트를 두 번 이상 수신할 수 있어 중복 구매 기록 적재 위험
 
 **해결**
-- **Kafka 설정 레벨** — `acks=all` + `enable.idempotence=true` + `isolation-level=read_committed` + `min.insync.replicas=2`로 exactly-once 파이프라인 구성
+- **Kafka 설정 레벨** — `acks=all` + `enable.idempotence=true` + `isolation-level=read_committed`로 producer 전송 안정성과 트랜잭션 메시지 가시성 강화. 단, DB 반영까지 포함한 end-to-end exactly-once는 아님
 - **Dual KafkaTemplate 분리** — 비즈니스 커맨드(구매·재고)는 트랜잭션 프로듀서(`transactionalKafkaTemplate`, `acks=all`) / 행동 로그는 일반 `kafkaTemplate` — 중요도·성능 비용 기준 전략 분리
-- **REQUIRES_NEW + DLQ** — 배치 삽입 실패 시 20건을 단건으로 분해, `@Transactional(REQUIRES_NEW)`로 각각 독립 재시도 — 최종 실패 건은 DLQ로 격리
-- **멱등성 이중 방어** — Redisson 분산락으로 결제 ID별 처리 순서 보장 + MySQL Unique Key로 중복 저장 물리적 차단
+- **REQUIRES_NEW + DLQ** — 배치 삽입 실패 시 20건을 단건으로 분해하고, 별도 `CampaignActivityEntryRetryService`를 통해 Spring AOP 프록시가 적용되는 `@Transactional(REQUIRES_NEW)` 경계로 각각 독립 재시도 — 최종 실패 건은 DLQ로 격리
+- **멱등성 방어** — Kafka 재수신 가능성을 전제로 MySQL Unique Key(`campaign_activity_id`, `user_id`)로 중복 저장을 물리적으로 차단
 
 **결과**
-- Consumer 강제 재기동 극단 시나리오에서도 데이터 유실 0건 · 중복 적재 0건
+- 검증 시나리오 기준 Consumer 재기동 상황에서도 데이터 유실 0건 · 중복 적재 0건
 - Entry 200건 발행 시 Purchase 200건 DB 적재 정합성 달성
 
 ---
 
 > 아래 `6-A`, `7-A` 섹션은 Kafka 신뢰성을 장애 격리와 멱등성으로 나눠 설명한 보존 블록이다.
-> 현재 표준 재조립 단위는 위 `6` 섹션이다.
+> 현재 표준 재조립 단위는 위 `6` 섹션이며, 아래 블록은 재사용 전 코드와 T2 기준으로 재검증한다.
 
 ## 6-A. 비동기 적재 신뢰성: 정합성 한계 극복과 장애 격리(Fault Tolerance) 파이프라인
 
@@ -253,9 +253,9 @@ flowchart TD
     end
     
     subgraph Processor ["사후 정산 스케줄러 (비동기)"]
-        Buffer -->|"100ms Polling"| Batch["3. Micro-Batch Insert (50건)"]
+        Buffer -->|"100ms Polling"| Batch["3. Micro-Batch Insert (20건)"]
         Batch --"성공"--> Commit["정상 완료 (Throughput 극대화)"]
-        Batch --"단건 제약조건 위반 등"--> Fallback["4. 개별 단건 재시도 (REQUIRES_NEW 방화벽)"]
+        Batch --"단건 제약조건 위반 등"--> Fallback["4. 개별 단건 재시도\n(RetryService + REQUIRES_NEW)"]
         Fallback --"최종 실패"--> DLQ["5. DLQ 격리 (Poison Pill 차단)"]
     end
     
@@ -267,12 +267,12 @@ flowchart TD
 
 **문제**
 - **스레드 병목 및 강결합 현상:** 메인 수신 스레드가 메모리 버퍼 적재뿐만 아니라 DB 일괄 저장(`flushBatch`)까지 직접 수행함에 따라, DB 락(Lock) 등 지연 발생 시 앞단 Kafka 수신부까지 대기가 걸리는 결합 문제 확인.
-- **배치 오염 (Batch Contamination):** 트래픽 완화를 위해 50건 단위 배치(Micro-Batch) 구조를 도입했으나, 단 1건의 제약조건 오류 발생 시 전체 트랜잭션 배치가 롤백되어 타 유저의 정상 데이터까지 저장이 중단되는 리스크 존재.
+- **배치 오염 (Batch Contamination):** 트래픽 완화를 위해 20건 단위 배치(Micro-Batch) 구조를 도입했으나, 단 1건의 제약조건 오류 발생 시 전체 트랜잭션 배치가 롤백되어 타 유저의 정상 데이터까지 저장이 중단되는 리스크 존재.
 - **Ghost Data (고아 데이터) 이슈:** 선착순 응답 속도를 위해 `BEFORE_COMMIT` 시점에 이벤트를 조기 전송하는데, 간헐적인 DB 커밋 타임아웃 발생 시 '참여 기록(Entry)은 롤백되었으나 결제 기록(Purchase)만 남는' 데이터 정합성 불일치 가능성 내포.
 
 **과정 및 해결**
 - **스레드 분리(Decoupling):** 수신 스레드는 큐(`ConcurrentLinkedQueue`)에 데이터를 담는 역할만 수행하고 즉시 반환되도록 분리. 실제 DB 일괄 적재는 100ms 주기의 독립 스케줄러 스레드가 전담하도록 설계하여 수신부와 영속성 처리부의 결합도를 낮춤.
-- **`REQUIRES_NEW` 적용 및 DLQ 도입:** 배치 삽입 실패 시, 50건의 데이터를 개별 `REQUIRES_NEW` 트랜잭션으로 분할하여 재시도하는(Fallback) 로직 추가. 여기서도 실패하는 문제 데이터는 Dead Letter Queue (DLQ)로 전송하여 정상 데이터의 처리 흐름을 보장.
+- **`REQUIRES_NEW` 적용 및 DLQ 도입:** 배치 삽입 실패 시, 20건의 데이터를 개별 `REQUIRES_NEW` 트랜잭션으로 분할하여 재시도하는(Fallback) 로직 추가. `REQUIRES_NEW`는 같은 클래스 내부 호출이 아니라 별도 RetryService Bean을 통해 Spring AOP 프록시가 적용되도록 분리했다. 여기서도 실패하는 문제 데이터는 Dead Letter Queue (DLQ)로 전송하여 정상 데이터의 처리 흐름을 보장.
 - **사후 대사(Reconciliation) 스케줄러 구현:** 성능을 위해 타협했던 'Ghost Data' 발생 가능성을 보완하기 위해, 유휴 시간대(새벽 3시)에 작동하는 비동기 대사 스케줄러 추가. `NOT EXISTS` 쿼리로 고아 데이터를 찾아내고 로깅하여 관리자가 인지 및 후속 처리할 수 있도록 조치.
 
 **결과**
@@ -286,31 +286,28 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    Producer["발행처 (Entry-Service)"] -->|1. 메시지 발행| Kafka[("Kafka Broker\n(Exactly-once)")]
+    Producer["발행처 (Entry-Service)"] -->|1. 메시지 발행| Kafka[("Kafka Broker\n(acks=all + idempotence)")]
     Kafka -->|2. 메시지 수신| Consumer["처리처 (Core-Service)"]
     
     subgraph Idempotent_Process ["중복 처리 방지 (이중 방어)"]
-        Consumer -->|3. 락 획득| Redis[("Redis Lock\n(Redisson)")]
-        Redis -->|4. 성공 시| DB[(MySQL)]
+        Consumer -->|3. 저장 시도| DB[(MySQL)]
         DB -->|Unique Key 체크| Commit["최종 커밋"]
     end
     
-    Commit -->|5. ACK| Kafka
-    Redis -.->|이미 처리됨| Skip["중복 스킵"]
+    Commit -->|4. ACK| Kafka
     DB -->|중복 유입| Skip["중복 스킵"]
 ```
 
 **문제**
-- 카프카의 **Exactly-once(EOS)** 설정을 사용하더라도, DB 처리는 끝났으나 오프셋이 기록되기 전 서버가 종료될 경우 동일 메시지를 재수신하여 중복 처리될 위험 인지.
-- 특히 다중 서버 환경에서 동일 결제 건에 대해 여러 컨슈머가 동시에 접근할 때 발생하는 데이터 경합 및 중복 적재 가능성 확인.
+- Kafka producer idempotence와 read-committed 설정을 사용하더라도, DB 처리는 끝났으나 오프셋이 기록되기 전 서버가 종료될 경우 동일 메시지를 재수신하여 중복 처리될 위험 인지.
+- 특히 at-least-once 소비 환경에서 동일 결제 이벤트가 다시 들어올 때 중복 적재 가능성 확인.
 
 **해결**
 - **애플리케이션 레벨의 멱등성 보강**: 인프라(Kafka)의 설정에만 의존하지 않고, 로직단에서 중복 유입을 안전하게 무시하거나 처리하도록 설계.
-- **분산 락(Redisson) 도입**: 결제 ID별로 락을 잡아, 여러 서버가 동시에 같은 주문을 처리하지 못하도록 전역적인 실행 순서 보장.
-- **DB Unique Key 활용**: 설령 락을 통과하더라도 물리적인 제약 조건을 통해 중복 저장을 원천 차단하고 안전하게 무시(Ignore)하도록 처리.
+- **DB Unique Key 활용**: 물리적인 제약 조건을 통해 중복 저장을 원천 차단하고 안전하게 무시(Ignore)하도록 처리.
 
 **결과**
-- 3,000 VU 부하 테스트 중 컨슈머를 강제로 재기동하는 극단적 시나리오에서도 중복 적재 및 이중 결제 0건 유지 확인.
+- 검증 시나리오 기준 컨슈머를 강제로 재기동하는 상황에서도 중복 적재 0건 유지 확인.
 - 성능이 중요한 행동 로그와 정합성이 중요한 결제 명령의 파이프라인을 이원화하여, 신뢰성과 시스템 전체의 가용성 사이의 균형 확보.
 
 ---

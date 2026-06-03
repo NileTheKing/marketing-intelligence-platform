@@ -1,5 +1,9 @@
 # Purchase Event Flow & Instrumentation Guide
 
+> 상태: reference
+> 용도: 구매 이벤트와 instrumentation 아이디어 참고 문서
+> 주의: Fluentd, 향후 TODO, instrumentation 계획이 섞여 있으므로 현재 behavior 파이프라인 사실은 코드와 T3 기준으로 재확인.
+
 ## 1. 동작 개요
 
 ### 엔드 투 엔드 플로우

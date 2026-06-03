@@ -61,6 +61,36 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Documentation Lifecycle
+
+**Documents become stale faster than code. Mark their role explicitly.**
+
+When creating or editing project documents:
+- Check for existing documents on the same topic before creating a new one.
+- Prefer updating the existing active document over creating another overlapping plan.
+- If a new planning document is created under `docs/plan`, register it in `docs/plan/document-map.md`.
+- If an older document is replaced, do not delete it silently. Mark it as `legacy` or `superseded` at the top and point to the replacement.
+- Keep old documents when they are useful history, but do not let them look like current source of truth.
+
+Use these document states:
+- `active`: current source for implementation or strategy.
+- `reference`: background or design context; verify against code before reuse.
+- `legacy`: old backlog or outdated plan; do not use as current truth without rechecking.
+- `draft`: tentative and not yet accepted.
+- `superseded`: replaced by another document; include the replacement path.
+
+When using documents as evidence:
+- Prefer `active` documents.
+- Treat `reference`, `legacy`, and `draft` documents as untrusted until verified against code and current T-files.
+- If documents conflict, report the conflict instead of silently choosing one.
+- For portfolio/resume claims, verify facts against code, tests, or latest active notes before strengthening the wording.
+
+When finishing work that touched docs, report:
+- new documents created
+- documents updated
+- documents marked `legacy` or `superseded`
+- any document/code fact conflict that remains unresolved
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

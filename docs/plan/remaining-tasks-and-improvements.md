@@ -1,4 +1,12 @@
-# 📅 남은 2주 개발 및 개선 계획 (Backlog)
+# Legacy Backlog — 남은 2주 개발 및 개선 계획
+
+> 현재 상태: **레거시 백로그**
+>
+> 이 문서는 2025년 말 기준 계획과 당시 미완료/완료 항목이 섞여 있다. 현재 포트폴리오·구현 기준의 source of truth로 사용하지 않는다.
+>
+> 현재 진행 방향은 `docs/plan/2026-h2-portfolio-hardening-roadmap.md`, `docs/plan/spike-traffic-observability-plan.md`, `docs/plan/pinpoint-actuator-k6-prep.md`를 우선한다.
+>
+> 특히 Redisson, Webhook 미구현, Prometheus/Grafana 전제 등은 현재 코드/전략과 다를 수 있으므로 재사용 전 반드시 코드와 최신 T파일을 확인한다.
 
 > **작성일**: 2025-11-28
 > **목표**: 시스템 안정화, 대시보드 고도화, 그리고 포트폴리오 퀄리티 향상
