@@ -1,8 +1,9 @@
-name: Deploy to KT Cloud K2P
+name: Deploy to KT Cloud K2P (Legacy Manual)
 
 on:
-  push:
-    branches: [ "main" ] # main 브랜치에 푸시될 때마다 실행
+  # Legacy K2P deployment is kept for reference/manual reuse.
+  # Current Oracle VM deployment uses deploy-compose.yml.
+  workflow_dispatch:
 
 env:
   DOCKER_IMAGE_ENTRY: ${{ secrets.DOCKER_USERNAME }}/axon-entry
