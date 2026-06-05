@@ -8,6 +8,7 @@ import com.axon.core_service.domain.product.Product;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.repository.CampaignActivityRepository;
+import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
@@ -37,6 +38,9 @@ public class CampaignStockSyncTest extends AbstractIntegrationTest {
     private CampaignActivityRepository activityRepository;
 
     @Autowired
+    private CampaignActivityEntryRepository activityEntryRepository;
+
+    @Autowired
     private CampaignRepository campaignRepository;
 
     @Autowired
@@ -52,6 +56,7 @@ public class CampaignStockSyncTest extends AbstractIntegrationTest {
     void setUp() {
         transactionTemplate.execute(status -> {
             purchaseRepository.deleteAll();
+            activityEntryRepository.deleteAll();
             activityRepository.deleteAll();
             campaignRepository.deleteAll();
             productRepository.deleteAll();

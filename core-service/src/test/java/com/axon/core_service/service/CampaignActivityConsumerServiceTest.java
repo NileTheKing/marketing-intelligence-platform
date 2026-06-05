@@ -11,6 +11,7 @@ import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.EventRepository;
 import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.repository.UserRepository;
 import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.messaging.CampaignActivityType;
@@ -61,6 +62,9 @@ class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
     private UserSummaryRepository userSummaryRepository;
 
     @Autowired
+    private PurchaseRepository purchaseRepository;
+
+    @Autowired
     private EventRepository eventRepository;
 
     @Autowired
@@ -73,9 +77,12 @@ class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        productRepository.deleteAll();
+        purchaseRepository.deleteAll();
+        campaignActivityEntryRepository.deleteAll();
+        userSummaryRepository.deleteAll();
         campaignActivityRepository.deleteAll();
         campaignRepository.deleteAll();
+        productRepository.deleteAll();
         userRepository.deleteAll();
         eventRepository.deleteAll();
         kafkaTemplate.flush();

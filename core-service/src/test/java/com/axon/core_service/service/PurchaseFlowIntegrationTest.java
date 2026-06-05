@@ -11,6 +11,7 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.product.Product;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +44,9 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
     private CampaignActivityRepository campaignActivityRepository;
 
     @Autowired
+    private CampaignActivityEntryRepository campaignActivityEntryRepository;
+
+    @Autowired
     private ProductRepository productRepository;
 
     private Long activityId;
@@ -51,6 +55,7 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
     @BeforeEach
     void setUp() {
         purchaseRepository.deleteAll();
+        campaignActivityEntryRepository.deleteAll();
         campaignActivityRepository.deleteAll();
         campaignRepository.deleteAll();
         productRepository.deleteAll();
