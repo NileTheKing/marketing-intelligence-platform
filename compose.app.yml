@@ -110,6 +110,7 @@ services:
       AXON_ENTRY_SERVICE_URL: http://entry-service:8081
       JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED: ${MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED:-false}
 
   entry-service:
     build:
