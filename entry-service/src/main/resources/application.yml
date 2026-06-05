@@ -19,7 +19,7 @@ spring:
     include: oauth
 
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -42,7 +42,7 @@ payment:
 
 axon:
   core-service:
-    base-url: http://localhost:8080
+    base-url: ${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}
 
 # Actuator and Metrics
 management:
@@ -53,4 +53,3 @@ management:
   metrics:
     tags:
       application: ${spring.application.name:entry-service}
-

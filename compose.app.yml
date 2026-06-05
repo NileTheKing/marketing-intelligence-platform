@@ -100,7 +100,7 @@ services:
     networks:
       - axon-network
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/axon_db?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/axon_db?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true}
       DB_USERNAME: ${DB_USERNAME:-axon_user}
       DB_PASSWORD: ${DB_PASSWORD:-axon1234}
       REDIS_HOST: redis
