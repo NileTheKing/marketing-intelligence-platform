@@ -30,6 +30,22 @@ jobs:
             git pull origin main
             docker compose -f compose.app.yml config --quiet
             docker compose -f compose.app.yml up -d --build
-            curl -f http://127.0.0.1:8080/actuator/health
-            curl -f http://127.0.0.1:8081/actuator/health
-            curl -f -I http://127.0.0.1:28080/
+
+            wait_for_url() {
+              name="$1"
+              url="$2"
+              for i in $(seq 1 30); do
+                if curl -fsS "$url" > /dev/null; then
+                  echo "$name is ready"
+                  return 0
+                fi
+                echo "waiting for $name ($i/30)"
+                sleep 2
+              done
+              echo "$name did not become ready: $url"
+              return 1
+            }
+
+            wait_for_url "core-service" "http://127.0.0.1:8080/actuator/health"
+            wait_for_url "entry-service" "http://127.0.0.1:8081/actuator/health"
+            wait_for_url "axon-nginx" "http://127.0.0.1:28080/"
