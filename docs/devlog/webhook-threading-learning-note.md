@@ -2,7 +2,7 @@
 
 > Status: `reference`
 >
-> Purpose: webhook 고도화 논의 중 정리한 thread, virtual thread, scheduler, Kafka consumer 책임 분리 학습 노트.
+> Purpose: webhook 고도화 논의 중 정리한 thread, virtual thread, scheduler, Kafka consumer 책임 분리 학습/회고 노트.
 >
 > Use: 면접/회고/학습용 개념 정리. 현재 구현 사실은 코드와 `docs/plan/2026-h2-portfolio-hardening-roadmap.md`를 우선한다.
 

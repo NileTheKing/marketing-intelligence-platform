@@ -14,7 +14,6 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions: transaction self-invocation, DTO/OSIV boundary, lazy loading, webhook timeout, PaymentService retry policy |
 | `docs/plan/spike-traffic-observability-plan.md` | active | Oracle VM Docker Compose based spike bottleneck analysis |
 | `docs/plan/pinpoint-actuator-k6-prep.md` | active | pre-VM Pinpoint/Actuator/k6 readiness checklist |
-| `docs/plan/webhook-threading-learning-note.md` | reference | learning note for webhook threading, virtual threads, scheduler, and responsibility separation |
 
 ## Active / Current Implementation References
 
@@ -58,6 +57,7 @@ These are still useful, but code must win if there is a conflict.
 | `docs/code-improvements.md` | reference | code cleanup notes |
 | `docs/Filter_System_Architecture.md` | reference | filter system design context; verify current usage before reuse |
 | `docs/devlog/dev-log-2025-11-18-dashboard-architecture.md` | reference | dashboard architecture development log |
+| `docs/devlog/webhook-threading-learning-note.md` | reference | learning note for webhook threading, virtual threads, scheduler, and responsibility separation |
 | `docs/llm-insights-feature-plan.md` | reference | LLM feature planning context; T8 is newer for portfolio facts |
 | `docs/plan/js-sdk-enhancement-plan.md` | reference | JS SDK extension ideas; T3 is newer for implemented facts |
 | `docs/plan/redis-fast-validation-plan.md` | reference | Redis fast validation plan; verify against current entry-service implementation |
