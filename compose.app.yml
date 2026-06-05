@@ -88,8 +88,8 @@ services:
 
   core-service:
     build:
-      context: ./core-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: core-service/Dockerfile
     container_name: axon-core
     depends_on:
       - mysql
@@ -113,8 +113,8 @@ services:
 
   entry-service:
     build:
-      context: ./entry-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: entry-service/Dockerfile
     container_name: axon-entry
     depends_on:
       - redis
