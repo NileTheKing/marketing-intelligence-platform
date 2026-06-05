@@ -14,6 +14,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions: transaction self-invocation, DTO/OSIV boundary, lazy loading, webhook timeout, PaymentService retry policy |
 | `docs/plan/spike-traffic-observability-plan.md` | active | Oracle VM Docker Compose based spike bottleneck analysis |
 | `docs/plan/pinpoint-actuator-k6-prep.md` | active | pre-VM Pinpoint/Actuator/k6 readiness checklist |
+| `docs/plan/webhook-threading-learning-note.md` | reference | learning note for webhook threading, virtual threads, scheduler, and responsibility separation |
 
 ## Active / Current Implementation References
 
