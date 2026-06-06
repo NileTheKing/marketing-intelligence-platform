@@ -1,15 +1,14 @@
-package com.axon.entry_service.service.Payment;
+package com.axon.entry_service.service.payment;
 
-import com.axon.entry_service.dto.Payment.PaymentApprovalPayload;
+import com.axon.entry_service.dto.payment.PaymentApprovalPayload;
 import com.axon.entry_service.service.CampaignActivityProducerService;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
+import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service

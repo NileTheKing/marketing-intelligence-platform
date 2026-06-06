@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.axon.entry_service.domain.CampaignActivityMeta;
@@ -14,12 +12,12 @@ import com.axon.entry_service.domain.ReservationResult;
 import com.axon.entry_service.domain.ReservationStatus;
 import com.axon.entry_service.dto.EntryRequestDto;
 import com.axon.entry_service.service.CampaignActivityMetaService;
-import com.axon.entry_service.service.CampaignActivityProducerService;
 import com.axon.entry_service.service.CouponEntryService;
 import com.axon.entry_service.service.EntryReservationService;
 import com.axon.entry_service.service.FastValidationService;
 import com.axon.entry_service.service.CoreValidationService;
-import com.axon.entry_service.service.Payment.ReservationTokenService;
+import com.axon.entry_service.service.payment.ReservationTokenService;
+import com.axon.entry_service.service.entry.EntryApplicationService;
 import com.axon.messaging.dto.payment.ReservationTokenPayload;
 import com.axon.messaging.topic.KafkaTopics;
 import java.time.Instant;
@@ -35,9 +33,6 @@ import org.springframework.security.core.userdetails.User;
 
 @org.junit.jupiter.api.extension.ExtendWith(MockitoExtension.class)
 class EntryControllerTest {
-
-    @Mock
-    private CampaignActivityProducerService producer;
 
     @Mock
     private EntryReservationService reservationService;
@@ -58,6 +53,8 @@ class EntryControllerTest {
     private CouponEntryService couponEntryService;
 
     @InjectMocks
+    private EntryApplicationService entryApplicationService;
+
     private EntryController entryController;
 
     private EntryRequestDto requestDto;
@@ -66,6 +63,8 @@ class EntryControllerTest {
 
     @BeforeEach
     void setUp() {
+        entryController = new EntryController(entryApplicationService);
+
         requestDto = new EntryRequestDto();
         requestDto.setCampaignActivityId(1L);
         requestDto.setProductId(10L);
@@ -101,7 +100,6 @@ class EntryControllerTest {
         ResponseEntity<?> response = entryController.createEntry(requestDto, "FAKETOKEN",userDetails);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        verify(producer, never()).send(any(), any());
     }
 
     @Test
@@ -113,7 +111,6 @@ class EntryControllerTest {
         ResponseEntity<?> response = entryController.createEntry(requestDto, "FAKETOKEN",userDetails);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GONE);
-        verify(producer, never()).send(any(), any());
     }
 
     @Test
@@ -125,7 +122,6 @@ class EntryControllerTest {
         ResponseEntity<?> response = entryController.createEntry(requestDto, "FAKETOKEN", userDetails);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        verify(producer, never()).send(any(), any());
     }
 
     @Test
@@ -135,7 +131,6 @@ class EntryControllerTest {
         ResponseEntity<?> response = entryController.createEntry(requestDto, "FAKETOKEN", userDetails);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        verify(producer, never()).send(any(), any());
     }
 
     @Test
@@ -147,6 +142,5 @@ class EntryControllerTest {
         ResponseEntity<?> response = entryController.createEntry(requestDto, "FAKETOKEN", userDetails);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        verify(producer, never()).send(any(), any());
     }
 }

@@ -1,13 +1,13 @@
 package com.axon.entry_service.controller;
 
 import com.axon.entry_service.domain.ReservationResult;
-import com.axon.entry_service.dto.Payment.PaymentApprovalPayload;
-import com.axon.entry_service.dto.Payment.PaymentConfirmationRequest;
-import com.axon.entry_service.dto.Payment.PaymentConfirmationResponse;
-import com.axon.entry_service.dto.Payment.PaymentPrepareRequest;
-import com.axon.entry_service.dto.Payment.PaymentPrepareResponse;
-import com.axon.entry_service.service.Payment.PaymentService;
-import com.axon.entry_service.service.Payment.ReservationTokenService;
+import com.axon.entry_service.dto.payment.PaymentApprovalPayload;
+import com.axon.entry_service.dto.payment.PaymentConfirmationRequest;
+import com.axon.entry_service.dto.payment.PaymentConfirmationResponse;
+import com.axon.entry_service.dto.payment.PaymentPrepareRequest;
+import com.axon.entry_service.dto.payment.PaymentPrepareResponse;
+import com.axon.entry_service.service.payment.PaymentService;
+import com.axon.entry_service.service.payment.ReservationTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

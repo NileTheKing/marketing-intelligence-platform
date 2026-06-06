@@ -626,7 +626,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 4. Payment confirm success boundary clarification
 
 - Code evidence:
-  - `entry-service/src/main/java/com/axon/entry_service/service/Payment/PaymentService.java`
+  - `entry-service/src/main/java/com/axon/entry_service/service/payment/PaymentService.java`
 - Current behavior:
   - Payment confirm waits for Kafka broker ack with bounded timeout.
   - It does not wait for core-service consumption or DB persistence.

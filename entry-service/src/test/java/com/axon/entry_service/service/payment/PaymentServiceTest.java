@@ -1,10 +1,11 @@
-package com.axon.entry_service.service.Payment;
+package com.axon.entry_service.service.payment;
 
-import com.axon.entry_service.dto.Payment.PaymentApprovalPayload;
+import com.axon.entry_service.dto.payment.PaymentApprovalPayload;
 import com.axon.entry_service.service.CampaignActivityProducerService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,8 +13,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.support.SendResult;
-
-import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;

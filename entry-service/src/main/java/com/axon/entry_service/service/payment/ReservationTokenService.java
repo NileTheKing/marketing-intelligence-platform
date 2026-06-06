@@ -1,20 +1,18 @@
-package com.axon.entry_service.service.Payment;
+package com.axon.entry_service.service.payment;
 
-
-import com.axon.entry_service.dto.Payment.PaymentApprovalPayload;
+import com.axon.entry_service.dto.payment.PaymentApprovalPayload;
 import com.axon.messaging.dto.payment.ReservationTokenPayload;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.digest.HmacAlgorithms;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Optional;
-import org.apache.commons.codec.digest.HmacUtils;
 import java.util.concurrent.TimeUnit;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.HmacAlgorithms;
+import org.apache.commons.codec.digest.HmacUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -59,7 +57,6 @@ public class ReservationTokenService {
         return hmacUtilsThreadLocal.get().hmacHex(data);
     }
 
-
     // HMAC 토큰 생성
     public String generateDeterministicToken(Long userId, Long campaignActivityId) {
         // 1. Payload 생성
@@ -75,7 +72,6 @@ public class ReservationTokenService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(combined.getBytes(StandardCharsets.UTF_8));
     }
 
-
     // 1차 토큰 생성
     public String issueToken(ReservationTokenPayload payload) {
         String token = generateDeterministicToken(payload.getUserId(), payload.getCampaignActivityId());
@@ -84,7 +80,8 @@ public class ReservationTokenService {
         // 무조건 저장 및 TTL 갱신 (덮어쓰기)
         redisTemplate.opsForValue().set(redisKey, payload, TOKEN_TTL_MINUTES, TimeUnit.MINUTES);
 
-        log.info("1차 토큰 발급/갱신: userId={}, campaignActivityId={}, token={}...", payload.getUserId(), payload.getCampaignActivityId(), token.substring(0, Math.min(10, token.length())));
+        log.info("1차 토큰 발급/갱신: userId={}, campaignActivityId={}, token={}...",
+                payload.getUserId(), payload.getCampaignActivityId(), token.substring(0, Math.min(10, token.length())));
 
         return token;
     }
@@ -107,7 +104,7 @@ public class ReservationTokenService {
         Object payload = redisTemplate.opsForValue().get(redisKey);
         String substring = token.substring(0, Math.min(10, token.length()));
 
-        if(payload != null) {
+        if (payload != null) {
             log.debug("토큰 검증 성공 (Redis): token={}...", substring);
             return Optional.of((ReservationTokenPayload) payload);
         }

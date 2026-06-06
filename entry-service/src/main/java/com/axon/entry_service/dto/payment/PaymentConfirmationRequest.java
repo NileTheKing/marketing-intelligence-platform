@@ -1,6 +1,5 @@
-package com.axon.entry_service.dto.Payment;
+package com.axon.entry_service.dto.payment;
 
-import com.axon.messaging.CampaignActivityType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;

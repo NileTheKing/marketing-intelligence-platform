@@ -1,4 +1,4 @@
-package com.axon.entry_service.dto.Payment;
+package com.axon.entry_service.dto.payment;
 
 import lombok.Builder;
 import lombok.Data;
@@ -23,5 +23,4 @@ public class PaymentPrepareResponse {
                 .approvalToken(null)
                 .message(message).build();
     }
-
 }
