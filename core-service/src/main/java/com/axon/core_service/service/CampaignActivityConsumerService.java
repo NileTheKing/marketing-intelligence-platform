@@ -1,46 +1,24 @@
 package com.axon.core_service.service;
 
-import com.axon.core_service.service.batch.BatchStrategy;
-import com.axon.core_service.service.strategy.CampaignStrategy;
-import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CampaignActivityConsumerService {
 
-    private final Map<CampaignActivityType, CampaignStrategy> strategies;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final int kafkaBatchBuffer = 20;
-
-    // 메시지 버퍼 (Thread-safe Queue)
-    private final ConcurrentLinkedQueue<CampaignActivityKafkaProducerDto> buffer = new ConcurrentLinkedQueue<>();
-    /**
-     * Creates a CampaignActivityConsumerService and builds an unmodifiable map from each strategy's type to the strategy.
-     *
-     * @param strategyList list of CampaignStrategy instances used to populate the internal unmodifiable map keyed by each strategy's type
-     * @param kafkaTemplate KafkaTemplate used to send failed messages to the DLT
-     */
-    public CampaignActivityConsumerService(List<CampaignStrategy> strategyList, KafkaTemplate<String, Object> kafkaTemplate) {
-        this.strategies = strategyList.stream()
-                .collect(Collectors.toUnmodifiableMap(CampaignStrategy::getType, Function.identity()));
-        this.kafkaTemplate = kafkaTemplate;
-    }
+    private final CampaignActivityCommandBuffer buffer;
+    private final CampaignActivityCommandDispatcher dispatcher;
 
     /**
      * Handles an incoming campaign activity message from the CAMPAIGN_ACTIVITY_COMMAND topic and delegates processing to the matching CampaignStrategy.
@@ -80,7 +58,6 @@ public class CampaignActivityConsumerService {
             return;
         }
 
-        // 1. 버퍼에서 메시지 추출 (최대 BATCH_SIZE개)
         List<CampaignActivityKafkaProducerDto> messages = drainBuffer();
 
         if (messages.isEmpty()) {
@@ -88,42 +65,7 @@ public class CampaignActivityConsumerService {
         }
 
         log.info("Processing Micro batch: {} messages", messages.size());
-
-        // 2. 타입별로 그룹핑 (FCFS, Coupon)
-        Map<CampaignActivityType, List<CampaignActivityKafkaProducerDto>> groupedByType =
-                messages.stream()
-                        .collect(Collectors.groupingBy(
-                                CampaignActivityKafkaProducerDto::getCampaignActivityType
-                        ));
-
-        // 3. 각 타입별로 처리
-        groupedByType.forEach((type, batch) -> {
-            CampaignStrategy strategy = strategies.get(type);
-
-            if (strategy == null) {
-                log.warn("지원하지 않는 캠페인 활동 타입입니다: {}", type);
-                return;
-            }
-
-            try {
-                // 배치 처리 지원하면 배치로, 아니면 개별 처리
-                if (strategy instanceof BatchStrategy) {
-                    ((BatchStrategy) strategy).processBatch(batch);
-                    log.info("Batch processed: type={}, count={}", type, batch.size());
-                } else {
-                    // Fallback: 개별 처리
-                    batch.forEach(msg -> {
-                        strategy.process(msg);
-                        log.info("Consumed message: {}", msg);
-                    });
-                }
-            } catch (Exception e) {
-                log.error("Error processing batch for type {}: {}", type, e.getMessage(), e);
-                // [PORTFOLIO POINT] DLQ Implementation for Fault Tolerance
-                log.warn("🚨 [DLQ] Sending {} failed messages to DLT: {}", batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
-                batch.forEach(msg -> kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, msg));
-            }
-        });
+        dispatcher.dispatch(messages);
     }
     /**
      * 버퍼에서 메시지 추출
@@ -131,17 +73,7 @@ public class CampaignActivityConsumerService {
      * 역할: Thread-safe하게 버퍼 비우기 (최대 BATCH_SIZE개)
      */
     private List<CampaignActivityKafkaProducerDto> drainBuffer() {
-        List<CampaignActivityKafkaProducerDto> drained = new ArrayList<>(kafkaBatchBuffer);
-
-        for (int i = 0; i < kafkaBatchBuffer; i++) {
-            CampaignActivityKafkaProducerDto message = buffer.poll();
-            if (message == null) {
-                break;
-            }
-            drained.add(message);
-        }
-
-        return drained;
+        return buffer.drain(kafkaBatchBuffer);
     }
 
     /**

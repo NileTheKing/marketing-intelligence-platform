@@ -6,6 +6,7 @@ import com.axon.core_service.domain.dashboard.FunnelStep;
 import com.axon.core_service.domain.dto.dashboard.DashboardResponse;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,8 @@ class DashboardServiceTest {
                 realtimeMetricsService,
                 behaviorEventService,
                 campaignRepository,
-                campaignActivityRepository);
+                campaignActivityRepository,
+                new DashboardMetricCalculator());
 
         Long activityId = 1L;
         CampaignActivity activity = CampaignActivity.builder()
@@ -86,7 +88,8 @@ class DashboardServiceTest {
                 realtimeMetricsService,
                 behaviorEventService,
                 campaignRepository,
-                campaignActivityRepository);
+                campaignActivityRepository,
+                new DashboardMetricCalculator());
 
         Long activityId = 2L;
         CampaignActivity activity = CampaignActivity.builder()

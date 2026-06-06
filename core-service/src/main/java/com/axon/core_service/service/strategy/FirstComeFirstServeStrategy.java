@@ -3,6 +3,7 @@ package com.axon.core_service.service.strategy;
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntryStatus;
 import com.axon.core_service.repository.CampaignActivityRepository;
+import com.axon.core_service.service.ActivityUserKey;
 import com.axon.core_service.service.CampaignActivityEntryService;
 import com.axon.core_service.service.batch.BatchStrategy;
 import com.axon.messaging.CampaignActivityType;
@@ -56,9 +57,9 @@ public class FirstComeFirstServeStrategy implements BatchStrategy {
         log.info("Processing FCFS batch: {} messages", messages.size());
 
         // 1. 중복 제거: 같은 (activityId, userId)는 최신 메시지만 유지
-        Map<String, CampaignActivityKafkaProducerDto> deduped = messages.stream()
+        Map<ActivityUserKey, CampaignActivityKafkaProducerDto> deduped = messages.stream()
                 .collect(Collectors.toMap(
-                        msg -> msg.getCampaignActivityId() + ":" + msg.getUserId(),
+                        msg -> new ActivityUserKey(msg.getCampaignActivityId(), msg.getUserId()),
                         msg -> msg,
                         (existing, replacement) -> {
                             // 타임스탬프가 더 최신인 것 선택

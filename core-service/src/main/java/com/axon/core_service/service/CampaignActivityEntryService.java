@@ -105,9 +105,9 @@ public class CampaignActivityEntryService {
 
         List<CampaignActivityEntry> existingEntries = campaignActivityEntryRepository.findByActivityIdsAndUserIds(activityIds, userIds);
 
-        Map<String, CampaignActivityEntry> existingMap = existingEntries.stream()
+        Map<ActivityUserKey, CampaignActivityEntry> existingMap = existingEntries.stream()
                 .collect(Collectors.toMap(
-                        entry -> entry.getCampaignActivity().getId() + ":" + entry.getUserId(),
+                        entry -> new ActivityUserKey(entry.getCampaignActivity().getId(), entry.getUserId()),
                         entry -> entry
                 ));
 
@@ -120,7 +120,7 @@ public class CampaignActivityEntryService {
                 continue;
             }
 
-            String key = activity.getId() + ":" + dto.getUserId();
+            ActivityUserKey key = new ActivityUserKey(activity.getId(), dto.getUserId());
             Instant requestedAt = Optional.ofNullable(dto.getTimestamp())
                     .map(Instant::ofEpochMilli)
                     .orElseGet(Instant::now);

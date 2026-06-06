@@ -7,6 +7,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.dashboard.*;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ public class DashboardService {
     private final BehaviorEventService behaviorEventService;
     private final CampaignRepository campaignRepository;
     private final CampaignActivityRepository campaignActivityRepository;
+    private final DashboardMetricCalculator metricCalculator;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Level 3: Activity Detail Dashboard
@@ -84,17 +86,15 @@ public class DashboardService {
                 ? activity.getBudget()
                 : java.math.BigDecimal.ZERO;
 
-        java.math.BigDecimal gmv = price.multiply(java.math.BigDecimal.valueOf(purchases));
-        java.math.BigDecimal aov = purchases > 0
-                ? gmv.divide(java.math.BigDecimal.valueOf(purchases), 2, java.math.RoundingMode.HALF_UP)
-                : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal gmv = metricCalculator.gmv(price, purchases);
+        java.math.BigDecimal aov = metricCalculator.averageOrderValue(gmv, purchases);
 
-        double conversionRate = visits > 0 ? (purchases * 100.0) / visits : 0.0;
-        double engagementRate = visits > 0 ? (engages * 100.0) / visits : 0.0;
-        double qualificationRate = engages > 0 ? (qualifies * 100.0) / engages : 0.0;
-        double purchaseRate = qualifies > 0 ? (purchases * 100.0) / qualifies : 0.0;
+        double conversionRate = metricCalculator.percentage(purchases, visits);
+        double engagementRate = metricCalculator.percentage(engages, visits);
+        double qualificationRate = metricCalculator.percentage(qualifies, engages);
+        double purchaseRate = metricCalculator.percentage(purchases, qualifies);
 
-        double roas = calculateROAS(gmv, budget);
+        double roas = metricCalculator.roas(gmv, budget);
 
         return new OverviewData(
                 visits,
@@ -242,9 +242,9 @@ public class DashboardService {
             java.math.BigDecimal gmv = calculateGMV(activity.getId(), purchases);
 
             // Calculate Conversion Rate (Visit -> Purchase)
-            double conversionRate = visits > 0 ? (double) purchases / visits * 100 : 0.0;
+            double conversionRate = metricCalculator.percentage(purchases, visits);
             // Calculate Engagement Rate (Visit -> Engage)
-            double engagementRate = visits > 0 ? (double) engages / visits * 100 : 0.0;
+            double engagementRate = metricCalculator.percentage(engages, visits);
 
             totalVisits += visits;
             totalEngages += engages;
@@ -267,20 +267,18 @@ public class DashboardService {
                     conversionRate));
         }
 
-        double totalConversionRate = totalVisits > 0 ? (double) totalPurchases / totalVisits * 100 : 0.0;
-        double totalEngagementRate = totalVisits > 0 ? (double) totalEngages / totalVisits * 100 : 0.0;
-        double totalQualificationRate = totalEngages > 0 ? (double) totalQualifies / totalEngages * 100 : 0.0;
-        double totalPurchaseRate = totalQualifies > 0 ? (double) totalPurchases / totalQualifies * 100 : 0.0;
+        double totalConversionRate = metricCalculator.percentage(totalPurchases, totalVisits);
+        double totalEngagementRate = metricCalculator.percentage(totalEngages, totalVisits);
+        double totalQualificationRate = metricCalculator.percentage(totalQualifies, totalEngages);
+        double totalPurchaseRate = metricCalculator.percentage(totalPurchases, totalQualifies);
 
-        java.math.BigDecimal totalAOV = totalPurchases > 0
-                ? totalGMV.divide(java.math.BigDecimal.valueOf(totalPurchases), 2, java.math.RoundingMode.HALF_UP)
-                : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalAOV = metricCalculator.averageOrderValue(totalGMV, totalPurchases);
 
         java.math.BigDecimal totalBudget = campaign.getBudget() != null
                 ? campaign.getBudget()
                 : java.math.BigDecimal.ZERO;
 
-        double totalROAS = calculateROAS(totalGMV, totalBudget);
+        double totalROAS = metricCalculator.roas(totalGMV, totalBudget);
 
         OverviewData overview = new OverviewData(
                 totalVisits,
@@ -319,15 +317,11 @@ public class DashboardService {
                 .findById(activityId)
                 .orElseThrow(() -> new IllegalArgumentException("Activity not found: " + activityId));
 
-        java.math.BigDecimal price = activity.getPrice() != null ? activity.getPrice() : java.math.BigDecimal.ZERO;
-        return price.multiply(java.math.BigDecimal.valueOf(purchaseCount));
+        return metricCalculator.gmv(activity.getPrice(), purchaseCount);
     }
 
     public double calculateROAS(java.math.BigDecimal gmv, java.math.BigDecimal budget) {
-        if (budget == null || budget.compareTo(java.math.BigDecimal.ZERO) == 0) {
-            return 0.0;
-        }
-        return gmv.divide(budget, 2, java.math.RoundingMode.HALF_UP).doubleValue() * 100;
+        return metricCalculator.roas(gmv, budget);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -377,7 +371,7 @@ public class DashboardService {
 
             java.math.BigDecimal budget = campaign.getBudget() != null ? campaign.getBudget()
                     : java.math.BigDecimal.ZERO;
-            double roas = calculateROAS(campaignGmv, budget);
+            double roas = metricCalculator.roas(campaignGmv, budget);
 
             totalVisits += visits;
             totalPurchases += purchases;
