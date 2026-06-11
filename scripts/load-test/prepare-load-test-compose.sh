@@ -7,6 +7,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 NUM_USERS="${1:-1000}"
 ACTIVITY_ID="${2:-1}"
 CAMPAIGN_ID="${CAMPAIGN_ID:-1}"
@@ -24,6 +25,16 @@ export DB_NAME="${DB_NAME:-axon_db}"
 
 export REDIS_MODE="${REDIS_MODE:-docker}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
+
+MYSQL_WRAPPER_DIR="$PROJECT_ROOT/artifacts/load-test/bin"
+mkdir -p "$MYSQL_WRAPPER_DIR"
+cat > "$MYSQL_WRAPPER_DIR/mysql" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+docker exec -i -e MYSQL_PWD="${MYSQL_PWD:-}" axon-mysql mysql "$@"
+EOF
+chmod +x "$MYSQL_WRAPPER_DIR/mysql"
+export PATH="$MYSQL_WRAPPER_DIR:$PATH"
 
 echo "Ensuring Compose baseline seed data..."
 MYSQL_PWD="$DB_PASS" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$DB_NAME" <<SQL

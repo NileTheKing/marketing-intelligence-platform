@@ -19,7 +19,7 @@ redis_get() {
 }
 
 mysql_query() {
-  MYSQL_PWD="$DB_PASS" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$DB_NAME" -N -s -e "$1"
+  docker exec -i -e MYSQL_PWD="$DB_PASS" axon-mysql mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$DB_NAME" -N -s -e "$1"
 }
 
 echo ""
