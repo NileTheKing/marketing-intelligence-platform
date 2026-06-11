@@ -319,8 +319,8 @@ for ((batch=0; batch<TOTAL_BATCHES; batch++)); do
   # 배치 내 병렬 처리
   for ((userId=START_USER; userId<=END_USER; userId++)); do
     (
-      TOKEN=$(curl -s "${CORE_SERVICE_URL}/test/auth/token?userId=${userId}")
-      if [[ ${#TOKEN} -gt 20 ]]; then
+      TOKEN=$(curl -fsS --max-time 5 "${CORE_SERVICE_URL}/test/auth/token?userId=${userId}" 2>/dev/null | tr -d '[:space:]' || true)
+      if [[ "$TOKEN" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]]; then
           echo "  \"${userId}\": \"${TOKEN}\"," >> "$TEMP_TOKENS"
       fi
     ) &
@@ -359,8 +359,7 @@ USER_COUNT=$($MYSQL_CMD_BASE -s -N -e "SELECT COUNT(*) FROM users WHERE id BETWE
 echo "   MySQL 유저: $USER_COUNT / $NUM_USERS"
 
 # JWT 토큰 수 확인
-TOKEN_COUNT=$(grep -o '"' "$TOKEN_FILE" | wc -l | tr -d ' ')
-TOKEN_COUNT=$((TOKEN_COUNT / 2))  # key:value이므로 2로 나눔
+TOKEN_COUNT=$(grep -Ec '^[[:space:]]*"[0-9]+": "[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"' "$TOKEN_FILE" || true)
 echo "   JWT 토큰: $TOKEN_COUNT / $NUM_USERS"
 
 # Redis 캐시 확인
@@ -409,7 +408,8 @@ fi
 if [ "$USER_COUNT" -eq "$NUM_USERS" ] && [ "$TOKEN_COUNT" -ge "$NUM_USERS" ]; then
   echo "   ✅ 검증 성공!"
 else
-  echo "   ⚠️  경고: 일부 데이터 누락"
+  echo "   ❌ 검증 실패: 일부 데이터 또는 JWT 토큰 누락"
+  exit 1
 fi
 
 echo ""

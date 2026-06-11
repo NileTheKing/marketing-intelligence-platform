@@ -56,6 +56,21 @@ if (USE_PRODUCTION_API && USE_TOKEN_FILE) {
   }
 }
 
+function normalizeJwtToken(token) {
+  if (token === undefined || token === null) {
+    return null;
+  }
+  const normalized = String(token).replace(/\s+/g, '');
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(normalized) ? normalized : null;
+}
+
+function getPreparedJwtToken(data, userId) {
+  if (!data.tokens || !data.tokens[userId]) {
+    return null;
+  }
+  return normalizeJwtToken(data.tokens[userId]);
+}
+
 // 시나리오별 파라미터
 const MAX_VUS = parseInt(__ENV.MAX_VUS || '5000');
 const VUS_LIST = (__ENV.VUS_LIST || '100,500,1000,2000,5000,8000').split(',').map(Number);
@@ -344,8 +359,9 @@ function sendBehaviorEvent(data, userId, sessionId, triggerType) {
 
   // JWT 토큰이 있으면 헤더에 추가 (data.tokens 사용)
   const headers = { 'Content-Type': 'application/json' };
-  if (data.tokens && data.tokens[userId]) {
-      headers['Authorization'] = `Bearer ${data.tokens[userId]}`;
+  const token = getPreparedJwtToken(data, userId);
+  if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
   }
 
   const res = http.post(
@@ -383,15 +399,20 @@ function reserveWithJWT(data, userId) {
   let token;
 
   // Step 1: JWT 토큰 가져오기
-  if (data.tokens && data.tokens[userId]) {
-    token = data.tokens[userId];
+  const preparedToken = getPreparedJwtToken(data, userId);
+  if (preparedToken) {
+    token = preparedToken;
   } else {
     const tokenRes = http.get(
       `${data.coreServiceUrl}/test/auth/token?userId=${userId}`,
       { tags: { name: 'jwt_token_realtime' } }
     );
     if (tokenRes.status !== 200) return null;
-    token = tokenRes.body;
+    token = normalizeJwtToken(tokenRes.body);
+    if (!token) {
+      console.error(`Invalid JWT token for reservation (user ${userId})`);
+      return null;
+    }
   }
 
   // Step 2: FCFS 예약 (JWT 사용)
@@ -436,7 +457,7 @@ function reserveWithJWT(data, userId) {
 // 결제 승인 (DB 저장) - Prepare -> Confirm
 // =========================================================================
 function confirmPayment(data, userId, reservationToken) {
-  let token = data.tokens && data.tokens[userId] ? data.tokens[userId] : null;
+  let token = getPreparedJwtToken(data, userId);
 
   // 토큰 없으면 실시간 발급
   if (!token) {
@@ -448,7 +469,11 @@ function confirmPayment(data, userId, reservationToken) {
       console.error(`Failed to get JWT token for payment (user ${userId}): ${tokenRes.status}`);
       return;
     }
-    token = tokenRes.body;
+    token = normalizeJwtToken(tokenRes.body);
+    if (!token) {
+      console.error(`Invalid JWT token for payment (user ${userId})`);
+      return;
+    }
   }
 
   // 1. Payment Prepare (2차 토큰 발급)
