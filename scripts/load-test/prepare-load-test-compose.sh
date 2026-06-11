@@ -9,10 +9,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+load_env_file() {
+  local env_file="$1"
+  while IFS='=' read -r key value; do
+    if [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]]; then
+      continue
+    fi
+    key="$(echo "$key" | xargs)"
+    export "$key=$value"
+  done < "$env_file"
+}
+
 if [ -f "$PROJECT_ROOT/.env" ]; then
-  set -a
-  . "$PROJECT_ROOT/.env"
-  set +a
+  load_env_file "$PROJECT_ROOT/.env"
 fi
 
 NUM_USERS="${1:-1000}"
