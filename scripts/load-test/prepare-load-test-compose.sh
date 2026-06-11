@@ -7,6 +7,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NUM_USERS="${1:-1000}"
+ACTIVITY_ID="${2:-1}"
+CAMPAIGN_ID="${CAMPAIGN_ID:-1}"
+PRODUCT_ID="${PRODUCT_ID:-1}"
+FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
 
 export CORE_SERVICE_URL="${CORE_SERVICE_URL:-http://127.0.0.1:8080}"
 export ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}"
@@ -20,4 +25,48 @@ export DB_NAME="${DB_NAME:-axon_db}"
 export REDIS_MODE="${REDIS_MODE:-docker}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
 
-exec "$SCRIPT_DIR/prepare-load-test.sh" "$@"
+echo "Ensuring Compose baseline seed data..."
+MYSQL_PWD="$DB_PASS" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$DB_NAME" <<SQL
+INSERT INTO products (id, product_name, price, stock, category, brand, discount_rate, image_url)
+VALUES ($PRODUCT_ID, 'Axon Baseline Product', 1290000.00, GREATEST($FCFS_LIMIT_COUNT * 3, 1000), 'BASELINE', 'AXON', 0, NULL)
+ON DUPLICATE KEY UPDATE
+  product_name = VALUES(product_name),
+  price = VALUES(price),
+  stock = GREATEST(stock, VALUES(stock)),
+  category = VALUES(category),
+  brand = VALUES(brand),
+  discount_rate = VALUES(discount_rate);
+
+INSERT INTO campaigns (id, name, start_at, end_at, created_at, updated_at, budget)
+VALUES ($CAMPAIGN_ID, 'Axon Compose Baseline Campaign', NOW() - INTERVAL 1 DAY, NOW() + INTERVAL 7 DAY, NOW(), NOW(), 10000000)
+ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  start_at = VALUES(start_at),
+  end_at = VALUES(end_at),
+  updated_at = NOW(),
+  budget = VALUES(budget);
+
+INSERT INTO campaign_activities (
+  id, campaign_id, product_id, name, activity_type, status,
+  start_date, end_date, price, quantity, limit_count, budget, synced_count, created_at, updated_at
+)
+VALUES (
+  $ACTIVITY_ID, $CAMPAIGN_ID, $PRODUCT_ID, 'Axon Compose FCFS Baseline', 'FIRST_COME_FIRST_SERVE', 'ACTIVE',
+  NOW() - INTERVAL 1 DAY, NOW() + INTERVAL 7 DAY, 1290000.00, $FCFS_LIMIT_COUNT, $FCFS_LIMIT_COUNT, 5000000.00, 0, NOW(), NOW()
+)
+ON DUPLICATE KEY UPDATE
+  campaign_id = VALUES(campaign_id),
+  product_id = VALUES(product_id),
+  name = VALUES(name),
+  activity_type = VALUES(activity_type),
+  status = VALUES(status),
+  start_date = VALUES(start_date),
+  end_date = VALUES(end_date),
+  price = VALUES(price),
+  quantity = VALUES(quantity),
+  limit_count = VALUES(limit_count),
+  budget = VALUES(budget),
+  updated_at = NOW();
+SQL
+
+exec "$SCRIPT_DIR/prepare-load-test.sh" "$NUM_USERS" "$ACTIVITY_ID"
