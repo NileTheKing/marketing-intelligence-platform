@@ -5,13 +5,22 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  . "$PROJECT_ROOT/.env"
+  set +a
+fi
+
 ACTIVITY_ID="${1:-1}"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
-DB_USER="${DB_USER:-axon_user}"
-DB_PASS="${DB_PASS:-axon1234}"
-DB_NAME="${DB_NAME:-axon_db}"
+DB_USER="${DB_USER:-${DB_USERNAME:-axon_user}}"
+DB_PASS="${DB_PASS:-${DB_PASSWORD:-axon1234}}"
+DB_NAME="${DB_NAME:-${MYSQL_DATABASE:-axon_db}}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
 
 redis_get() {

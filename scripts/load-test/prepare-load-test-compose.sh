@@ -8,6 +8,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  . "$PROJECT_ROOT/.env"
+  set +a
+fi
+
 NUM_USERS="${1:-1000}"
 ACTIVITY_ID="${2:-1}"
 CAMPAIGN_ID="${CAMPAIGN_ID:-1}"
@@ -19,9 +26,9 @@ export ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}"
 
 export DB_HOST="${DB_HOST:-127.0.0.1}"
 export DB_PORT="${DB_PORT:-3306}"
-export DB_USER="${DB_USER:-axon_user}"
-export DB_PASS="${DB_PASS:-axon1234}"
-export DB_NAME="${DB_NAME:-axon_db}"
+export DB_USER="${DB_USER:-${DB_USERNAME:-axon_user}}"
+export DB_PASS="${DB_PASS:-${DB_PASSWORD:-axon1234}}"
+export DB_NAME="${DB_NAME:-${MYSQL_DATABASE:-axon_db}}"
 
 export REDIS_MODE="${REDIS_MODE:-docker}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
