@@ -35,6 +35,14 @@ If k6 runs on the same VM, its CPU and network usage are part of the measured en
 
 ## First Baseline Command
 
+Preferred path: use GitHub Actions manual execution.
+
+- Actions workflow: `Run VM Compose Baseline`
+- Execution mode: GitHub Actions connects to the VM through SSH, but k6 runs inside the VM.
+- Result retrieval: the workflow downloads `latest-compose-baseline.tar.gz` from the VM and uploads it as a GitHub Actions artifact named `vm-compose-baseline`.
+
+Manual VM fallback:
+
 ```bash
 cd ~/apps/axon
 ./scripts/load-test/run-baseline-compose.sh 1000 1
@@ -56,6 +64,13 @@ The run creates:
 - `artifacts/load-test/<run-id>-compose-baseline/domain-check.log`
 - `artifacts/load-test/<run-id>-compose-baseline/docker-stats.txt`
 - `artifacts/load-test/<run-id>-compose-baseline/docker-ps.txt`
+- `artifacts/load-test/<run-id>-compose-baseline/summary.md`
+- `artifacts/load-test/<run-id>-compose-baseline/run-meta.txt`
+- `artifacts/load-test/<run-id>-compose-baseline.tar.gz`
+- `artifacts/load-test/latest-compose-baseline.tar.gz`
+- `artifacts/load-test/latest-compose-baseline.txt`
+
+`summary.md` is an automatically generated first-pass summary. It is not a replacement for engineering analysis; use it to decide which raw files to inspect first.
 
 ## Success Criteria
 

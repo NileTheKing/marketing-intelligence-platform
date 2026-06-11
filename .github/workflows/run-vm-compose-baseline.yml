@@ -1,0 +1,111 @@
+name: Run VM Compose Baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      users:
+        description: "Number of test users"
+        required: true
+        default: "1000"
+      activity_id:
+        description: "Campaign activity id"
+        required: true
+        default: "1"
+      max_vus:
+        description: "Maximum k6 VUs"
+        required: true
+        default: "1000"
+      fcfs_limit_count:
+        description: "Expected FCFS success count"
+        required: true
+        default: "200"
+      product_id:
+        description: "Product id"
+        required: true
+        default: "1"
+      redeploy:
+        description: "Pull main and rebuild Compose before the run"
+        required: true
+        type: boolean
+        default: true
+
+concurrency:
+  group: vm-compose-baseline
+  cancel-in-progress: false
+
+jobs:
+  run-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Run baseline on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd "${{ secrets.VM_APP_DIR }}"
+
+            if [ "${{ inputs.redeploy }}" = "true" ]; then
+              git pull origin main
+              docker compose -f compose.app.yml config --quiet
+              docker compose -f compose.app.yml up -d --build
+            fi
+
+            wait_for_url() {
+              name="$1"
+              url="$2"
+              for i in $(seq 1 30); do
+                if curl -fsS "$url" > /dev/null; then
+                  echo "$name is ready"
+                  return 0
+                fi
+                echo "waiting for $name ($i/30)"
+                sleep 2
+              done
+              echo "$name did not become ready: $url"
+              return 1
+            }
+
+            wait_for_url "core-service" "http://127.0.0.1:8080/actuator/health"
+            wait_for_url "entry-service" "http://127.0.0.1:8081/actuator/health"
+            wait_for_url "axon-nginx" "http://127.0.0.1:28080/"
+
+            MAX_VUS="${{ inputs.max_vus }}" \
+            FCFS_LIMIT_COUNT="${{ inputs.fcfs_limit_count }}" \
+            PRODUCT_ID="${{ inputs.product_id }}" \
+              ./scripts/load-test/run-baseline-compose.sh "${{ inputs.users }}" "${{ inputs.activity_id }}"
+
+            cat artifacts/load-test/latest-compose-baseline.txt
+
+      - name: Download baseline artifact from VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_APP_DIR: ${{ secrets.VM_APP_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh baseline-artifacts
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/axon_vm_key
+          chmod 600 ~/.ssh/axon_vm_key
+
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/axon_vm_key \
+            "$VM_USER@$VM_HOST:$VM_APP_DIR/artifacts/load-test/latest-compose-baseline.tar.gz" \
+            baseline-artifacts/
+
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/axon_vm_key \
+            "$VM_USER@$VM_HOST:$VM_APP_DIR/artifacts/load-test/latest-compose-baseline.txt" \
+            baseline-artifacts/
+
+          tar -tzf baseline-artifacts/latest-compose-baseline.tar.gz
+
+      - name: Upload baseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-compose-baseline
+          path: baseline-artifacts/
+          retention-days: 14
