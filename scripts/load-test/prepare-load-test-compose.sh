@@ -39,6 +39,13 @@ export DB_USER="${DB_USER:-${DB_USERNAME:-axon_user}}"
 export DB_PASS="${DB_PASS:-${DB_PASSWORD:-axon1234}}"
 export DB_NAME="${DB_NAME:-${MYSQL_DATABASE:-axon_db}}"
 
+if docker ps --format '{{.Names}}' | grep -qx 'axon-mysql'; then
+  DB_USER="$(docker exec axon-mysql printenv MYSQL_USER 2>/dev/null || echo "$DB_USER")"
+  DB_PASS="$(docker exec axon-mysql printenv MYSQL_PASSWORD 2>/dev/null || echo "$DB_PASS")"
+  DB_NAME="$(docker exec axon-mysql printenv MYSQL_DATABASE 2>/dev/null || echo "$DB_NAME")"
+  export DB_USER DB_PASS DB_NAME
+fi
+
 export REDIS_MODE="${REDIS_MODE:-docker}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
 
