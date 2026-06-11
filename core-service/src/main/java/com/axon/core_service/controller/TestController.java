@@ -17,7 +17,7 @@ import java.util.Collections;
 @RestController
 @RequestMapping("/test")
 @RequiredArgsConstructor
-@Profile({"dev", "test"})
+@Profile({"dev", "test", "loadtest"})
 public class TestController {
 
     private final JwtTokenProvider jwtTokenProvider;
