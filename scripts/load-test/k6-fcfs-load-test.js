@@ -482,7 +482,7 @@ function confirmPayment(data, userId, reservationToken) {
   });
 
   const prepareRes = http.post(
-    `${data.entryServiceUrl}/entry/api/v1/payments/prepare`,
+    `${data.entryServiceUrl}/api/v1/payments/prepare`,
     preparePayload,
     {
       headers: {
@@ -523,7 +523,7 @@ function confirmPayment(data, userId, reservationToken) {
   });
 
   const confirmRes = http.post(
-    `${data.entryServiceUrl}/entry/api/v1/payments/confirm`,
+    `${data.entryServiceUrl}/api/v1/payments/confirm`,
     confirmPayload,
     {
       headers: {
