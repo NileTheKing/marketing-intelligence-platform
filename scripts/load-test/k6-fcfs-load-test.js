@@ -609,10 +609,10 @@ export function teardown(data) {
   console.log('='.repeat(70));
   console.log('🔍 Next Steps:');
   console.log('   1. Verify Redis counter:');
-  console.log(`      kubectl exec -it axon-redis-master-0 -- redis-cli GET "campaignActivity:${data.activityId}:counter"`);
+  console.log(`      docker exec axon-redis redis-cli GET "campaign:${data.activityId}:counter"`);
   console.log('   2. Verify MySQL entries:');
   console.log(`      SELECT COUNT(*) FROM campaign_activity_entries WHERE campaign_activity_id = ${data.activityId};`);
-  console.log('   3. Check Elasticsearch events:');
-  console.log(`      curl "http://localhost:9200/behavior-events/_count?q=properties.activityId:${data.activityId}"`);
+  console.log('   3. Verify MySQL purchases:');
+  console.log(`      SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${data.activityId};`);
   console.log('='.repeat(70));
 }

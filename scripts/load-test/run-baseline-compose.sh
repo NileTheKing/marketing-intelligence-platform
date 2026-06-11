@@ -62,6 +62,7 @@ EOF
 
 docker run --rm \
   --network host \
+  --user "$(id -u):$(id -g)" \
   -e SCENARIO=spike \
   -e ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}" \
   -e CORE_SERVICE_URL="${CORE_SERVICE_URL:-http://127.0.0.1:8080}" \
@@ -78,7 +79,7 @@ docker run --rm \
   /scripts/k6-fcfs-load-test.js \
   2>&1 | tee "$RESULT_DIR/k6-console.log"
 
-"$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
+FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" "$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
 
 docker stats --no-stream > "$RESULT_DIR/docker-stats.txt"
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" > "$RESULT_DIR/docker-ps.txt"
@@ -113,7 +114,7 @@ $(cat "$RESULT_DIR/docker-stats.txt")
 \`\`\`
 EOF
 
-if command -v python3 >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1 && [ -f "$RESULT_DIR/k6-summary.json" ]; then
   python3 - "$RESULT_DIR/k6-summary.json" >> "$RESULT_DIR/summary.md" <<'PY'
 import json
 import sys

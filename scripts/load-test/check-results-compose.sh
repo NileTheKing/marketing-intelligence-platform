@@ -39,6 +39,12 @@ fi
 
 REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
 
+if docker ps --format '{{.Names}}' | grep -qx 'axon-redis'; then
+  CONTAINER_REDIS_PASSWORD="$(docker inspect axon-redis --format '{{json .Config.Cmd}}' 2>/dev/null \
+    | sed -n 's/.*"--requirepass","\\([^"]*\\)".*/\1/p')"
+  REDIS_PASSWORD="${CONTAINER_REDIS_PASSWORD:-$REDIS_PASSWORD}"
+fi
+
 redis_get() {
   docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" "$@" 2>/dev/null | tr -d '\r\n'
 }
@@ -59,6 +65,18 @@ REDIS_COUNT="$(redis_get GET "campaign:${ACTIVITY_ID}:counter")"
 REDIS_SET_SIZE="$(redis_get SCARD "campaign:${ACTIVITY_ID}:users")"
 DB_ENTRY_COUNT="$(mysql_query "SELECT COUNT(*) FROM campaign_activity_entries WHERE campaign_activity_id = ${ACTIVITY_ID};")"
 DB_PURCHASE_COUNT="$(mysql_query "SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${ACTIVITY_ID};")"
+
+EXPECTED_PURCHASES="${FCFS_LIMIT_COUNT:-0}"
+if [[ "$EXPECTED_PURCHASES" =~ ^[0-9]+$ ]] && [ "$EXPECTED_PURCHASES" -gt 0 ]; then
+  for _ in $(seq 1 30); do
+    if [[ "$DB_PURCHASE_COUNT" =~ ^[0-9]+$ ]] && [ "$DB_PURCHASE_COUNT" -ge "$EXPECTED_PURCHASES" ]; then
+      break
+    fi
+    sleep 1
+    DB_ENTRY_COUNT="$(mysql_query "SELECT COUNT(*) FROM campaign_activity_entries WHERE campaign_activity_id = ${ACTIVITY_ID};")"
+    DB_PURCHASE_COUNT="$(mysql_query "SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${ACTIVITY_ID};")"
+  done
+fi
 
 REDIS_COUNT="${REDIS_COUNT:-0}"
 REDIS_SET_SIZE="${REDIS_SET_SIZE:-0}"
