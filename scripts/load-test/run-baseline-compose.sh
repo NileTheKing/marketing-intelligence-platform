@@ -38,6 +38,7 @@ LATEST_META="$PROJECT_ROOT/artifacts/load-test/latest-compose-baseline.txt"
 
 TOKEN_FILE="$SCRIPT_DIR/jwt-tokens.json"
 COMMIT_SHA="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+K6_IMAGE="${K6_IMAGE:-grafana/k6:0.53.0}"
 
 echo "Baseline run: $RUN_ID"
 echo "Users:        $NUM_USERS"
@@ -59,16 +60,22 @@ EOF
 
 "$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
 
-SCENARIO=spike \
-MAX_VUS="$MAX_VUS" \
-ACTIVITY_ID="$ACTIVITY_ID" \
-PRODUCT_ID="$PRODUCT_ID" \
-FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
-USE_PRODUCTION_API=true \
-TOKEN_FILE_PATH="$TOKEN_FILE" \
-k6 run \
-  --summary-export "$RESULT_DIR/k6-summary.json" \
-  "$SCRIPT_DIR/k6-fcfs-load-test.js" \
+docker run --rm \
+  --network host \
+  -e SCENARIO=spike \
+  -e ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}" \
+  -e CORE_SERVICE_URL="${CORE_SERVICE_URL:-http://127.0.0.1:8080}" \
+  -e MAX_VUS="$MAX_VUS" \
+  -e ACTIVITY_ID="$ACTIVITY_ID" \
+  -e PRODUCT_ID="$PRODUCT_ID" \
+  -e FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
+  -e USE_PRODUCTION_API=true \
+  -e TOKEN_FILE_PATH=/scripts/jwt-tokens.json \
+  -v "$SCRIPT_DIR:/scripts:ro" \
+  -v "$RESULT_DIR:/results" \
+  "$K6_IMAGE" run \
+  --summary-export /results/k6-summary.json \
+  /scripts/k6-fcfs-load-test.js \
   2>&1 | tee "$RESULT_DIR/k6-console.log"
 
 "$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
