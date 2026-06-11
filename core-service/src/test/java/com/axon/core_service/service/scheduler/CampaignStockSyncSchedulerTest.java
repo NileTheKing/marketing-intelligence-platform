@@ -38,7 +38,7 @@ class CampaignStockSyncSchedulerTest {
     private ValueOperations<String, String> valueOperations;
 
     @InjectMocks
-    private CampaignStockSyncScheduler scheduler;
+    private CampaignStockSyncService syncService;
 
     @Test
     @DisplayName("정산 시 Redis와 MySQL 수치가 다르면, MySQL(SSOT) 기준으로 재고가 정산되어야 한다")
@@ -61,7 +61,7 @@ class CampaignStockSyncSchedulerTest {
         when(purchaseRepository.countByCampaignActivityId(campaignId)).thenReturn(10L);
 
         // When
-        scheduler.syncCampaignStockManually(campaignId);
+        syncService.syncCampaignStockManually(campaignId);
 
         // Then
         // 1. 재고 차감은 무조건 DB 수치인 10으로 호출되어야 함
@@ -95,7 +95,7 @@ class CampaignStockSyncSchedulerTest {
         when(purchaseRepository.countByCampaignActivityId(campaignId)).thenReturn(5L);
 
         // When
-        scheduler.syncCampaignStockManually(campaignId);
+        syncService.syncCampaignStockManually(campaignId);
 
         // Then
         verify(productService, times(1)).syncCampaignStock(eq(productId), eq(5L));

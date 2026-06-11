@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CampaignStockSyncTest extends AbstractIntegrationTest {
 
     @Autowired
-    private CampaignStockSyncScheduler syncScheduler;
+    private CampaignStockSyncService syncService;
 
     @Autowired
     private ProductRepository productRepository;
@@ -97,7 +97,7 @@ public class CampaignStockSyncTest extends AbstractIntegrationTest {
         });
 
         // 2. 1차 동기화 실행
-        syncScheduler.syncOngoingCampaignStocks();
+        syncService.syncOngoingCampaignStocks();
 
         // 3. 1차 결과 확인: 재고 100 -> 90, syncedCount 0 -> 10
         Product productAfter1st = productRepository.findById(productId).orElseThrow();
@@ -107,7 +107,7 @@ public class CampaignStockSyncTest extends AbstractIntegrationTest {
         assertThat(activityAfter1st.getSyncedCount()).isEqualTo(10);
 
         // 4. 추가 주문 없이 2차 동기화 실행 (중복 차감 방지 테스트)
-        syncScheduler.syncOngoingCampaignStocks();
+        syncService.syncOngoingCampaignStocks();
 
         // 5. 2차 결과 확인: 재고는 여전히 90이어야 함 (0만큼 차감)
         Product productAfter2nd = productRepository.findById(productId).orElseThrow();
@@ -125,7 +125,7 @@ public class CampaignStockSyncTest extends AbstractIntegrationTest {
         });
 
         // 7. 3차 동기화 실행
-        syncScheduler.syncOngoingCampaignStocks();
+        syncService.syncOngoingCampaignStocks();
 
         // 8. 3차 결과 확인: 재고 90 -> 85 (새로 발생한 5건만 차감)
         Product productAfter3rd = productRepository.findById(productId).orElseThrow();
