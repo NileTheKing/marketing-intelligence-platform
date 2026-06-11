@@ -30,6 +30,7 @@ jobs:
             git pull origin main
             docker compose -f compose.app.yml config --quiet
             docker compose -f compose.app.yml up -d --build
+            docker compose -f compose.app.yml restart axon-nginx
 
             wait_for_url() {
               name="$1"
