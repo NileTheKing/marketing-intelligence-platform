@@ -51,9 +51,9 @@ jobs:
 
             if [ "${{ inputs.redeploy }}" = "true" ]; then
               git pull origin main
-              docker compose -f compose.app.yml config --quiet
-              docker compose -f compose.app.yml up -d --build
-              docker compose -f compose.app.yml restart axon-nginx
+              docker compose -f compose.app.yml -f compose.resources.yml config --quiet
+              docker compose -f compose.app.yml -f compose.resources.yml up -d --build
+              docker compose -f compose.app.yml -f compose.resources.yml restart axon-nginx
             fi
 
             wait_for_url() {
@@ -78,6 +78,7 @@ jobs:
             MAX_VUS="${{ inputs.max_vus }}" \
             FCFS_LIMIT_COUNT="${{ inputs.fcfs_limit_count }}" \
             PRODUCT_ID="${{ inputs.product_id }}" \
+            RESOURCE_PROFILE="compose.resources.yml" \
               ./scripts/load-test/run-baseline-compose.sh "${{ inputs.users }}" "${{ inputs.activity_id }}"
 
             cat artifacts/load-test/latest-compose-baseline.txt

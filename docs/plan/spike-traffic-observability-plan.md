@@ -46,9 +46,9 @@ These are valid future hardening topics, but they are not required for the curre
 
 ## Environment Strategy
 
-### Baseline Mode
+### Measurement Baseline Mode
 
-Baseline mode runs the full project shape with observability attached.
+Measurement baseline mode runs the core purchase path with fixed resource limits and without tracing agents.
 
 Components:
 
@@ -58,19 +58,24 @@ Components:
 - Kafka
 - Redis
 - MySQL
-- Elasticsearch
-- Kafka Connect
-- Pinpoint
 
 Purpose:
 
-- Confirm the integrated application flow runs under spike load.
-- Observe API latency, Redis calls, DB calls, Kafka consumer processing, and behavior-log pipeline impact.
-- Identify noisy or heavy components before optimizing.
+- Produce the official before/after performance number.
+- Keep measurement overhead stable and low.
+- Verify FCFS reservation, Kafka command flow, Core consumer processing, DB persistence, Redis counter/set, and domain consistency.
 
-### Analysis Mode
+Compose files:
 
-Analysis mode reduces variables while keeping the core purchase path.
+```bash
+docker compose -f compose.app.yml -f compose.resources.yml up -d --build
+```
+
+Do not attach Pinpoint to the official baseline/final comparison run.
+
+### Diagnostic Mode
+
+Diagnostic mode attaches request tracing after a clean baseline exists.
 
 Components:
 
@@ -93,7 +98,37 @@ Optional exclusions:
 Purpose:
 
 - Focus on FCFS entry, Redis Lua reservation, Kafka command flow, Core consumer processing, CampaignActivityEntry persistence, Purchase buffering, batch flush, DLQ, and reconciliation-related risks.
-- Reduce noise when reading Pinpoint traces.
+- Identify which API or internal method is slow.
+- Separate controller/service/repository time, DB connection wait, SQL execution, Redis calls, Kafka publish/consume, and scheduled flush delay.
+- Guide one concrete code or configuration change.
+
+Pinpoint-attached latency may be used as diagnostic evidence, but it is not the headline before/after performance number because the agent adds tracing overhead.
+
+### Final Measurement Mode
+
+Final measurement mode repeats the measurement baseline after the fix.
+
+Rules:
+
+- Use the same Oracle VM.
+- Use the same Compose files: `compose.app.yml + compose.resources.yml`.
+- Use the same k6 scenario, users, `MAX_VUS`, `FCFS_LIMIT_COUNT`, and seed assumptions.
+- Keep Pinpoint detached.
+- Compare only against the matching measurement baseline.
+
+### Full Pipeline / k3s Mode
+
+Full pipeline or k3s mode is a separate experiment.
+
+Use it for:
+
+- Elasticsearch and Kafka Connect behavior-log flow
+- dashboard freshness and analytics-path cost
+- Kubernetes/k3s rolling update behavior
+- controlled scaling automation
+- Kafka/Redis/container failure scenarios
+
+Do not compare Docker Compose measurement numbers directly with k3s or full-pipeline numbers.
 
 ## Service Topology
 
@@ -289,14 +324,15 @@ Key checks:
 
 Each test should follow the same loop:
 
-1. Start from a known compose profile.
+1. Start from a known compose profile and resource profile.
 2. Reset or seed the same dataset.
 3. Run the same k6 scenario.
-4. Capture Pinpoint traces and k6 summary.
-5. Identify one bottleneck only.
-6. Apply one change.
-7. Run the same scenario again.
-8. Compare only results from the same Oracle VM environment.
+4. Capture k6 summary, domain check, and container stats.
+5. Attach Pinpoint in a separate diagnostic run if the baseline exposes a bottleneck.
+6. Identify one bottleneck only.
+7. Apply one change.
+8. Run the same measurement scenario again without Pinpoint.
+9. Compare only results from the same Oracle VM environment and same resource profile.
 
 Do not compare Oracle results directly against the previous K2P results. K2P and Oracle differ in CPU model, memory, disk I/O, network path, Kubernetes overhead, and deployed component shape.
 
@@ -355,4 +391,3 @@ These are separate experiments after the baseline backend bottleneck analysis:
 - Nginx upstream health check and container failure redistribution
 - Cache stampede automated refresh job
 - Kubernetes/k3s deployment reproduction after Docker Compose analysis stabilizes
-

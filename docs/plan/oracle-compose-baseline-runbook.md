@@ -30,8 +30,27 @@ Keep these existing scripts as historical/k8s reproduction references:
 - MySQL is exposed on `127.0.0.1:3306`.
 - Redis container name is `axon-redis`.
 - k6 is installed on the machine running the baseline.
+- Official before/after baseline runs use `compose.app.yml` plus `compose.resources.yml`.
 
 If k6 runs on the same VM, its CPU and network usage are part of the measured environment. For cleaner server-capacity numbers, run k6 from a separate client machine and keep the same target URL.
+
+## Resource Profile
+
+Use the same resource profile for baseline and final measurement.
+
+Default `compose.resources.yml` limits:
+
+| Service | CPU | Memory | JVM heap |
+|---|---:|---:|---|
+| core-service | 1.5 | 3GiB | `-Xms512m -Xmx2g` |
+| entry-service | 1.0 | 2GiB | `-Xms256m -Xmx1536m` |
+| mysql | 1.0 | 4GiB | n/a |
+| kafka broker | 1.0 | 4GiB | image default |
+| kafka controller | 0.5 | 1GiB | image default |
+| redis | 0.5 | 1GiB | n/a |
+| axon-nginx | 0.25 | 256MiB | n/a |
+
+This profile leaves host headroom for OS cache, Docker overhead, SSH/GitHub Actions, and k6 when k6 runs on the same VM. Do not compare runs that use different resource profiles as a single before/after result.
 
 ## First Baseline Command
 
@@ -45,6 +64,7 @@ Manual VM fallback:
 
 ```bash
 cd ~/apps/axon
+docker compose -f compose.app.yml -f compose.resources.yml up -d --build
 ./scripts/load-test/run-baseline-compose.sh 1000 1
 ```
 
@@ -52,6 +72,7 @@ Optional overrides:
 
 ```bash
 MAX_VUS=3000 FCFS_LIMIT_COUNT=200 PRODUCT_ID=1 \
+RESOURCE_PROFILE=compose.resources.yml \
   ./scripts/load-test/run-baseline-compose.sh 3000 1
 ```
 
@@ -83,3 +104,12 @@ The run creates:
 ## Next Step After Baseline
 
 After one clean baseline, attach Pinpoint for diagnosis mode. Do not compare Pinpoint-attached latency directly against the baseline because the agent adds tracing overhead.
+
+Measurement flow:
+
+1. Run baseline with `compose.app.yml + compose.resources.yml`, without Pinpoint.
+2. Attach Pinpoint only for diagnosis and trace inspection.
+3. Apply one bottleneck fix.
+4. Run final measurement again with `compose.app.yml + compose.resources.yml`, without Pinpoint.
+
+Pinpoint evidence can explain where time was spent. The headline performance number should come from the Pinpoint-off baseline/final pair.

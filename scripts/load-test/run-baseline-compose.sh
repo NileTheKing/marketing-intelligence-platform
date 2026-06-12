@@ -28,6 +28,7 @@ ACTIVITY_ID="${2:-1}"
 MAX_VUS="${MAX_VUS:-$NUM_USERS}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
 PRODUCT_ID="${PRODUCT_ID:-1}"
+RESOURCE_PROFILE="${RESOURCE_PROFILE:-unlimited-compose-app}"
 
 RUN_ID="$(date '+%Y%m%d-%H%M%S')"
 RESULT_DIR="${RESULT_DIR:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID-compose-baseline}"
@@ -54,6 +55,7 @@ activity_id=$ACTIVITY_ID
 max_vus=$MAX_VUS
 fcfs_limit_count=$FCFS_LIMIT_COUNT
 product_id=$PRODUCT_ID
+resource_profile=$RESOURCE_PROFILE
 started_at=$(date -Iseconds)
 host=$(hostname)
 EOF
