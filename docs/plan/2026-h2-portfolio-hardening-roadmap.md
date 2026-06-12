@@ -370,6 +370,18 @@ Multi-pod note:
 
 Webhook delivery is external HTTP I/O. If it runs inside the campaign command consumer flush path, a slow external endpoint can delay local queue flushing for unrelated campaign commands.
 
+Current code boundary:
+
+```text
+Kafka listener
+-> in-memory command buffer
+-> scheduled synchronized flush
+-> strategy dispatch
+-> FCFS / COUPON / WEBHOOK strategy
+```
+
+This means Kafka message reception is already separated from strategy execution, but the strategy execution path is still shared. A slow `WEBHOOK` strategy can keep the flush task open and delay the next drain/dispatch cycle for other command types.
+
 ### Backend Idea
 
 Do not call external webhook endpoints directly from the campaign command flush path.
@@ -394,6 +406,62 @@ WebhookDeliveryWorker
 - Kafka listener and flush workers should remain lightweight and focused on receiving/flushing internal commands.
 - Webhook delivery may use a dedicated scheduler or executor later.
 - Virtual threads are a candidate for webhook HTTP delivery, but only with explicit concurrency/rate limits.
+
+Near-term implementation option:
+
+- Split the single command buffer into type-aware buffers or type-aware flush lanes.
+- Keep internal DB-oriented strategies conservative until their idempotency and duplicate handling are verified.
+- Move webhook HTTP delivery to a dedicated bounded executor first if the goal is to reduce flush-path blocking without introducing a durable outbox yet.
+- Treat virtual threads as an implementation option for the webhook delivery executor, not as a substitute for separating the webhook responsibility from command flushing.
+- If delivery state, operator retry, or process-crash recovery becomes part of the claim, promote the design to an outbox + delivery worker.
+
+### Baseline Before Refactor
+
+Do not refactor this path only because it looks cleaner. First create a load scenario that makes the coupling visible.
+
+Suggested scenario:
+
+```text
+Input:
+- mixed CAMPAIGN_ACTIVITY_COMMAND messages
+- COUPON commands for internal DB writes
+- WEBHOOK commands pointing to a mock endpoint with 2-3s delay
+- optional FCFS/PURCHASE follow-up commands if the scenario needs richer traffic
+
+Observe:
+- command buffer size over time
+- type별 처리 완료 시간
+- webhook delay / retry / DLT count
+- coupon issue completion time
+- consumer lag if available
+- core-service thread/CPU snapshot
+```
+
+Expected failure mode to confirm:
+
+```text
+WEBHOOK delay
+-> shared flush task remains open
+-> next drain/dispatch is delayed
+-> COUPON/FCFS command processing completion time increases
+```
+
+Only after this baseline is captured, compare with:
+
+```text
+After:
+- type-aware queue/flush lanes
+- webhook delivery executor
+- same command mix
+- same webhook mock delay
+- same VM/container resource boundary
+```
+
+Portfolio-safe claim after measurement:
+
+```text
+I found that Kafka reception was separated from business execution, but the post-Kafka in-memory flush path still shared different command types. Under delayed webhook delivery, internal coupon/FCFS commands could wait behind external HTTP work. I measured the coupling with a mixed-command load scenario, then separated type-specific flush lanes and webhook delivery execution to reduce delay propagation.
+```
 
 ### Portfolio Message
 
