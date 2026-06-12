@@ -132,6 +132,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-axon1234}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: broker_1:29092
       AXON_CORE_SERVICE_BASE_URL: http://core-service:8080
+      AXON_CORS_ALLOWED_ORIGINS: ${AXON_CORS_ALLOWED_ORIGINS:-https://axon.opicnic.xyz}
       JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
       PAYMENT_TOKEN_SECRET: ${PAYMENT_TOKEN_SECRET:-change-this-payment-secret}
 

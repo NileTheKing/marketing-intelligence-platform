@@ -43,6 +43,8 @@ payment:
 axon:
   core-service:
     base-url: ${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}
+  cors:
+    allowed-origins: ${AXON_CORS_ALLOWED_ORIGINS:${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}}
 
 # Actuator and Metrics
 management:

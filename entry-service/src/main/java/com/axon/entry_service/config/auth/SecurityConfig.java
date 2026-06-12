@@ -12,6 +12,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -21,8 +22,8 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
 
-    @Value("${axon.core-service.base-url:http://localhost:8080}")
-    private String coreServiceUrl;
+    @Value("${axon.cors.allowed-origins:${axon.core-service.base-url:http://localhost:8080}}")
+    private String allowedOrigins;
 
     /**
      * Create a JwtAuthenticationFilter configured with the injected
@@ -37,8 +38,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Creates a CorsConfigurationSource that permits cross-origin requests from
-     * http://localhost:8080
+     * Creates a CorsConfigurationSource that permits configured frontend origins
      * with specific methods, headers, and credentials enabled for all paths.
      *
      * @return a CorsConfigurationSource that allows origin http://localhost:8080;
@@ -48,13 +48,20 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(coreServiceUrl)); // core-service의 출처 허용
+        configuration.setAllowedOrigins(parseAllowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private List<String> parseAllowedOrigins() {
+        return Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
     }
 
     /**
