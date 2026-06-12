@@ -36,6 +36,7 @@ const USER_ID_END = parseInt(__ENV.USER_ID_END || '9000');
 const FCFS_LIMIT_COUNT = parseInt(__ENV.FCFS_LIMIT_COUNT || '200');
 const USE_PRODUCTION_API = __ENV.USE_PRODUCTION_API === 'true';
 const USE_TOKEN_FILE = __ENV.USE_TOKEN_FILE !== 'false'; // 기본값: true
+const FLOW = __ENV.FLOW || 'full'; // behavior | reservation | payment | full
 
 // 시나리오 선택
 const SCENARIO = __ENV.SCENARIO || 'spike';
@@ -137,6 +138,23 @@ const spike_scenario = {
   },
 };
 
+const behavior_spike_scenario = {
+  ...spike_scenario,
+  thresholds: {
+    'behavior_event_success_rate': ['rate==1'],
+    'http_req_failed': ['rate==0'],
+  },
+};
+
+const reservation_spike_scenario = {
+  ...spike_scenario,
+  thresholds: {
+    'fcfs_success_count': [`count==${FCFS_LIMIT_COUNT}`],
+    'fcfs_error_count': ['count==0'],
+    'reservation_duration': ['p(95)<5000'],
+  },
+};
+
 // Scenario 2: Constant Load (계단식) - 강도 테스트 ⭐
 const constant_scenarios = {};
 VUS_LIST.forEach((vus, index) => {
@@ -223,7 +241,13 @@ export const options = (() => {
 
   switch (SCENARIO) {
     case 'spike':
-      selectedScenario = spike_scenario;
+      if (FLOW === 'behavior') {
+        selectedScenario = behavior_spike_scenario;
+      } else if (FLOW === 'reservation') {
+        selectedScenario = reservation_spike_scenario;
+      } else {
+        selectedScenario = spike_scenario;
+      }
       scenarioName = `Thunder Herd (Spike) - MAX_VUS=${MAX_VUS}`;
       break;
 
@@ -269,6 +293,7 @@ export function setup() {
   console.log(`Activity ID: ${ACTIVITY_ID}`);
   console.log(`User ID Range: ${USER_ID_START} - ${USER_ID_END}`);
   console.log(`Production API: ${USE_PRODUCTION_API ? 'YES (JWT)' : 'NO (Test API)'}`);
+  console.log(`Flow: ${FLOW}`);
 
   if (USE_PRODUCTION_API) {
     const tokenCount = Object.keys(PRE_GENERATED_TOKENS).length;
@@ -298,6 +323,7 @@ export function setup() {
     userIdStart: USER_ID_START,
     userIdEnd: USER_ID_END,
     useProductionApi: USE_PRODUCTION_API,
+    flow: FLOW,
     tokens: PRE_GENERATED_TOKENS,
   };
 }
@@ -311,13 +337,39 @@ export default function (data) {
   const userId = data.userIdStart + (uniqueIndex % (data.userIdEnd - data.userIdStart + 1));
   const sessionId = `session-${userId}-${Date.now()}`;
 
+  if (data.flow === 'behavior') {
+    runBehaviorFlow(data, userId, sessionId);
+    return;
+  }
+
+  if (data.flow === 'reservation') {
+    runReservationFlow(data, userId, false);
+    return;
+  }
+
+  if (data.flow === 'payment') {
+    runReservationFlow(data, userId, true);
+    return;
+  }
+
+  if (data.flow !== 'full') {
+    console.warn(`Unknown FLOW '${data.flow}', using full flow`);
+  }
+
+  runBehaviorFlow(data, userId, sessionId);
+  runReservationFlow(data, userId, true);
+}
+
+function runBehaviorFlow(data, userId, sessionId) {
   // ===== Step 1: 페이지 방문 이벤트 =====
   sendBehaviorEvent(data, userId, sessionId, 'PAGE_VIEW');
   sleep(Math.random() * 0.2 + 0.1); // 100-300ms 랜덤 딜레이
 
   // ===== Step 2: 참여 버튼 클릭 이벤트 =====
   sendBehaviorEvent(data, userId, sessionId, 'CLICK');
+}
 
+function runReservationFlow(data, userId, includePayment) {
   // ===== Step 3: FCFS 예약 시도 =====
   const startTime = Date.now();
 
@@ -334,7 +386,7 @@ export default function (data) {
   reservationDuration.add(duration);
 
   // ===== Step 4: 결제 승인 (DB 저장) =====
-  if (reservationToken) {
+  if (includePayment && reservationToken) {
     confirmPayment(data, userId, reservationToken);
   }
 }

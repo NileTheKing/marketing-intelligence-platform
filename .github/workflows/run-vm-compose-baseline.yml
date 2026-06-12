@@ -23,6 +23,10 @@ on:
         description: "Product id"
         required: true
         default: "1"
+      flow:
+        description: "k6 flow: behavior, reservation, payment, or full"
+        required: true
+        default: "full"
       redeploy:
         description: "Pull main and rebuild Compose before the run"
         required: true
@@ -91,6 +95,7 @@ jobs:
             FCFS_LIMIT_COUNT="${{ inputs.fcfs_limit_count }}" \
             PRODUCT_ID="${{ inputs.product_id }}" \
             RESOURCE_PROFILE="$RESOURCE_PROFILE" \
+            FLOW="${{ inputs.flow }}" \
               ./scripts/load-test/run-baseline-compose.sh "${{ inputs.users }}" "${{ inputs.activity_id }}"
 
             cat artifacts/load-test/latest-compose-baseline.txt

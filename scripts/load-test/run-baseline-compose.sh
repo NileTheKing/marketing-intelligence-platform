@@ -29,6 +29,7 @@ MAX_VUS="${MAX_VUS:-$NUM_USERS}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
 PRODUCT_ID="${PRODUCT_ID:-1}"
 RESOURCE_PROFILE="${RESOURCE_PROFILE:-unlimited-compose-app}"
+FLOW="${FLOW:-full}"
 
 RUN_ID="$(date '+%Y%m%d-%H%M%S')"
 RESULT_DIR="${RESULT_DIR:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID-compose-baseline}"
@@ -56,6 +57,7 @@ max_vus=$MAX_VUS
 fcfs_limit_count=$FCFS_LIMIT_COUNT
 product_id=$PRODUCT_ID
 resource_profile=$RESOURCE_PROFILE
+flow=$FLOW
 started_at=$(date -Iseconds)
 host=$(hostname)
 EOF
@@ -72,6 +74,7 @@ docker run --rm \
   -e ACTIVITY_ID="$ACTIVITY_ID" \
   -e PRODUCT_ID="$PRODUCT_ID" \
   -e FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
+  -e FLOW="$FLOW" \
   -e USE_PRODUCTION_API=true \
   -e TOKEN_FILE_PATH=/scripts/jwt-tokens.json \
   -v "$SCRIPT_DIR:/scripts:ro" \

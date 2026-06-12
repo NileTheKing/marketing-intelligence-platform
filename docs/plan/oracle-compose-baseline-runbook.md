@@ -63,6 +63,9 @@ Preferred path: use GitHub Actions manual execution.
 - `use_resource_profile=false`: deploy with `compose.app.yml` only. Use this only for A/B checks against the older unlimited Compose shape.
 - `redeploy=true`: pull `main`, rebuild/restart Compose, then run k6.
 - `redeploy=false`: skip rebuild and run k6 against the currently running containers.
+- `flow=behavior|reservation|payment|full`: choose which k6 path to execute.
+
+Use `flow=full` only after the smaller flows are stable.
 
 Manual VM fallback:
 
@@ -71,6 +74,31 @@ cd ~/apps/axon
 docker compose -f compose.app.yml -f compose.resources.yml up -d --build
 ./scripts/load-test/run-baseline-compose.sh 1000 1
 ```
+
+Fast debug loop on the VM:
+
+```bash
+cd ~/apps/axon
+
+FLOW=behavior MAX_VUS=100 FCFS_LIMIT_COUNT=20 \
+  ./scripts/load-test/run-baseline-compose.sh 100 1
+
+FLOW=reservation MAX_VUS=100 FCFS_LIMIT_COUNT=20 \
+  ./scripts/load-test/run-baseline-compose.sh 100 1
+
+FLOW=payment MAX_VUS=100 FCFS_LIMIT_COUNT=20 \
+  ./scripts/load-test/run-baseline-compose.sh 100 1
+
+FLOW=full MAX_VUS=100 FCFS_LIMIT_COUNT=20 \
+  ./scripts/load-test/run-baseline-compose.sh 100 1
+```
+
+Flow boundary:
+
+- `behavior`: sends `PAGE_VIEW` and `CLICK` behavior events only.
+- `reservation`: executes FCFS reservation only and does not confirm payment.
+- `payment`: executes reservation and payment prepare/confirm, without behavior events.
+- `full`: executes behavior events, reservation, and payment.
 
 Optional overrides:
 
