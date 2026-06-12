@@ -39,12 +39,6 @@ fi
 
 REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
 
-if docker ps --format '{{.Names}}' | grep -qx 'axon-redis'; then
-  CONTAINER_REDIS_PASSWORD="$(docker inspect axon-redis --format '{{json .Config.Cmd}}' 2>/dev/null \
-    | sed -n 's/.*"--requirepass","\\([^"]*\\)".*/\1/p')"
-  REDIS_PASSWORD="${CONTAINER_REDIS_PASSWORD:-$REDIS_PASSWORD}"
-fi
-
 redis_get() {
   docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" "$@" 2>/dev/null | tr -d '\r\n'
 }

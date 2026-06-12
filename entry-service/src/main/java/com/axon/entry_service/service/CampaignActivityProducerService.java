@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 public class CampaignActivityProducerService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public CampaignActivityProducerService(@Qualifier("transactionalKafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate) {
+    public CampaignActivityProducerService(@Qualifier("kafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate) {
         this.kafkaTemplate = kafkaTemplate;
     }
 
