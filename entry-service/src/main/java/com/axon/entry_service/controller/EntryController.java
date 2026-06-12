@@ -52,7 +52,7 @@ public class EntryController {
     public ResponseEntity<?> createEntry(@Valid @RequestBody EntryRequestDto requestDto,
             @RequestHeader("Authorization") String token,
             @AuthenticationPrincipal UserDetails userDetails) {
-        log.info("요청 확인 {}", requestDto);
+        log.debug("요청 확인 {}", requestDto);
         long userId = Long.parseLong(userDetails.getUsername());
         return toResponse(entryApplicationService.createEntry(requestDto, token, userId));
     }

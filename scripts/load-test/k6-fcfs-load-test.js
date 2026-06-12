@@ -46,7 +46,7 @@ const TOKEN_FILE_PATH = __ENV.TOKEN_FILE_PATH || './jwt-tokens.json';
 let PRE_GENERATED_TOKENS = {};
 
 // 토큰 파일 로드 시도
-if (USE_PRODUCTION_API && USE_TOKEN_FILE) {
+if (USE_PRODUCTION_API && USE_TOKEN_FILE && FLOW !== 'behavior') {
   try {
     const tokenFileContent = open(TOKEN_FILE_PATH);
     PRE_GENERATED_TOKENS = JSON.parse(tokenFileContent);

@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends GenericFilterBean {
         if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
             Authentication authentication = jwtTokenProvider.getAuthentication(jwt);
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            logger.info("Security Context에 '" + authentication.getName() + "' 인증 정보를 저장했습니다, uri: " + requestURI);
+            logger.debug("Security Context에 '" + authentication.getName() + "' 인증 정보를 저장했습니다, uri: " + requestURI);
         } else {
             logger.debug("유효한 JWT 토큰이 없습니다, uri: " + requestURI);
         }
