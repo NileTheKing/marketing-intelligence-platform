@@ -59,6 +59,10 @@ Preferred path: use GitHub Actions manual execution.
 - Actions workflow: `Run VM Compose Baseline`
 - Execution mode: GitHub Actions connects to the VM through SSH, but k6 runs inside the VM.
 - Result retrieval: the workflow downloads `latest-compose-baseline.tar.gz` from the VM and uploads it as a GitHub Actions artifact named `vm-compose-baseline`.
+- `use_resource_profile=true`: deploy with `compose.app.yml + compose.resources.yml`.
+- `use_resource_profile=false`: deploy with `compose.app.yml` only. Use this only for A/B checks against the older unlimited Compose shape.
+- `redeploy=true`: pull `main`, rebuild/restart Compose, then run k6.
+- `redeploy=false`: skip rebuild and run k6 against the currently running containers.
 
 Manual VM fallback:
 

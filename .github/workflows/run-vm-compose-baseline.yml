@@ -28,6 +28,11 @@ on:
         required: true
         type: boolean
         default: true
+      use_resource_profile:
+        description: "Apply compose.resources.yml fixed resource limits"
+        required: true
+        type: boolean
+        default: true
 
 concurrency:
   group: vm-compose-baseline
@@ -49,18 +54,25 @@ jobs:
           script: |
             cd "${{ secrets.VM_APP_DIR }}"
 
+            COMPOSE_FILES="-f compose.app.yml"
+            RESOURCE_PROFILE="unlimited-compose-app"
+            if [ "${{ inputs.use_resource_profile }}" = "true" ]; then
+              COMPOSE_FILES="$COMPOSE_FILES -f compose.resources.yml"
+              RESOURCE_PROFILE="compose.resources.yml"
+            fi
+
             if [ "${{ inputs.redeploy }}" = "true" ]; then
               git pull origin main
-              docker compose -f compose.app.yml -f compose.resources.yml config --quiet
-              docker compose -f compose.app.yml -f compose.resources.yml up -d --build
-              docker compose -f compose.app.yml -f compose.resources.yml restart axon-nginx
+              docker compose $COMPOSE_FILES config --quiet
+              docker compose $COMPOSE_FILES up -d --build
+              docker compose $COMPOSE_FILES restart axon-nginx
             fi
 
             wait_for_url() {
               name="$1"
               url="$2"
               for i in $(seq 1 30); do
-                if curl -fsS "$url" > /dev/null; then
+                if curl --connect-timeout 2 --max-time 5 -fsS "$url" > /dev/null; then
                   echo "$name is ready"
                   return 0
                 fi
@@ -78,7 +90,7 @@ jobs:
             MAX_VUS="${{ inputs.max_vus }}" \
             FCFS_LIMIT_COUNT="${{ inputs.fcfs_limit_count }}" \
             PRODUCT_ID="${{ inputs.product_id }}" \
-            RESOURCE_PROFILE="compose.resources.yml" \
+            RESOURCE_PROFILE="$RESOURCE_PROFILE" \
               ./scripts/load-test/run-baseline-compose.sh "${{ inputs.users }}" "${{ inputs.activity_id }}"
 
             cat artifacts/load-test/latest-compose-baseline.txt
