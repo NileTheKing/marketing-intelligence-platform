@@ -24,6 +24,14 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
   load_env_file "$PROJECT_ROOT/.env"
 fi
 
+REDIS_PASSWORD_FROM_FILE=""
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  REDIS_PASSWORD_FROM_FILE="$(grep '^REDIS_PASSWORD=' "$PROJECT_ROOT/.env" | tail -n 1 | cut -d= -f2- | tr -d '\r')"
+fi
+if [ -n "$REDIS_PASSWORD_FROM_FILE" ]; then
+  export REDIS_PASSWORD="$REDIS_PASSWORD_FROM_FILE"
+fi
+
 NUM_USERS="${1:-1000}"
 ACTIVITY_ID="${2:-1}"
 CAMPAIGN_ID="${CAMPAIGN_ID:-1}"
@@ -48,6 +56,7 @@ fi
 
 export REDIS_MODE="${REDIS_MODE:-docker}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
+echo "Redis password length: ${#REDIS_PASSWORD}"
 
 MYSQL_WRAPPER_DIR="$PROJECT_ROOT/artifacts/load-test/bin"
 mkdir -p "$MYSQL_WRAPPER_DIR"
