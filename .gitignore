@@ -16,6 +16,8 @@ application-local.yml
 
 # test related files
 jwt-tokens.json
+scripts/load-test/jwt-tokens.json
+artifacts/
 
 # Build and IDE artifacts
 bin/
