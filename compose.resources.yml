@@ -1,32 +1,32 @@
 services:
   controller:
-    cpus: ${KAFKA_CONTROLLER_CPUS:-0.5}
+    cpus: ${KAFKA_CONTROLLER_CPUS:-0.25}
     mem_limit: ${KAFKA_CONTROLLER_MEM_LIMIT:-1g}
 
   broker:
-    cpus: ${KAFKA_BROKER_CPUS:-1.0}
+    cpus: ${KAFKA_BROKER_CPUS:-0.6}
     mem_limit: ${KAFKA_BROKER_MEM_LIMIT:-4g}
 
   mysql:
-    cpus: ${MYSQL_CPUS:-1.0}
+    cpus: ${MYSQL_CPUS:-0.75}
     mem_limit: ${MYSQL_MEM_LIMIT:-4g}
 
   redis:
-    cpus: ${REDIS_CPUS:-0.5}
+    cpus: ${REDIS_CPUS:-0.25}
     mem_limit: ${REDIS_MEM_LIMIT:-1g}
 
   core-service:
-    cpus: ${CORE_CPUS:-1.5}
+    cpus: ${CORE_CPUS:-1.2}
     mem_limit: ${CORE_MEM_LIMIT:-3g}
     environment:
       JAVA_TOOL_OPTIONS: ${CORE_JAVA_TOOL_OPTIONS:--Xms512m -Xmx2g}
 
   entry-service:
-    cpus: ${ENTRY_CPUS:-1.0}
+    cpus: ${ENTRY_CPUS:-0.6}
     mem_limit: ${ENTRY_MEM_LIMIT:-2g}
     environment:
       JAVA_TOOL_OPTIONS: ${ENTRY_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1536m}
 
   axon-nginx:
-    cpus: ${NGINX_CPUS:-0.25}
+    cpus: ${NGINX_CPUS:-0.1}
     mem_limit: ${NGINX_MEM_LIMIT:-256m}
