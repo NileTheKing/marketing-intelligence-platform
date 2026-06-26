@@ -109,6 +109,13 @@ echo "🧹 Step 1/5: Redis 초기화..."ㅇ
 if [ "$REDIS_MODE" == "docker" ]; then
     echo "   Docker 모드로 실행..."
 
+    REDIS_PING=$(docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" PING 2>&1 | tr -d '\r' || true)
+    if [ "$REDIS_PING" != "PONG" ]; then
+      echo "   ❌ Redis 인증/연결 실패. Redis 초기화 없이 부하테스트를 진행하면 이전 sold-out 상태가 남습니다."
+      echo "   Redis response: $REDIS_PING"
+      exit 1
+    fi
+
     # 캠페인 관련 키 삭제 (meta 포함!)
     docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" DEL \
       "campaign:${ACTIVITY_ID}:users" \
@@ -127,10 +134,27 @@ if [ "$REDIS_MODE" == "docker" ]; then
     if [ -n "$PAYMENT_KEYS" ]; then
       docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" DEL $PAYMENT_KEYS > /dev/null 2>&1 || true
     fi
+
+    REMAINING_CAMPAIGN_KEYS=$(docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" EXISTS \
+      "campaign:${ACTIVITY_ID}:users" \
+      "campaign:${ACTIVITY_ID}:counter" \
+      "campaign:${ACTIVITY_ID}:meta" \
+      2>/dev/null | tr -d '\r\n')
+    if [ "$REMAINING_CAMPAIGN_KEYS" != "0" ]; then
+      echo "   ❌ Redis 캠페인 키 초기화 실패: remaining=$REMAINING_CAMPAIGN_KEYS"
+      exit 1
+    fi
 else
     echo "   K8s 모드로 실행..."
     # Pod 이름 동적 조회
     REDIS_POD=$(kubectl get pods -l app.kubernetes.io/name=redis -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "axon-redis-master-0")
+
+    REDIS_PING=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" PING 2>&1 | tr -d '\r' || true)
+    if [ "$REDIS_PING" != "PONG" ]; then
+      echo "   ❌ Redis 인증/연결 실패. Redis 초기화 없이 부하테스트를 진행하면 이전 sold-out 상태가 남습니다."
+      echo "   Redis response: $REDIS_PING"
+      exit 1
+    fi
 
     # 캠페인 관련 키 삭제 (meta 포함!)
     kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" DEL \
@@ -149,6 +173,16 @@ else
     PAYMENT_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" --scan --pattern "PAYMENT_APPROVED_TOKEN:*" 2>/dev/null | tr '\n' ' ')
     if [ -n "$PAYMENT_KEYS" ]; then
       kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" DEL $PAYMENT_KEYS > /dev/null 2>&1 || true
+    fi
+
+    REMAINING_CAMPAIGN_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" EXISTS \
+      "campaign:${ACTIVITY_ID}:users" \
+      "campaign:${ACTIVITY_ID}:counter" \
+      "campaign:${ACTIVITY_ID}:meta" \
+      2>/dev/null | tr -d '\r\n')
+    if [ "$REMAINING_CAMPAIGN_KEYS" != "0" ]; then
+      echo "   ❌ Redis 캠페인 키 초기화 실패: remaining=$REMAINING_CAMPAIGN_KEYS"
+      exit 1
     fi
 fi
 
