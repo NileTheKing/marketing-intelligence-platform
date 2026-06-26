@@ -109,7 +109,7 @@ echo "🧹 Step 1/5: Redis 초기화..."ㅇ
 if [ "$REDIS_MODE" == "docker" ]; then
     echo "   Docker 모드로 실행..."
 
-    REDIS_PING=$(docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" PING 2>&1 | tr -d '\r' || true)
+    REDIS_PING=$(docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" PING 2>/dev/null | tr -d '\r' || true)
     if [ "$REDIS_PING" != "PONG" ]; then
       echo "   ❌ Redis 인증/연결 실패. Redis 초기화 없이 부하테스트를 진행하면 이전 sold-out 상태가 남습니다."
       echo "   Redis response: $REDIS_PING"
@@ -117,7 +117,7 @@ if [ "$REDIS_MODE" == "docker" ]; then
     fi
 
     # 캠페인 관련 키 삭제 (meta 포함!)
-    docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" DEL \
+    docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" DEL \
       "campaign:${ACTIVITY_ID}:users" \
       "campaign:${ACTIVITY_ID}:counter" \
       "campaign:${ACTIVITY_ID}:meta" \
@@ -125,17 +125,17 @@ if [ "$REDIS_MODE" == "docker" ]; then
 
     # 토큰 키 삭제 (SCAN + 일괄 DEL - 최적화)
     echo "   토큰 키 정리 중..."
-    TOKEN_KEYS=$(docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" --scan --pattern "RESERVATION_TOKEN:*" 2>/dev/null | tr '\n' ' ')
+    TOKEN_KEYS=$(docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" --scan --pattern "RESERVATION_TOKEN:*" 2>/dev/null | tr '\n' ' ')
     if [ -n "$TOKEN_KEYS" ]; then
-      docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" DEL $TOKEN_KEYS > /dev/null 2>&1 || true
+      docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" DEL $TOKEN_KEYS > /dev/null 2>&1 || true
     fi
 
-    PAYMENT_KEYS=$(docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" --scan --pattern "PAYMENT_APPROVED_TOKEN:*" 2>/dev/null | tr '\n' ' ')
+    PAYMENT_KEYS=$(docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" --scan --pattern "PAYMENT_APPROVED_TOKEN:*" 2>/dev/null | tr '\n' ' ')
     if [ -n "$PAYMENT_KEYS" ]; then
-      docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" DEL $PAYMENT_KEYS > /dev/null 2>&1 || true
+      docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" DEL $PAYMENT_KEYS > /dev/null 2>&1 || true
     fi
 
-    REMAINING_CAMPAIGN_KEYS=$(docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" EXISTS \
+    REMAINING_CAMPAIGN_KEYS=$(docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" EXISTS \
       "campaign:${ACTIVITY_ID}:users" \
       "campaign:${ACTIVITY_ID}:counter" \
       "campaign:${ACTIVITY_ID}:meta" \
@@ -149,7 +149,7 @@ else
     # Pod 이름 동적 조회
     REDIS_POD=$(kubectl get pods -l app.kubernetes.io/name=redis -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "axon-redis-master-0")
 
-    REDIS_PING=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" PING 2>&1 | tr -d '\r' || true)
+    REDIS_PING=$(kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" PING 2>/dev/null | tr -d '\r' || true)
     if [ "$REDIS_PING" != "PONG" ]; then
       echo "   ❌ Redis 인증/연결 실패. Redis 초기화 없이 부하테스트를 진행하면 이전 sold-out 상태가 남습니다."
       echo "   Redis response: $REDIS_PING"
@@ -157,7 +157,7 @@ else
     fi
 
     # 캠페인 관련 키 삭제 (meta 포함!)
-    kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" DEL \
+    kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" DEL \
       "campaign:${ACTIVITY_ID}:users" \
       "campaign:${ACTIVITY_ID}:counter" \
       "campaign:${ACTIVITY_ID}:meta" \
@@ -165,17 +165,17 @@ else
 
     # 토큰 키 삭제 (SCAN + 일괄 DEL - 최적화)
     echo "   토큰 키 정리 중..."
-    TOKEN_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" --scan --pattern "RESERVATION_TOKEN:*" 2>/dev/null | tr '\n' ' ')
+    TOKEN_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" --scan --pattern "RESERVATION_TOKEN:*" 2>/dev/null | tr '\n' ' ')
     if [ -n "$TOKEN_KEYS" ]; then
-      kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" DEL $TOKEN_KEYS > /dev/null 2>&1 || true
+      kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" DEL $TOKEN_KEYS > /dev/null 2>&1 || true
     fi
 
-    PAYMENT_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" --scan --pattern "PAYMENT_APPROVED_TOKEN:*" 2>/dev/null | tr '\n' ' ')
+    PAYMENT_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" --scan --pattern "PAYMENT_APPROVED_TOKEN:*" 2>/dev/null | tr '\n' ' ')
     if [ -n "$PAYMENT_KEYS" ]; then
-      kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" DEL $PAYMENT_KEYS > /dev/null 2>&1 || true
+      kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" DEL $PAYMENT_KEYS > /dev/null 2>&1 || true
     fi
 
-    REMAINING_CAMPAIGN_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" EXISTS \
+    REMAINING_CAMPAIGN_KEYS=$(kubectl exec "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" EXISTS \
       "campaign:${ACTIVITY_ID}:users" \
       "campaign:${ACTIVITY_ID}:counter" \
       "campaign:${ACTIVITY_ID}:meta" \
@@ -316,11 +316,11 @@ done < "$CACHE_DATA"
 
 # Redis에 PIPELINE 실행
 if [ "$REDIS_MODE" == "docker" ]; then
-    cat "$REDIS_PIPELINE" | docker exec -i axon-redis redis-cli -a "$REDIS_PASSWORD" > /dev/null 2>&1
+    cat "$REDIS_PIPELINE" | docker exec -i axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" > /dev/null 2>&1
 else
     # Pod 이름 다시 조회
     REDIS_POD=$(kubectl get pods -l app.kubernetes.io/name=redis -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "axon-redis-master-0")
-    cat "$REDIS_PIPELINE" | kubectl exec -i "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" > /dev/null 2>&1
+    cat "$REDIS_PIPELINE" | kubectl exec -i "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" > /dev/null 2>&1
 fi
 
 rm -f "$CACHE_DATA" "$REDIS_PIPELINE"
@@ -398,10 +398,10 @@ echo "   JWT 토큰: $TOKEN_COUNT / $NUM_USERS"
 
 # Redis 캐시 확인
 if [ "$REDIS_MODE" == "docker" ]; then
-    REDIS_COUNT=$(docker exec -i axon-redis redis-cli -a "$REDIS_PASSWORD" KEYS "user:*" | wc -l | tr -d ' ')
+    REDIS_COUNT=$(docker exec -i axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" KEYS "user:*" | wc -l | tr -d ' ')
 else
     REDIS_POD=$(kubectl get pods -l app.kubernetes.io/name=redis -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || echo "axon-redis-master-0")
-    REDIS_COUNT=$(kubectl exec -i "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" KEYS "user:*" | wc -l | tr -d ' ')
+    REDIS_COUNT=$(kubectl exec -i "$REDIS_POD" -- redis-cli --no-auth-warning -a "$REDIS_PASSWORD" KEYS "user:*" | wc -l | tr -d ' ')
 fi
 echo "   Redis 캐시: $REDIS_COUNT / $CACHE_COUNT"
 
