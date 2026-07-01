@@ -1,10 +1,10 @@
 name: Deploy to Oracle VM Compose
 
-on:
-  workflow_run:
-    workflows: ["CI"]
-    types: ["completed"]
-    branches: ["main"]
+# on: 부하테스트로 인한 비활성화
+#   workflow_run:
+#     workflows: ["CI"]
+#     types: ["completed"]
+#     branches: ["main"]
   workflow_dispatch:
 
 concurrency:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
