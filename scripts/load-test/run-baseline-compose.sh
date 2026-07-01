@@ -25,6 +25,8 @@ fi
 
 NUM_USERS="${1:-1000}"
 ACTIVITY_ID="${2:-1}"
+USER_ID_START="${USER_ID_START:-1000}"
+USER_ID_END="${USER_ID_END:-$((USER_ID_START + NUM_USERS - 1))}"
 MAX_VUS="${MAX_VUS:-$NUM_USERS}"
 SCENARIO="${SCENARIO:-spike}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
@@ -57,6 +59,8 @@ cat > "$RESULT_DIR/run-meta.txt" <<EOF
 run_id=$RUN_ID
 commit_sha=$COMMIT_SHA
 num_users=$NUM_USERS
+user_id_start=$USER_ID_START
+user_id_end=$USER_ID_END
 activity_id=$ACTIVITY_ID
 max_vus=$MAX_VUS
 scenario=$SCENARIO
@@ -88,6 +92,8 @@ docker run --rm \
   -e ACTIVITY_ID="$ACTIVITY_ID" \
   -e PRODUCT_ID="$PRODUCT_ID" \
   -e FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
+  -e USER_ID_START="$USER_ID_START" \
+  -e USER_ID_END="$USER_ID_END" \
   -e FLOW="$FLOW" \
   -e USE_PRODUCTION_API=true \
   -e TOKEN_FILE_PATH=/scripts/jwt-tokens.json \
@@ -109,6 +115,7 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - Run ID: \`$RUN_ID\`
 - Commit: \`$COMMIT_SHA\`
 - Users: \`$NUM_USERS\`
+- User ID range: \`$USER_ID_START-$USER_ID_END\`
 - Max VUs: \`$MAX_VUS\`
 - Scenario: \`$SCENARIO\`
 - Activity ID: \`$ACTIVITY_ID\`
