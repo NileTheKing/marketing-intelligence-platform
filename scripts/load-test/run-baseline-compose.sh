@@ -82,6 +82,7 @@ FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
 PRODUCT_ID="$PRODUCT_ID" \
   "$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
 
+set +e
 docker run --rm \
   --network host \
   --user "$(id -u):$(id -g)" \
@@ -103,6 +104,8 @@ docker run --rm \
   --summary-export /results/k6-summary.json \
   /scripts/k6-fcfs-load-test.js \
   2>&1 | tee "$RESULT_DIR/k6-console.log"
+K6_STATUS=${PIPESTATUS[0]}
+set -e
 
 FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" "$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
 
@@ -124,6 +127,7 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - Prepare core URL: \`$PREPARE_CORE_SERVICE_URL\`
 - k6 entry URL: \`$K6_ENTRY_SERVICE_URL\`
 - k6 core URL: \`$K6_CORE_SERVICE_URL\`
+- k6 status: \`$K6_STATUS\`
 
 ## Domain Check
 
@@ -190,3 +194,7 @@ EOF
 
 echo "Baseline artifacts saved to: $RESULT_DIR"
 echo "Baseline archive saved to: $RESULT_ARCHIVE"
+
+if [ "$K6_STATUS" -ne 0 ]; then
+  exit "$K6_STATUS"
+fi
