@@ -78,6 +78,8 @@ const VUS_LIST = (__ENV.VUS_LIST || '100,500,1000,2000,5000,8000').split(',').ma
 const DURATION_PER_STEP = __ENV.DURATION_PER_STEP || '10s';
 const SOAK_VUS = parseInt(__ENV.VUS || '500');
 const SOAK_DURATION = __ENV.DURATION || '5m';
+const ARRIVAL_PRE_ALLOCATED_VUS = parseInt(__ENV.ARRIVAL_PRE_ALLOCATED_VUS || '200');
+const ARRIVAL_RATE_MULTIPLIER = parseFloat(__ENV.ARRIVAL_RATE_MULTIPLIER || '1');
 
 // =========================================================================
 // 커스텀 메트릭 정의
@@ -97,6 +99,8 @@ const behaviorEventSuccessRate = new Rate('behavior_event_success_rate');
 const behaviorEventCount = new Counter('behavior_event_count');
 
 const reservationDuration = new Trend('reservation_duration');
+
+const userCount = USER_ID_END - USER_ID_START + 1;
 
 // =========================================================================
 // 시나리오 정의
@@ -148,6 +152,51 @@ const behavior_spike_scenario = {
 
 const reservation_spike_scenario = {
   ...spike_scenario,
+  thresholds: {
+    'fcfs_success_count': [`count==${FCFS_LIMIT_COUNT}`],
+    'fcfs_error_count': ['count==0'],
+    'reservation_duration': ['p(95)<5000'],
+  },
+};
+
+// Scenario 1-b: Arrival Spike - 현실형 선착순 오픈 모델
+// 각 iteration은 새 유저 1명의 1회 클릭에 가깝게 모델링한다.
+const arrival_scenario = {
+  scenarios: {
+    arrival_spike: {
+      executor: 'ramping-arrival-rate',
+      startRate: 0,
+      timeUnit: '1s',
+      preAllocatedVUs: ARRIVAL_PRE_ALLOCATED_VUS,
+      maxVUs: MAX_VUS,
+      stages: [
+        { duration: '2s', target: Math.max(1, Math.floor(userCount * 0.3 * ARRIVAL_RATE_MULTIPLIER)) },
+        { duration: '8s', target: Math.max(1, Math.floor(userCount * 0.08 * ARRIVAL_RATE_MULTIPLIER)) },
+        { duration: '10s', target: Math.max(1, Math.floor(userCount * 0.02 * ARRIVAL_RATE_MULTIPLIER)) },
+        { duration: '5s', target: 0 },
+      ],
+    },
+  },
+
+  thresholds: {
+    'fcfs_success_count': [`count==${FCFS_LIMIT_COUNT}`],
+    'fcfs_error_count': ['count==0'],
+    'reservation_duration': ['p(95)<5000'],
+  },
+};
+
+// Scenario 1-c: Waiting Burst - 선착순 오픈 전 대기자 flash crowd 모델
+// 각 iteration은 대기 중이던 유저 1명의 1회 참여이며, 클릭 반응속도만 다르게 둔다.
+const waiting_burst_scenario = {
+  scenarios: {
+    waiting_burst: {
+      executor: 'shared-iterations',
+      vus: Math.min(MAX_VUS, userCount),
+      iterations: userCount,
+      maxDuration: '60s',
+    },
+  },
+
   thresholds: {
     'fcfs_success_count': [`count==${FCFS_LIMIT_COUNT}`],
     'fcfs_error_count': ['count==0'],
@@ -256,6 +305,16 @@ export const options = (() => {
       scenarioName = `Constant Load (Step-by-step) - VUs=${VUS_LIST.join('→')}`;
       break;
 
+    case 'arrival':
+      selectedScenario = arrival_scenario;
+      scenarioName = `Arrival Spike - users=${userCount}, maxVUs=${MAX_VUS}`;
+      break;
+
+    case 'waiting_burst':
+      selectedScenario = waiting_burst_scenario;
+      scenarioName = `Waiting Burst - users=${userCount}, vus=${Math.min(MAX_VUS, userCount)}`;
+      break;
+
     case 'ramp':
       selectedScenario = ramp_scenario;
       scenarioName = 'Ramp-up Test (Find Limits)';
@@ -308,6 +367,14 @@ export function setup() {
 
   if (SCENARIO === 'spike') {
     console.log(`MAX_VUS: ${MAX_VUS}`);
+  } else if (SCENARIO === 'arrival') {
+    console.log(`MAX_VUS: ${MAX_VUS}`);
+    console.log(`ARRIVAL_PRE_ALLOCATED_VUS: ${ARRIVAL_PRE_ALLOCATED_VUS}`);
+    console.log(`ARRIVAL_RATE_MULTIPLIER: ${ARRIVAL_RATE_MULTIPLIER}`);
+  } else if (SCENARIO === 'waiting_burst') {
+    console.log(`MAX_VUS: ${MAX_VUS}`);
+    console.log(`WAITING_USERS: ${userCount}`);
+    console.log('Reaction model: 50% 0-1s, 30% 1-2s, 15% 2-4s, 5% 4-6s');
   } else if (SCENARIO === 'constant') {
     console.log(`VUS_LIST: ${VUS_LIST.join(', ')}`);
     console.log(`DURATION_PER_STEP: ${DURATION_PER_STEP}`);
@@ -332,10 +399,20 @@ export function setup() {
 // 메인 시나리오: 각 VU(Virtual User)가 실행하는 흐름
 // =========================================================================
 export default function (data) {
-  // 순차적 userId 생성 (중복 방지)
+  // spike/constant/stress는 기존처럼 user pool을 반복 사용한다.
+  // arrival/waiting_burst는 실제 오픈 이벤트에 가깝게 userId를 1회만 사용한다.
   const uniqueIndex = exec.scenario.iterationInTest;
-  const userId = data.userIdStart + (uniqueIndex % (data.userIdEnd - data.userIdStart + 1));
+  const availableUsers = data.userIdEnd - data.userIdStart + 1;
+  const usesUniqueUserOnce = SCENARIO === 'arrival' || SCENARIO === 'waiting_burst';
+  if (usesUniqueUserOnce && uniqueIndex >= availableUsers) {
+    return;
+  }
+  const userId = data.userIdStart + (usesUniqueUserOnce ? uniqueIndex : uniqueIndex % availableUsers);
   const sessionId = `session-${userId}-${Date.now()}`;
+
+  if (SCENARIO === 'waiting_burst') {
+    sleep(getWaitingBurstReactionDelay());
+  }
 
   if (data.flow === 'behavior') {
     runBehaviorFlow(data, userId, sessionId);
@@ -360,6 +437,20 @@ export default function (data) {
   runReservationFlow(data, userId, true);
 }
 
+function getWaitingBurstReactionDelay() {
+  const bucket = Math.random();
+  if (bucket < 0.5) {
+    return Math.random(); // 50%: 0-1s
+  }
+  if (bucket < 0.8) {
+    return 1 + Math.random(); // 30%: 1-2s
+  }
+  if (bucket < 0.95) {
+    return 2 + Math.random() * 2; // 15%: 2-4s
+  }
+  return 4 + Math.random() * 2; // 5%: 4-6s
+}
+
 function runBehaviorFlow(data, userId, sessionId) {
   // ===== Step 1: 페이지 방문 이벤트 =====
   sendBehaviorEvent(data, userId, sessionId, 'PAGE_VIEW');
@@ -374,9 +465,12 @@ function runReservationFlow(data, userId, includePayment) {
   const startTime = Date.now();
 
   let reservationToken = null;
+  let reservationRetry = false;
   if (data.useProductionApi) {
     // 프로덕션 API (JWT 필요)
-    reservationToken = reserveWithJWT(data, userId);
+    const reservation = reserveWithJWT(data, userId);
+    reservationToken = reservation.token;
+    reservationRetry = reservation.isRetry;
   } else {
     // 테스트 API (인증 불필요)
     reserveWithTestAPI(data, userId);
@@ -386,7 +480,7 @@ function runReservationFlow(data, userId, includePayment) {
   reservationDuration.add(duration);
 
   // ===== Step 4: 결제 승인 (DB 저장) =====
-  if (includePayment && reservationToken) {
+  if (includePayment && reservationToken && !reservationRetry) {
     confirmPayment(data, userId, reservationToken);
   }
 }
@@ -459,11 +553,11 @@ function reserveWithJWT(data, userId) {
       `${data.coreServiceUrl}/test/auth/token?userId=${userId}`,
       { tags: { name: 'jwt_token_realtime' } }
     );
-    if (tokenRes.status !== 200) return null;
+    if (tokenRes.status !== 200) return { token: null, isRetry: false };
     token = normalizeJwtToken(tokenRes.body);
     if (!token) {
       console.error(`Invalid JWT token for reservation (user ${userId})`);
-      return null;
+      return { token: null, isRetry: false };
     }
   }
 
@@ -493,8 +587,10 @@ function reserveWithJWT(data, userId) {
       try {
           const json = res.json();
           if (json.reservationToken) {
-              console.log(`Got token for user ${userId}: ${json.reservationToken.substring(0, 10)}...`);
-              return json.reservationToken;
+              return {
+                token: json.reservationToken,
+                isRetry: json.isRetry === true,
+              };
           } else {
               console.error(`No reservationToken in response for user ${userId}:`, json);
           }
@@ -502,7 +598,7 @@ function reserveWithJWT(data, userId) {
           console.error(`Failed to parse reservation token for user ${userId}`, e);
       }
   }
-  return null;
+  return { token: null, isRetry: false };
 }
 
 // =========================================================================

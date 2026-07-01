@@ -15,8 +15,11 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 NUM_USERS="${NUM_USERS:-${1:-1000}}"
 ACTIVITY_ID="${ACTIVITY_ID:-${2:-1}}"
 MAX_VUS="${MAX_VUS:-100}"
+SCENARIO="${SCENARIO:-spike}"
 FLOW="${FLOW:-payment}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
+ARRIVAL_PRE_ALLOCATED_VUS="${ARRIVAL_PRE_ALLOCATED_VUS:-200}"
+ARRIVAL_RATE_MULTIPLIER="${ARRIVAL_RATE_MULTIPLIER:-1}"
 PRODUCT_ID="${PRODUCT_ID:-1}"
 USER_ID_START="${USER_ID_START:-1000}"
 USER_ID_END="${USER_ID_END:-$((USER_ID_START + NUM_USERS - 1))}"
@@ -72,7 +75,10 @@ num_users=$NUM_USERS
 activity_id=$ACTIVITY_ID
 max_vus=$MAX_VUS
 flow=$FLOW
+scenario=$SCENARIO
 fcfs_limit_count=$FCFS_LIMIT_COUNT
+arrival_pre_allocated_vus=$ARRIVAL_PRE_ALLOCATED_VUS
+arrival_rate_multiplier=$ARRIVAL_RATE_MULTIPLIER
 product_id=$PRODUCT_ID
 user_id_start=$USER_ID_START
 user_id_end=$USER_ID_END
@@ -82,7 +88,7 @@ EOF
 
 echo ""
 echo "== Step 1/4: prepare VM seed and JWT tokens =="
-ssh_vm "cd '$REMOTE_DIR' && ./scripts/load-test/prepare-load-test-compose.sh '$NUM_USERS' '$ACTIVITY_ID'"
+ssh_vm "cd '$REMOTE_DIR' && FCFS_LIMIT_COUNT='$FCFS_LIMIT_COUNT' PRODUCT_ID='$PRODUCT_ID' ./scripts/load-test/prepare-load-test-compose.sh '$NUM_USERS' '$ACTIVITY_ID'"
 
 REMOTE_TOKEN_COUNT="$(ssh_vm "cd '$REMOTE_DIR' && python3 -c 'import json; j=json.load(open(\"scripts/load-test/jwt-tokens.json\")); print(len(j))'")"
 echo "Remote JWT tokens: $REMOTE_TOKEN_COUNT / $NUM_USERS"
@@ -106,8 +112,10 @@ echo ""
 echo "== Step 3/4: run external k6 =="
 set +e
 FLOW="$FLOW" \
-SCENARIO=spike \
+SCENARIO="$SCENARIO" \
 MAX_VUS="$MAX_VUS" \
+ARRIVAL_PRE_ALLOCATED_VUS="$ARRIVAL_PRE_ALLOCATED_VUS" \
+ARRIVAL_RATE_MULTIPLIER="$ARRIVAL_RATE_MULTIPLIER" \
 USE_PRODUCTION_API=true \
 USE_TOKEN_FILE=true \
 TOKEN_FILE_PATH="$TOKEN_FILE" \
@@ -187,9 +195,12 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 
 - Run ID: \`$RUN_ID\`
 - Flow: \`$FLOW\`
+- Scenario: \`$SCENARIO\`
 - Public URL: \`$PUBLIC_URL\`
 - Users: \`$NUM_USERS\`
 - Max VUs: \`$MAX_VUS\`
+- Arrival pre-allocated VUs: \`$ARRIVAL_PRE_ALLOCATED_VUS\`
+- Arrival rate multiplier: \`$ARRIVAL_RATE_MULTIPLIER\`
 - Activity ID: \`$ACTIVITY_ID\`
 - FCFS limit count: \`$FCFS_LIMIT_COUNT\`
 - k6 status: \`$K6_STATUS\`
