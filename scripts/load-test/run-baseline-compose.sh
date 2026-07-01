@@ -26,6 +26,7 @@ fi
 NUM_USERS="${1:-1000}"
 ACTIVITY_ID="${2:-1}"
 MAX_VUS="${MAX_VUS:-$NUM_USERS}"
+SCENARIO="${SCENARIO:-spike}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
 PRODUCT_ID="${PRODUCT_ID:-1}"
 RESOURCE_PROFILE="${RESOURCE_PROFILE:-unlimited-compose-app}"
@@ -54,6 +55,7 @@ commit_sha=$COMMIT_SHA
 num_users=$NUM_USERS
 activity_id=$ACTIVITY_ID
 max_vus=$MAX_VUS
+scenario=$SCENARIO
 fcfs_limit_count=$FCFS_LIMIT_COUNT
 product_id=$PRODUCT_ID
 resource_profile=$RESOURCE_PROFILE
@@ -62,12 +64,12 @@ started_at=$(date -Iseconds)
 host=$(hostname)
 EOF
 
-"$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
+FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" PRODUCT_ID="$PRODUCT_ID" "$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
 
 docker run --rm \
   --network host \
   --user "$(id -u):$(id -g)" \
-  -e SCENARIO=spike \
+  -e SCENARIO="$SCENARIO" \
   -e ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}" \
   -e CORE_SERVICE_URL="${CORE_SERVICE_URL:-http://127.0.0.1:8080}" \
   -e MAX_VUS="$MAX_VUS" \
@@ -96,6 +98,7 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - Commit: \`$COMMIT_SHA\`
 - Users: \`$NUM_USERS\`
 - Max VUs: \`$MAX_VUS\`
+- Scenario: \`$SCENARIO\`
 - Activity ID: \`$ACTIVITY_ID\`
 - Product ID: \`$PRODUCT_ID\`
 - FCFS limit count: \`$FCFS_LIMIT_COUNT\`
