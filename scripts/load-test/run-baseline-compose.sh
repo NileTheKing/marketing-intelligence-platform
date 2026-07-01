@@ -31,6 +31,10 @@ FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
 PRODUCT_ID="${PRODUCT_ID:-1}"
 RESOURCE_PROFILE="${RESOURCE_PROFILE:-unlimited-compose-app}"
 FLOW="${FLOW:-full}"
+PREPARE_CORE_SERVICE_URL="${PREPARE_CORE_SERVICE_URL:-http://127.0.0.1:8080}"
+PREPARE_ENTRY_SERVICE_URL="${PREPARE_ENTRY_SERVICE_URL:-http://127.0.0.1:8081}"
+K6_ENTRY_SERVICE_URL="${K6_ENTRY_SERVICE_URL:-${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}}"
+K6_CORE_SERVICE_URL="${K6_CORE_SERVICE_URL:-${CORE_SERVICE_URL:-http://127.0.0.1:8080}}"
 
 RUN_ID="$(date '+%Y%m%d-%H%M%S')"
 RESULT_DIR="${RESULT_DIR:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID-compose-baseline}"
@@ -60,18 +64,26 @@ fcfs_limit_count=$FCFS_LIMIT_COUNT
 product_id=$PRODUCT_ID
 resource_profile=$RESOURCE_PROFILE
 flow=$FLOW
+prepare_core_service_url=$PREPARE_CORE_SERVICE_URL
+prepare_entry_service_url=$PREPARE_ENTRY_SERVICE_URL
+k6_entry_service_url=$K6_ENTRY_SERVICE_URL
+k6_core_service_url=$K6_CORE_SERVICE_URL
 started_at=$(date -Iseconds)
 host=$(hostname)
 EOF
 
-FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" PRODUCT_ID="$PRODUCT_ID" "$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
+CORE_SERVICE_URL="$PREPARE_CORE_SERVICE_URL" \
+ENTRY_SERVICE_URL="$PREPARE_ENTRY_SERVICE_URL" \
+FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
+PRODUCT_ID="$PRODUCT_ID" \
+  "$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
 
 docker run --rm \
   --network host \
   --user "$(id -u):$(id -g)" \
   -e SCENARIO="$SCENARIO" \
-  -e ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}" \
-  -e CORE_SERVICE_URL="${CORE_SERVICE_URL:-http://127.0.0.1:8080}" \
+  -e ENTRY_SERVICE_URL="$K6_ENTRY_SERVICE_URL" \
+  -e CORE_SERVICE_URL="$K6_CORE_SERVICE_URL" \
   -e MAX_VUS="$MAX_VUS" \
   -e ACTIVITY_ID="$ACTIVITY_ID" \
   -e PRODUCT_ID="$PRODUCT_ID" \
@@ -102,6 +114,9 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - Activity ID: \`$ACTIVITY_ID\`
 - Product ID: \`$PRODUCT_ID\`
 - FCFS limit count: \`$FCFS_LIMIT_COUNT\`
+- Prepare core URL: \`$PREPARE_CORE_SERVICE_URL\`
+- k6 entry URL: \`$K6_ENTRY_SERVICE_URL\`
+- k6 core URL: \`$K6_CORE_SERVICE_URL\`
 
 ## Domain Check
 
