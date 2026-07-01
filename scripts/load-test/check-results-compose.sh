@@ -23,6 +23,14 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
   load_env_file "$PROJECT_ROOT/.env"
 fi
 
+REDIS_PASSWORD_FROM_FILE=""
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  REDIS_PASSWORD_FROM_FILE="$(grep '^REDIS_PASSWORD=' "$PROJECT_ROOT/.env" | tail -n 1 | cut -d= -f2- | tr -d '\r')"
+fi
+if [ -n "$REDIS_PASSWORD_FROM_FILE" ]; then
+  export REDIS_PASSWORD="$REDIS_PASSWORD_FROM_FILE"
+fi
+
 ACTIVITY_ID="${1:-1}"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
@@ -40,7 +48,7 @@ fi
 REDIS_PASSWORD="${REDIS_PASSWORD:-axon1234}"
 
 redis_get() {
-  docker exec axon-redis redis-cli -a "$REDIS_PASSWORD" "$@" 2>/dev/null | tr -d '\r\n'
+  docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" "$@" 2>/dev/null | tr -d '\r\n'
 }
 
 mysql_query() {
