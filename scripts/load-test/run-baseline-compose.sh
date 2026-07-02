@@ -48,6 +48,7 @@ LATEST_META="$PROJECT_ROOT/artifacts/load-test/latest-compose-baseline.txt"
 TOKEN_FILE="$SCRIPT_DIR/jwt-tokens.json"
 COMMIT_SHA="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 K6_IMAGE="${K6_IMAGE:-grafana/k6:0.53.0}"
+OBSERVE_CONTAINERS="${OBSERVE_CONTAINERS:-axon-nginx axon-entry axon-core axon-mysql axon-redis broker_1 kafka-controller}"
 
 echo "Baseline run: $RUN_ID"
 echo "Users:        $NUM_USERS"
@@ -82,6 +83,21 @@ FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
 PRODUCT_ID="$PRODUCT_ID" \
   "$SCRIPT_DIR/prepare-load-test-compose.sh" "$NUM_USERS" "$ACTIVITY_ID"
 
+if command -v ss >/dev/null 2>&1; then
+  ss -s > "$RESULT_DIR/ss-before.txt" 2>&1 || true
+fi
+
+K6_STARTED_AT="$(date -Iseconds)"
+STATS_PID=""
+(
+  while true; do
+    echo "===== $(date -Iseconds) ====="
+    docker stats --no-stream $OBSERVE_CONTAINERS 2>&1 || true
+    sleep 1
+  done
+) > "$RESULT_DIR/docker-stats-timeseries.txt" &
+STATS_PID=$!
+
 set +e
 docker run --rm \
   --network host \
@@ -106,6 +122,19 @@ docker run --rm \
   2>&1 | tee "$RESULT_DIR/k6-console.log"
 K6_STATUS=${PIPESTATUS[0]}
 set -e
+
+if [ -n "$STATS_PID" ]; then
+  kill "$STATS_PID" 2>/dev/null || true
+  wait "$STATS_PID" 2>/dev/null || true
+fi
+
+if command -v ss >/dev/null 2>&1; then
+  ss -s > "$RESULT_DIR/ss-after.txt" 2>&1 || true
+fi
+
+for container in $OBSERVE_CONTAINERS; do
+  docker logs --since "$K6_STARTED_AT" "$container" > "$RESULT_DIR/${container}.log" 2>&1 || true
+done
 
 FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" "$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
 

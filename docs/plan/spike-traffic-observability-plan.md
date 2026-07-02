@@ -50,6 +50,20 @@ These are valid future hardening topics, but they are not required for the curre
 
 Measurement baseline mode runs the core purchase path with fixed resource limits and without tracing agents.
 
+Official measurement traffic should be generated from an external client machine.
+
+Current official route:
+
+```text
+Mac k6
+  -> Cloudflare
+  -> VM host Nginx
+  -> axon-nginx container
+  -> entry-service/core-service
+```
+
+Same-VM k6 is allowed only for debugging because it shares CPU, network, and Docker resources with the system under test.
+
 Components:
 
 - Nginx
@@ -336,6 +350,102 @@ Each test should follow the same loop:
 
 Do not compare Oracle results directly against the previous K2P results. K2P and Oracle differ in CPU model, memory, disk I/O, network path, Kubernetes overhead, and deployed component shape.
 
+## 2026-06-12 Baseline Debug Notes
+
+Status: diagnostic notes, not final portfolio numbers.
+
+Observed facts:
+
+- The old KT Cloud K2P Kubernetes result and the new Oracle Docker Compose result have different deployment shape, log pipeline, resource profile, and load-generator path.
+- High-frequency request-path logs were observed during FCFS load tests.
+- The JWT authentication success log and reservation-token Redis-miss log were normal-path logs but emitted at `INFO`/`WARN` frequency.
+- These logs can create Docker stdout / Logback appender lock contention under spike traffic.
+- The normal-path logs were lowered to `DEBUG`; invalid or tampered reservation tokens still remain `WARN`.
+- Same-VM diagnostic k6 after log reduction produced a clean reservation path result at low concurrency: `fcfs_success_count=200`, `fcfs_error_count=0`.
+- External Mac k6 against the public route still showed intermittent timeout in one run: `fcfs_success_count=199`, `fcfs_error_count=6`.
+
+Interpretation boundary:
+
+- Do not claim "Virtual Thread pinning was fixed" from this evidence alone.
+- Safe claim: high-frequency synchronous application logging was identified as a bottleneck candidate and reduced on the hot request path.
+- The remaining timeout must be diagnosed separately before claiming a clean Oracle Compose baseline.
+
+Clean baseline requirement:
+
+- `fcfs_success_count == FCFS_LIMIT_COUNT`
+- `fcfs_error_count == 0`
+- no interrupted iterations
+- fresh seed data and fresh token file for every official run
+- external Mac k6 route for headline before/after numbers
+
+## 2026-07-01 Waiting Burst Baseline Notes
+
+Status: active diagnostic baseline, not final portfolio numbers.
+
+Scenario model:
+
+- `SCENARIO=waiting_burst`
+- 3,000 users are assumed to be waiting before event open.
+- Each user attempts once within a short reaction-time window.
+- The test is intended to stress the event-open burst path, not steady arrival traffic.
+- Same-VM k6 is used only for fast diagnosis because it shares CPU, network stack, and Docker resources with the system under test.
+
+Current VM diagnostic route:
+
+```text
+k6 container on Oracle VM
+  -> host network
+  -> http://127.0.0.1:28080
+  -> axon-nginx container
+  -> entry-service / core-service
+  -> Redis / Kafka / MySQL
+```
+
+Current command shape:
+
+```bash
+cd ~/apps/axon
+SCENARIO=waiting_burst FLOW=payment NUM_USERS=3000 FCFS_LIMIT_COUNT=600 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 ./scripts/load-test/run-baseline-compose.sh 3000 1
+```
+
+Observed pattern on the same VM:
+
+| Waiting users | FCFS limit | Result | Domain consistency | Notable signal |
+|---:|---:|---|---|---|
+| 3,000 | 400 | stable success in latest repeat | Redis/DB `400/400` | `reservation_duration` p95 stayed below the 5s threshold in the latest run |
+| 3,000 | 500 | consistency generally succeeds, latency reaches the threshold boundary | Redis/DB matched in the observed run | `reservation_duration` p95 was around the 5s threshold |
+| 3,000 | 600 | unstable boundary; repeated success/failure variance observed | failure runs showed Redis `600/600` but DB around `588~590/600` | `EOF`, nginx `500`, and high `http_req_blocked` / `http_req_connecting` p95 |
+
+Interpretation:
+
+- Redis Lua reservation still accepts exactly the configured limit.
+- The unstable area is not the Redis counter itself.
+- Failure runs show that some Redis-success users do not complete the payment / Kafka / Core persistence path.
+- High `http_req_blocked` and `http_req_connecting` p95 indicate connection acquisition or TCP connection establishment pressure before focusing only on application method latency.
+- Same-VM k6 may amplify variance because k6, nginx, Entry, Core, MySQL, Redis, Kafka, and Docker share the same 4 vCPU host.
+
+Current working baseline classification:
+
+- `3000/400`: stable success baseline.
+- `3000/500`: latency boundary candidate.
+- `3000/600`: stress/failure reproduction candidate.
+
+Next diagnostic evidence to collect before claiming a root cause:
+
+- Nginx error log during the failing window.
+- Entry-service logs during the failing window.
+- `docker stats` during the burst, not only after completion.
+- `ss -s` before and after the burst.
+- Pinpoint / Actuator metrics for Entry and Core in a separate diagnostic run.
+- Hikari active/idle/pending connections and DB connection wait if available.
+
+Portfolio boundary:
+
+- Safe claim: a waiting-burst reproduction showed a stable success range and an unstable boundary where connection wait, nginx errors, and asynchronous DB convergence issues appear.
+- Avoid claiming a single exact capacity number from one run.
+- Avoid claiming Redis Lua is the bottleneck without Redis command latency evidence.
+- Avoid using same-VM k6 numbers as the headline external before/after result.
+
 ## Candidate Improvements
 
 Backend changes:
@@ -354,6 +464,7 @@ Runtime/config changes:
 - Reduce Elasticsearch heap for single-node test use.
 - Keep Kafka single broker for bottleneck analysis unless testing Kafka HA separately.
 - Keep Redis single instance unless testing Sentinel/Cluster separately.
+- Keep high-frequency normal-path logs at `DEBUG` during load tests; reserve `WARN` for abnormal states that require operator attention.
 
 ## Portfolio Wording
 

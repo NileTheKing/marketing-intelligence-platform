@@ -134,6 +134,45 @@ FLOW=full MAX_VUS=100 FCFS_LIMIT_COUNT=20 \
   ./scripts/load-test/run-baseline-compose.sh 100 1
 ```
 
+Waiting-burst diagnostic loop on the VM. Use this to reproduce the FCFS event-open burst against the VM nginx path:
+
+```bash
+cd ~/apps/axon
+
+SCENARIO=waiting_burst FLOW=payment NUM_USERS=3000 FCFS_LIMIT_COUNT=400 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+
+SCENARIO=waiting_burst FLOW=payment NUM_USERS=3000 FCFS_LIMIT_COUNT=500 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+
+SCENARIO=waiting_burst FLOW=payment NUM_USERS=3000 FCFS_LIMIT_COUNT=600 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+```
+
+Interpretation boundary for the 2026-07-01 VM diagnostic runs:
+
+- `3000/400`: stable success baseline in latest repeats.
+- `3000/500`: latency boundary candidate; domain consistency can succeed while `reservation_duration` p95 approaches or crosses 5s.
+- `3000/600`: stress/failure reproduction candidate; repeated runs showed large variance, including `EOF`, nginx `500`, Redis success count `600`, and DB convergence around `588~590` in failure runs.
+
+Do not treat one run as the capacity number. The useful signal is the boundary shape:
+
+```text
+400: stable success
+500: latency boundary
+600: unstable stress/failure region
+```
+
+When the 600 run fails, collect logs and resource snapshots before changing code:
+
+```bash
+docker logs --since=2m axon-nginx 2>&1 | tail -120
+docker logs --since=2m axon-entry 2>&1 | tail -160
+docker logs --since=2m axon-core 2>&1 | tail -160
+docker stats --no-stream axon-nginx axon-entry axon-core axon-mysql axon-redis broker_1 kafka-controller
+ss -s
+```
+
 Flow boundary:
 
 - `behavior`: sends `PAGE_VIEW` and `CLICK` behavior events only.
@@ -157,7 +196,11 @@ The run creates:
 - `artifacts/load-test/<run-id>-compose-baseline/k6-console.log`
 - `artifacts/load-test/<run-id>-compose-baseline/domain-check.log`
 - `artifacts/load-test/<run-id>-compose-baseline/docker-stats.txt`
+- `artifacts/load-test/<run-id>-compose-baseline/docker-stats-timeseries.txt`
 - `artifacts/load-test/<run-id>-compose-baseline/docker-ps.txt`
+- `artifacts/load-test/<run-id>-compose-baseline/ss-before.txt`
+- `artifacts/load-test/<run-id>-compose-baseline/ss-after.txt`
+- `artifacts/load-test/<run-id>-compose-baseline/<container>.log`
 - `artifacts/load-test/<run-id>-compose-baseline/summary.md`
 - `artifacts/load-test/<run-id>-compose-baseline/run-meta.txt`
 - `artifacts/load-test/<run-id>-compose-baseline.tar.gz`
