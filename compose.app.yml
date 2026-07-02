@@ -144,6 +144,10 @@ services:
       - entry-service
     ports:
       - "127.0.0.1:28080:80"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     networks:
       - axon-network
     volumes:
