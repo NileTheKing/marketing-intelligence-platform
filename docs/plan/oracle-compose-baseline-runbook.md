@@ -173,6 +173,20 @@ docker stats --no-stream axon-nginx axon-entry axon-core axon-mysql axon-redis b
 ss -s
 ```
 
+If `entry-service:8081` direct traffic succeeds but `axon-nginx:80` traffic fails, verify nginx first:
+
+```bash
+docker exec axon-nginx nginx -T | grep -E 'worker_connections|multi_accept|upstream|keepalive|proxy_http_version|proxy_pass' -n
+docker logs --since=2m axon-nginx 2>&1 | grep -Ei 'worker_connections|upstream|connect|timeout|reset|refused|failed|500'
+```
+
+After changing nginx connection settings, retest nginx-only reservation flow before returning to payment flow:
+
+```bash
+SCENARIO=waiting_burst FLOW=reservation NUM_USERS=3000 FCFS_LIMIT_COUNT=600 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+```
+
 Flow boundary:
 
 - `behavior`: sends `PAGE_VIEW` and `CLICK` behavior events only.

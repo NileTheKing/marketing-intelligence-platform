@@ -147,6 +147,7 @@ services:
     networks:
       - axon-network
     volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/axon.conf:/etc/nginx/conf.d/default.conf:ro
 
 networks:

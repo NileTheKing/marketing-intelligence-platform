@@ -439,6 +439,26 @@ Next diagnostic evidence to collect before claiming a root cause:
 - Pinpoint / Actuator metrics for Entry and Core in a separate diagnostic run.
 - Hikari active/idle/pending connections and DB connection wait if available.
 
+2026-07-02 narrowed finding:
+
+- `3000/600` reservation-only against `entry-service:8081` directly succeeded with `fcfs_error_count=0` and `reservation_duration` p95 around 200ms.
+- The same reservation-only scenario through `axon-nginx:80` failed with high `http_req_connecting` p95.
+- `axon-nginx` logged `1024 worker_connections are not enough, reusing connections`.
+- This isolates the immediate bottleneck to the nginx proxy connection layer, not Redis Lua, Entry reservation logic, Payment, Kafka, Core consumer, or MySQL.
+
+Applied nginx-side change:
+
+- Mount a project-owned `nginx.conf`.
+- Increase `worker_connections` from the image default `1024` to `8192`.
+- Enable `multi_accept`.
+- Add `entry_upstream` and `core_upstream` blocks with upstream keepalive.
+- Use HTTP/1.1 upstream proxying with `Connection ""` so nginx can reuse upstream connections.
+
+Retest target:
+
+- `SCENARIO=waiting_burst FLOW=reservation NUM_USERS=3000 FCFS_LIMIT_COUNT=600 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080`
+- Success criteria: `fcfs_error_count=0`, Redis `600/600`, and no `worker_connections are not enough` line in `axon-nginx.log`.
+
 Portfolio boundary:
 
 - Safe claim: a waiting-burst reproduction showed a stable success range and an unstable boundary where connection wait, nginx errors, and asynchronous DB convergence issues appear.
