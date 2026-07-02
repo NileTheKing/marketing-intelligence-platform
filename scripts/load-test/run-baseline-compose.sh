@@ -37,6 +37,7 @@ PREPARE_CORE_SERVICE_URL="${PREPARE_CORE_SERVICE_URL:-http://127.0.0.1:8080}"
 PREPARE_ENTRY_SERVICE_URL="${PREPARE_ENTRY_SERVICE_URL:-http://127.0.0.1:8081}"
 K6_ENTRY_SERVICE_URL="${K6_ENTRY_SERVICE_URL:-${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}}"
 K6_CORE_SERVICE_URL="${K6_CORE_SERVICE_URL:-${CORE_SERVICE_URL:-http://127.0.0.1:8080}}"
+K6_DOCKER_NETWORK="${K6_DOCKER_NETWORK:-host}"
 
 RUN_ID="$(date '+%Y%m%d-%H%M%S')"
 RESULT_DIR="${RESULT_DIR:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID-compose-baseline}"
@@ -73,6 +74,7 @@ prepare_core_service_url=$PREPARE_CORE_SERVICE_URL
 prepare_entry_service_url=$PREPARE_ENTRY_SERVICE_URL
 k6_entry_service_url=$K6_ENTRY_SERVICE_URL
 k6_core_service_url=$K6_CORE_SERVICE_URL
+k6_docker_network=$K6_DOCKER_NETWORK
 started_at=$(date -Iseconds)
 host=$(hostname)
 EOF
@@ -100,7 +102,7 @@ STATS_PID=$!
 
 set +e
 docker run --rm \
-  --network host \
+  --network "$K6_DOCKER_NETWORK" \
   --user "$(id -u):$(id -g)" \
   -e SCENARIO="$SCENARIO" \
   -e ENTRY_SERVICE_URL="$K6_ENTRY_SERVICE_URL" \
