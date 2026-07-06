@@ -37,6 +37,7 @@ ACTIVITY_ID="${2:-1}"
 CAMPAIGN_ID="${CAMPAIGN_ID:-1}"
 PRODUCT_ID="${PRODUCT_ID:-1}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
+PRELOAD_CAMPAIGN_META="${PRELOAD_CAMPAIGN_META:-false}"
 
 export CORE_SERVICE_URL="${CORE_SERVICE_URL:-http://127.0.0.1:8080}"
 export ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://127.0.0.1:8081}"
@@ -112,4 +113,50 @@ ON DUPLICATE KEY UPDATE
   updated_at = NOW();
 SQL
 
-exec "$SCRIPT_DIR/prepare-load-test.sh" "$NUM_USERS" "$ACTIVITY_ID"
+"$SCRIPT_DIR/prepare-load-test.sh" "$NUM_USERS" "$ACTIVITY_ID"
+
+if [ "$PRELOAD_CAMPAIGN_META" = "true" ]; then
+  echo "Preloading campaign meta cache..."
+  META_ROW="$(MYSQL_PWD="$DB_PASS" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$DB_NAME" \
+    --batch --raw --skip-column-names \
+    -e "SELECT id, campaign_id, limit_count, status, DATE_FORMAT(start_date, '%Y-%m-%dT%H:%i:%s'), DATE_FORMAT(end_date, '%Y-%m-%dT%H:%i:%s'), COALESCE(filters, 'null'), product_id, coupon_id, activity_type FROM campaign_activities WHERE id = $ACTIVITY_ID LIMIT 1;")"
+
+  if [ -z "$META_ROW" ]; then
+    echo "Failed to preload campaign meta: activity_id=$ACTIVITY_ID not found"
+    exit 1
+  fi
+
+  META_JSON="$(python3 - "$META_ROW" <<'PY'
+import json
+import sys
+
+fields = sys.argv[1].split("\t")
+if len(fields) != 10:
+    raise SystemExit(f"unexpected campaign activity column count: {len(fields)}")
+
+def nullable_int(value):
+    return None if value in ("", "NULL", "null") else int(value)
+
+filters = None if fields[6] in ("", "NULL", "null") else json.loads(fields[6])
+meta = {
+    "id": int(fields[0]),
+    "campaignId": nullable_int(fields[1]),
+    "limitCount": nullable_int(fields[2]),
+    "status": fields[3],
+    "startDate": fields[4],
+    "endDate": fields[5],
+    "filters": filters,
+    "hasFastValidation": False,
+    "hasHeavyValidation": False,
+    "productId": nullable_int(fields[7]),
+    "couponId": nullable_int(fields[8]),
+    "campaignActivityType": fields[9],
+}
+print(json.dumps(meta, separators=(",", ":")))
+PY
+)"
+
+  docker exec axon-redis redis-cli --no-auth-warning -a "$REDIS_PASSWORD" \
+    SET "campaign:${ACTIVITY_ID}:meta" "$META_JSON" EX 3600 > /dev/null
+  echo "Campaign meta cache preloaded: campaign:${ACTIVITY_ID}:meta"
+fi
