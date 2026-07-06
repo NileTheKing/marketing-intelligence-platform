@@ -11,13 +11,44 @@
 # inside the Pinpoint stack.
 
 services:
+  pinpoint-hbase:
+    ports: !reset []
+
+  pinpoint-mysql:
+    ports: !reset []
+
   pinpoint-collector:
+    ports: !reset []
     networks:
       pinpoint:
         ipv4_address: ${COLLECTOR_FIXED_IP:-172.24.0.30}
       axon_axon-network:
         aliases:
           - pinpoint-collector
+
+  pinpoint-batch:
+    ports: !reset []
+
+  pinpoint-quickstart:
+    ports: !reset []
+
+  zoo1:
+    ports: !reset []
+
+  zoo2:
+    ports: !reset []
+
+  zoo3:
+    ports: !reset []
+
+  jobmanager:
+    ports: !reset []
+
+  taskmanager:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
 
 networks:
   axon_axon-network:

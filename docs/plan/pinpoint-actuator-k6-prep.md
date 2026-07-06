@@ -214,6 +214,9 @@ cd ~/apps
 git clone https://github.com/pinpoint-apm/pinpoint-docker.git
 cd ~/apps/pinpoint-docker
 
+# Avoid conflict with Axon core-service on host port 8080.
+sed -i 's/^WEB_SERVER_PORT=.*/WEB_SERVER_PORT=18080/' .env
+
 docker compose \
   -f docker-compose.yml \
   -f /home/ubuntu/apps/axon/observability/pinpoint/compose.axon-network.yml \
@@ -228,7 +231,7 @@ axon-entry/core
   -> pinpoint-collector
 ```
 
-`pinpoint-web`, HBase, MySQL, Redis, Zookeeper, and other Pinpoint internal services stay in the Pinpoint stack network.
+`pinpoint-web`, HBase, MySQL, Redis, Zookeeper, and other Pinpoint internal services stay in the Pinpoint stack network. The Axon override removes host port publishing for Pinpoint internal services so they do not conflict with Axon MySQL/Redis/Kafka support services. Only Pinpoint Web should be exposed on host port `18080`.
 
 Verify the collector is on the Axon network:
 
