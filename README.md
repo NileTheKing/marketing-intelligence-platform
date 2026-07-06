@@ -238,5 +238,6 @@ graph TB
 
 - 분석 파이프라인(Elasticsearch/Kibana/Kafka Connect): `docker compose -f compose.app.yml -f compose.analytics.yml up -d`
 - 메트릭(Prometheus/Grafana): `docker compose -f compose.app.yml -f compose.metrics.yml up -d`
+- APM 진단(Pinpoint agent 주입): `docker compose -f compose.app.yml -f compose.resources.yml -f compose.trace.yml up -d --build`
 - Compose baseline 부하 테스트: `./scripts/load-test/run-baseline-compose.sh 1000 1`
 - K2P/Kubernetes 배포 파일: `k8s/`, `helm/`, `.github/workflows/deploy.yml`에 보존되어 있습니다. 최신 코드로 재배포하려면 현재 멀티모듈 Docker build context와 런타임 profile을 환경에 맞게 점검해야 합니다.

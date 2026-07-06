@@ -1,12 +1,16 @@
 services:
   core-service:
     environment:
-      JAVA_TOOL_OPTIONS: ${CORE_JAVA_TOOL_OPTIONS:-}
+      JAVA_TOOL_OPTIONS: >-
+        ${CORE_JAVA_TOOL_OPTIONS:--Xms512m -Xmx2g}
+        ${PINPOINT_CORE_AGENT_OPTIONS:-}
     volumes:
       - ${PINPOINT_AGENT_DIR:-./pinpoint-agent}:/pinpoint-agent:ro
 
   entry-service:
     environment:
-      JAVA_TOOL_OPTIONS: ${ENTRY_JAVA_TOOL_OPTIONS:-}
+      JAVA_TOOL_OPTIONS: >-
+        ${ENTRY_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1536m}
+        ${PINPOINT_ENTRY_AGENT_OPTIONS:-}
     volumes:
       - ${PINPOINT_AGENT_DIR:-./pinpoint-agent}:/pinpoint-agent:ro

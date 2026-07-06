@@ -18,6 +18,7 @@ application-local.yml
 jwt-tokens.json
 scripts/load-test/jwt-tokens.json
 artifacts/
+pinpoint-agent/
 
 # Build and IDE artifacts
 bin/

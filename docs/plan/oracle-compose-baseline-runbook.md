@@ -149,19 +149,89 @@ SCENARIO=waiting_burst FLOW=payment NUM_USERS=3000 FCFS_LIMIT_COUNT=600 MAX_VUS=
   ./scripts/load-test/run-baseline-compose.sh 3000 1
 ```
 
-Interpretation boundary for the 2026-07-01 VM diagnostic runs:
+The runner also supports selecting the Docker network used by the k6 container:
+
+- `K6_DOCKER_NETWORK=host`: k6 uses the VM host network.
+- `K6_DOCKER_NETWORK=axon_axon-network`: k6 joins the Compose bridge network and can call service DNS names such as `entry-service`.
+
+Use these only for diagnosis. Do not mix their numbers as one before/after result.
+
+Nginx path, reservation-only:
+
+```bash
+cd ~/apps/axon
+
+K6_DOCKER_NETWORK=host \
+SCENARIO=waiting_burst \
+FLOW=reservation \
+NUM_USERS=3000 \
+FCFS_LIMIT_COUNT=600 \
+MAX_VUS=3000 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+```
+
+Host published-port path, payment flow:
+
+```bash
+cd ~/apps/axon
+
+K6_DOCKER_NETWORK=host \
+SCENARIO=waiting_burst \
+FLOW=payment \
+NUM_USERS=3000 \
+FCFS_LIMIT_COUNT=500 \
+MAX_VUS=3000 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:8081 \
+K6_CORE_SERVICE_URL=http://127.0.0.1:8080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+```
+
+Docker bridge direct path, payment flow:
+
+```bash
+cd ~/apps/axon
+
+K6_DOCKER_NETWORK=axon_axon-network \
+SCENARIO=waiting_burst \
+FLOW=payment \
+NUM_USERS=3000 \
+FCFS_LIMIT_COUNT=500 \
+MAX_VUS=3000 \
+K6_ENTRY_SERVICE_URL=http://entry-service:8081 \
+K6_CORE_SERVICE_URL=http://core-service:8080 \
+  ./scripts/load-test/run-baseline-compose.sh 3000 1
+```
+
+Interpretation boundary for the 2026-07-01 and 2026-07-02 VM diagnostic runs:
 
 - `3000/400`: stable success baseline in latest repeats.
 - `3000/500`: latency boundary candidate; domain consistency can succeed while `reservation_duration` p95 approaches or crosses 5s.
 - `3000/600`: stress/failure reproduction candidate; repeated runs showed large variance, including `EOF`, nginx `500`, Redis success count `600`, and DB convergence around `588~590` in failure runs.
+- `3000/500` through Docker bridge direct reached DB `500/500` in repeated payment-flow runs, but p95 still remained high.
+- `3000/500` through the host published port showed high variance: one run could persist only a small subset, while later repeats reached `498~500/500`.
+- `3000/600` reservation-only through nginx changed after connection tuning, but nginx `499` and high p95 still appeared around the burst boundary.
 
 Do not treat one run as the capacity number. The useful signal is the boundary shape:
 
 ```text
-400: stable success
-500: latency boundary
-600: unstable stress/failure region
+400: stable success candidate
+500: latency boundary candidate
+600: unstable stress/failure reproduction candidate
 ```
+
+`499` in the nginx access log means the client closed the connection before nginx returned a response. In this test, it usually means k6 timed out or disconnected while nginx was still waiting for the upstream path to finish.
+
+Do not conclude from this evidence alone that nginx, Docker networking, or Entry application code is the sole root cause. Use Pinpoint and metrics to split:
+
+- k6 connection wait
+- nginx request time and upstream response time
+- Docker host/bridge path
+- Entry controller/service time
+- Redis Lua latency
+- reservation token handling
+- Kafka publish latency
+- Core consumer and DB persistence
 
 When the 600 run fails, collect logs and resource snapshots before changing code:
 
@@ -222,6 +292,8 @@ The run creates:
 - `artifacts/load-test/latest-compose-baseline.txt`
 
 `summary.md` is an automatically generated first-pass summary. It is not a replacement for engineering analysis; use it to decide which raw files to inspect first.
+
+`run-meta.txt` records the effective route configuration, including `k6_docker_network`, `k6_entry_service_url`, and `k6_core_service_url`. Always check it before comparing two runs.
 
 ## Success Criteria
 

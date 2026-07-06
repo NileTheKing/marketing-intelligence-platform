@@ -52,12 +52,20 @@ Use k6 to reproduce the same FCFS spike scenario and connect:
   - `scripts/load-test/k6-fcfs-load-test.js`
 - spike analysis plan already exists:
   - `docs/plan/spike-traffic-observability-plan.md`
+- Pinpoint agent injection override exists:
+  - `compose.trace.yml`
+- Example Pinpoint agent environment exists:
+  - `observability/pinpoint-agent.env.example`
+- Official Pinpoint Docker network override exists:
+  - `observability/pinpoint/compose.axon-network.yml`
+- Pinpoint agent copy helper exists:
+  - `scripts/observability/install-pinpoint-agent.sh`
 
 ### Not Ready Yet
 
-- no Pinpoint runtime configuration is wired into app startup
-- no VM-oriented runbook for attaching Pinpoint agent
-- no narrowed “analysis mode” checklist for the purchase path only
+- Pinpoint Collector/Web is not managed inside the Axon Compose stack.
+- The Pinpoint agent directory must be supplied separately as `PINPOINT_AGENT_DIR`.
+- The collector host must be reachable from `core-service` and `entry-service` containers.
 
 ## Pre-VM Preparation Scope
 
@@ -94,15 +102,47 @@ java -javaagent:/pinpoint-agent/pinpoint-bootstrap.jar \
   -jar app.jar
 ```
 
-Pre-VM decision:
+Current decision:
 
-- keep Dockerfiles unchanged for now
-- inject agent options through runtime env or compose override on the VM
+- keep Dockerfiles unchanged
+- inject agent options through `JAVA_TOOL_OPTIONS` in `compose.trace.yml`
+- keep heap settings in the same value so `compose.trace.yml` does not wipe the resource profile
 
 Reason:
 
 - Pinpoint collector/web/container layout is environment-sensitive
-- avoiding premature hardcoding keeps the repo cleaner
+- avoiding collector hardcoding keeps the Axon stack focused on the application under diagnosis
+
+Current trace override:
+
+```bash
+docker compose \
+  -f compose.app.yml \
+  -f compose.resources.yml \
+  -f compose.trace.yml \
+  up -d --build core-service entry-service axon-nginx
+```
+
+Before running it, provide the agent options in the shell or `.env`.
+
+Example:
+
+```bash
+cp observability/pinpoint-agent.env.example .env.pinpoint
+set -a
+. ./.env.pinpoint
+set +a
+```
+
+The default example assumes the agent bootstrap jar is available at:
+
+```text
+./pinpoint-agent/pinpoint-bootstrap.jar
+```
+
+If the downloaded agent uses a versioned file name such as `pinpoint-bootstrap-2.5.3.jar`, either create a local symlink or override the `PINPOINT_*_AGENT_OPTIONS` values.
+
+The collector host in `PINPOINT_COLLECTOR_HOST` must be reachable from the app containers. If the official `pinpoint-docker` stack is used separately, connect it to the Axon Docker network or set a host/IP that the containers can reach.
 
 ### 3. Narrow the First Analysis Scenario
 
@@ -156,6 +196,92 @@ Examples:
 - attach Pinpoint collector/web if using containerized deployment
 - attach Pinpoint javaagent to both app services
 
+### Pinpoint Server Stack
+
+Run the official Pinpoint Docker stack outside the Axon repository.
+
+Recommended VM layout:
+
+```text
+~/apps/axon
+~/apps/pinpoint-docker
+```
+
+Clone and start Pinpoint:
+
+```bash
+cd ~/apps
+git clone https://github.com/pinpoint-apm/pinpoint-docker.git
+cd ~/apps/pinpoint-docker
+
+docker compose \
+  -f docker-compose.yml \
+  -f /home/ubuntu/apps/axon/observability/pinpoint/compose.axon-network.yml \
+  up -d
+```
+
+The override connects only `pinpoint-collector` to the existing Axon network:
+
+```text
+axon-entry/core
+  -> axon_axon-network
+  -> pinpoint-collector
+```
+
+`pinpoint-web`, HBase, MySQL, Redis, Zookeeper, and other Pinpoint internal services stay in the Pinpoint stack network.
+
+Verify the collector is on the Axon network:
+
+```bash
+docker inspect pinpoint-collector --format '{{json .NetworkSettings.Networks}}' | grep axon_axon-network
+```
+
+### Pinpoint Agent Directory
+
+The official `pinpoint-docker` stack includes a `pinpoint-agent` container that exposes the agent files. Copy them into the Axon repository after the Pinpoint stack is running:
+
+```bash
+cd ~/apps/axon
+./scripts/observability/install-pinpoint-agent.sh
+```
+
+This creates:
+
+```text
+~/apps/axon/pinpoint-agent/pinpoint-bootstrap.jar
+```
+
+The directory is intentionally ignored by git because it contains downloaded agent binaries.
+
+### Axon Trace Startup
+
+Prepare the Axon trace environment:
+
+```bash
+cd ~/apps/axon
+cp observability/pinpoint-agent.env.example .env.pinpoint
+
+set -a
+. ./.env.pinpoint
+set +a
+```
+
+Expected collector setting:
+
+```bash
+PINPOINT_COLLECTOR_HOST=pinpoint-collector
+```
+
+Start only the app-facing services with the trace override:
+
+```bash
+docker compose \
+  -f compose.app.yml \
+  -f compose.resources.yml \
+  -f compose.trace.yml \
+  up -d --build core-service entry-service axon-nginx
+```
+
 ### Verification
 
 - `curl http://<entry-host>/actuator/health`
@@ -163,6 +289,19 @@ Examples:
 - `curl http://<entry-host>/actuator/metrics`
 - `curl http://<core-host>/actuator/metrics`
 - open Pinpoint UI and verify both services are visible
+- verify the JVM picked up the agent options:
+
+```bash
+docker logs --since=2m axon-entry 2>&1 | grep -E 'Picked up JAVA_TOOL_OPTIONS|Pinpoint'
+docker logs --since=2m axon-core 2>&1 | grep -E 'Picked up JAVA_TOOL_OPTIONS|Pinpoint'
+```
+
+Verify container DNS from Axon to Pinpoint Collector:
+
+```bash
+docker exec axon-entry getent hosts pinpoint-collector
+docker exec axon-core getent hosts pinpoint-collector
+```
 
 ### Load
 

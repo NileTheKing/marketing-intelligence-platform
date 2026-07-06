@@ -439,25 +439,38 @@ Next diagnostic evidence to collect before claiming a root cause:
 - Pinpoint / Actuator metrics for Entry and Core in a separate diagnostic run.
 - Hikari active/idle/pending connections and DB connection wait if available.
 
-2026-07-02 narrowed finding:
+2026-07-02 diagnostic update:
 
-- `3000/600` reservation-only against `entry-service:8081` directly succeeded with `fcfs_error_count=0` and `reservation_duration` p95 around 200ms.
-- The same reservation-only scenario through `axon-nginx:80` failed with high `http_req_connecting` p95.
-- `axon-nginx` logged `1024 worker_connections are not enough, reusing connections`.
-- This isolates the immediate bottleneck to the nginx proxy connection layer, not Redis Lua, Entry reservation logic, Payment, Kafka, Core consumer, or MySQL.
+Status: active diagnostic notes, not final portfolio numbers.
 
-Applied nginx-side change:
+The same waiting-burst model was repeated across three request paths to avoid over-attributing the failure to one layer.
 
-- Mount a project-owned `nginx.conf`.
-- Increase `worker_connections` from the image default `1024` to `8192`.
-- Enable `multi_accept`.
-- Add `entry_upstream` and `core_upstream` blocks with upstream keepalive.
-- Use HTTP/1.1 upstream proxying with `Connection ""` so nginx can reuse upstream connections.
+| Path | Flow | Scenario | Observed result | Interpretation boundary |
+|---|---|---|---|---|
+| VM k6 -> nginx `28080` -> Entry | reservation | `3000/600` | After nginx connection changes, Redis reached `600/600` and one best run had `fcfs_error_count=6`; p95 was still high. | This suggests the front path affects the symptom, but does not prove nginx is the root cause. |
+| VM k6 -> host published port `8081` | payment | `3000/500` | Large variance: one run persisted only `21/500`, later repeats reached `498/500` and `500/500`. | The host/Docker published-port path showed variance under burst load; one run is not enough evidence. |
+| VM k6 -> Docker bridge `entry-service:8081` | payment | `3000/500` | Three repeats reached DB `500/500`; p95 still ranged roughly from 5s to 8s. | The application can complete the 500 payment path on this VM, but latency still needs breakdown. |
 
-Retest target:
+Current nginx findings:
 
-- `SCENARIO=waiting_burst FLOW=reservation NUM_USERS=3000 FCFS_LIMIT_COUNT=600 MAX_VUS=3000 K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080`
-- Success criteria: `fcfs_error_count=0`, Redis `600/600`, and no `worker_connections are not enough` line in `axon-nginx.log`.
+- Nginx `499` means the client closed the request before nginx returned a response. In these runs, that usually means k6 timed out or disconnected while nginx was still waiting on the upstream path.
+- Earlier `8192 + multi_accept` admitted too much burst traffic at once and made the downstream path worse.
+- The current nginx setting is intentionally more conservative: `worker_connections=2048`, no `multi_accept`, and timing fields in access logs.
+- Upstream keepalive was tried and reverted because it produced Tomcat `400 Bad Request` responses in this environment.
+
+Current interpretation:
+
+- Redis Lua still reaches the configured reservation limit when the request is accepted.
+- In the observed runs, DB persistence roughly followed the number of successful payment confirmations. This does not prove Core is fault-free; it only means many failed runs did not even reach successful confirmation.
+- The unstable area is before or around Entry response completion: k6 connection wait, nginx forwarding, Docker networking, Entry request handling, Redis Lua, token issuance, and Kafka publish still need to be separated.
+- High run-to-run variance means the current evidence is not strong enough to claim one exact root cause.
+
+APM transition:
+
+- Move to Pinpoint/metrics diagnostic mode before making further code-level performance claims.
+- Trace Entry reservation, Redis Lua call, reservation token handling, Kafka publish, payment prepare/confirm, Core consumer processing, and DB persistence.
+- Continue collecting nginx timing logs, `ss -s`, and short `docker stats` snapshots around the burst window.
+- Keep same-VM k6 results as diagnostic evidence only. Official before/after numbers should still come from a stable, repeated scenario with the same route and resource profile.
 
 Portfolio boundary:
 
