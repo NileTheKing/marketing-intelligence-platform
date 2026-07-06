@@ -19,6 +19,7 @@ jwt-tokens.json
 scripts/load-test/jwt-tokens.json
 artifacts/
 pinpoint-agent/
+otel-agent/
 
 # Build and IDE artifacts
 bin/

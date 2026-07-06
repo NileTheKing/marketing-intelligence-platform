@@ -1,0 +1,26 @@
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:${JAEGER_VERSION:-1.57}
+    container_name: axon-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+    networks:
+      - axon-network
+
+  core-service:
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        ${CORE_JAVA_TOOL_OPTIONS:--Xms512m -Xmx2g}
+        ${OTEL_CORE_AGENT_OPTIONS:-}
+    volumes:
+      - ${OTEL_AGENT_DIR:-./otel-agent}:/otel-agent:ro
+
+  entry-service:
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        ${ENTRY_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1536m}
+        ${OTEL_ENTRY_AGENT_OPTIONS:-}
+    volumes:
+      - ${OTEL_AGENT_DIR:-./otel-agent}:/otel-agent:ro
