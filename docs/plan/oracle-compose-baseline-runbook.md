@@ -113,8 +113,50 @@ Manual VM fallback:
 ```bash
 cd ~/apps/axon
 docker compose -f compose.app.yml -f compose.resources.yml up -d --build
+docker restart axon-nginx
 ./scripts/load-test/run-baseline-compose.sh 1000 1
 ```
+
+## Mandatory Nginx Restart After App Recreate
+
+Status: active operational rule
+
+When `axon-entry` or `axon-core` is recreated, restart `axon-nginx` before any load test that goes through `127.0.0.1:28080`, `https://axon.opicnic.xyz`, or the nginx container path.
+
+Reason:
+
+- Docker Compose can recreate `axon-entry` or `axon-core` with a new container IP.
+- Nginx can keep using the stale upstream IP it resolved earlier.
+- The app can be healthy on the direct published port while nginx still sends traffic to the old container IP.
+
+Symptom:
+
+```text
+direct 127.0.0.1:8081 responds
+nginx  127.0.0.1:28080 returns 502
+nginx log: connect() failed (113: Host is unreachable) while connecting to upstream
+```
+
+Required post-recreate check:
+
+```bash
+cd ~/apps/axon
+docker restart axon-nginx
+
+curl -fsS http://127.0.0.1:8081/actuator/health
+curl -sS -o /tmp/nginx-entry.out -w "nginx_entry_http=%{http_code} time=%{time_total}\n" \
+  -X POST http://127.0.0.1:28080/entry/api/v1/entries \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
+
+Expected unauthenticated probe result:
+
+```text
+nginx_entry_http=403
+```
+
+`403` means nginx reached Entry and Spring Security rejected the unauthenticated request. That is a valid path check. `502`, `499`, or `connect() failed ... upstream` means do not run the load test yet.
 
 Fast debug loop on the VM. Use this only to isolate obvious server-side failures before running the external Mac baseline:
 
@@ -222,7 +264,7 @@ Do not treat one run as the capacity number. The useful signal is the boundary s
 
 `499` in the nginx access log means the client closed the connection before nginx returned a response. In this test, it usually means k6 timed out or disconnected while nginx was still waiting for the upstream path to finish.
 
-Do not conclude from this evidence alone that nginx, Docker networking, or Entry application code is the sole root cause. Use Pinpoint and metrics to split:
+Do not conclude from this evidence alone that nginx, Docker networking, or Entry application code is the sole root cause. Use OpenTelemetry/Jaeger and metrics to split:
 
 - k6 connection wait
 - nginx request time and upstream response time
@@ -313,13 +355,13 @@ Notes:
 
 ## Next Step After Baseline
 
-After one clean baseline, attach Pinpoint for diagnosis mode. Do not compare Pinpoint-attached latency directly against the baseline because the agent adds tracing overhead.
+After one clean baseline, attach OpenTelemetry/Jaeger for diagnosis mode. Do not compare OTel-attached latency directly against the baseline because the agent adds tracing overhead.
 
 Measurement flow:
 
-1. Run baseline with `compose.app.yml + compose.resources.yml`, without Pinpoint.
-2. Attach Pinpoint only for diagnosis and trace inspection.
+1. Run baseline with `compose.app.yml + compose.resources.yml`, without OTel.
+2. Attach OpenTelemetry/Jaeger only for diagnosis and trace inspection.
 3. Apply one bottleneck fix.
-4. Run final measurement again with `compose.app.yml + compose.resources.yml`, without Pinpoint.
+4. Run final measurement again with `compose.app.yml + compose.resources.yml`, without OTel.
 
-Pinpoint evidence can explain where time was spent. The headline performance number should come from the Pinpoint-off baseline/final pair.
+OTel/Jaeger evidence can explain where time was spent. The headline performance number should come from the OTel-off baseline/final pair.

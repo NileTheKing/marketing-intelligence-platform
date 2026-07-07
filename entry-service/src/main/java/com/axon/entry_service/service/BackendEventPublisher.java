@@ -6,6 +6,7 @@ import com.axon.messaging.dto.UserBehaviorEventMessage;
 import com.axon.messaging.topic.KafkaTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -26,6 +27,9 @@ public class BackendEventPublisher {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BehaviorEventAdapter adapter;
 
+    @Value("${axon.diagnostic.backend-event-publish-enabled:true}")
+    private boolean backendEventPublishEnabled;
+
     /**
      * Handle ReservationApprovedEvent and publish it to Kafka as an APPROVED
      * behavior event.
@@ -37,6 +41,12 @@ public class BackendEventPublisher {
     @Async
     @EventListener
     public void handleReservationApproved(ReservationApprovedEvent event) {
+        if (!backendEventPublishEnabled) {
+            log.debug("Skipping backend APPROVED event publish for diagnostic run. userId={} activityId={}",
+                    event.userId(), event.campaignActivityId());
+            return;
+        }
+
         log.info("Publishing backend APPROVED event for userId={} activityId={} order={}",
                 event.userId(), event.campaignActivityId(), event.order());
 

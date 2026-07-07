@@ -199,6 +199,126 @@ Guardrails:
 - Do not use diagnostic-profile latency as portfolio headline latency.
 - After identifying the bottleneck, rerun headline measurements with `diagnostic` and OTel disabled.
 
+### 2026-07-07 Diagnostic Pool A/B
+
+Diagnostic-only run shape:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+PRELOAD_CAMPAIGN_META: true
+Entry URL: http://127.0.0.1:28080
+```
+
+Important operational note:
+
+- After recreating `axon-entry`, restart `axon-nginx`.
+- Otherwise nginx can keep a stale Docker DNS resolution and send traffic to the old Entry container IP.
+- Symptom: direct `127.0.0.1:8081` responds, but nginx returns `502` with `connect() failed (113: Host is unreachable) while connecting to upstream`.
+
+Baseline pool 8 artifact:
+
+```text
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-081646-diagnostic-pool8-valid
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 5335.25ms
+http_req_duration p95: 5.33s
+Redis counter/users: 600/600
+```
+
+Diagnostic stage totals from Prometheus:
+
+```text
+entry_total OK: 600 calls, sum 1844.83s, max 6.91s
+entry_total GONE: 2400 calls, sum 1482.53s, max 3.59s
+meta_lookup: 3000 calls, sum 866.22s, max 1.32s
+token_lookup: 3000 calls, sum 973.39s, max 2.29s
+redis_reserve: 3000 calls, sum 457.50s, max 1.33s
+token_issue: 600 calls, sum 438.33s, max 2.29s
+backend_event_publish_async: 600 calls, sum 388.04s, max 1.99s
+token_generate: 3000 calls, sum 0.57s, max 0.06s
+```
+
+Temporary Redis pool 64 artifact:
+
+```text
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-081857-diagnostic-pool64-valid
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 6792.50ms
+http_req_duration p95: 6.72s
+Redis counter/users: 600/600
+```
+
+Diagnostic stage totals from Prometheus:
+
+```text
+entry_total OK: 600 calls, sum 2060.99s, max 8.30s
+entry_total GONE: 2400 calls, sum 1321.15s, max 6.01s
+meta_lookup: 3000 calls, sum 819.51s, max 2.01s
+token_lookup: 3000 calls, sum 1161.15s, max 2.72s
+redis_reserve: 3000 calls, sum 359.00s, max 2.00s
+token_issue: 600 calls, sum 573.88s, max 2.77s
+backend_event_publish_async: 600 calls, sum 693.68s, max 2.29s
+token_generate: 3000 calls, sum 0.44s, max 0.06s
+```
+
+Interpretation:
+
+- Increasing Lettuce pool from `8` to `64` did not improve the end-to-end p95 in this shape.
+- `redis_reserve` improved, but `token_lookup`, `token_issue`, and `backend_event_publish_async` worsened.
+- Current evidence does not support "Redis connection pool size is the dominant bottleneck."
+- The next stronger candidate is successful-path side work competing for Entry resources, especially backend approved-event Kafka publish running asynchronously during the burst.
+
+Next focused test:
+
+- Add a diagnostic-only way to disable backend `ReservationApprovedEvent` publishing, or isolate it with a bounded/tuned async executor.
+- Compare the same shape with and without backend behavior event publish.
+- If it improves, the fix should be designed as async executor isolation/backpressure or outbox/staging, not as blind Redis pool tuning.
+
+### Backend Event Publish Toggle
+
+For the next focused A/B, `BackendEventPublisher` supports a diagnostic-only toggle:
+
+```text
+axon.diagnostic.backend-event-publish-enabled=true
+```
+
+`compose.diagnostic.yml` exposes it as:
+
+```text
+AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED
+```
+
+Use this only to isolate whether successful-path backend behavior-event publishing competes with Entry resources during the burst.
+
+Example off run:
+
+```bash
+ENTRY_SPRING_PROFILES_ACTIVE=diagnostic \
+AXON_DIAGNOSTIC_ENTRY_SLOW_THRESHOLD_MS=100 \
+AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED=false \
+ENTRY_CPUS=1.5 \
+docker compose \
+  -f compose.app.yml \
+  -f compose.resources.yml \
+  -f compose.diagnostic.yml \
+  up -d --build entry-service axon-nginx
+
+docker restart axon-nginx
+```
+
+Interpretation guardrail:
+
+- If the off run improves, do not remove analytics publishing as the final fix.
+- Treat it as evidence to isolate or backpressure the async publisher, tune its executor, or move it behind a more durable staging/outbox path.
+- Final performance measurements must run with the production behavior restored.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
