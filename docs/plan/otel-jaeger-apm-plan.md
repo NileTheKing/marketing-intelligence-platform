@@ -60,6 +60,7 @@ Override `JAEGER_UI_PORT` if the host port is already in use.
 ## Files
 
 - `compose.otel.yml`: starts Jaeger and injects OTel Java Agent options into Entry/Core.
+- `compose.diagnostic.yml`: enables Entry diagnostic profile and stage timing.
 - `observability/otel-agent.env.example`: example environment values for trace runs.
 - `scripts/observability/install-otel-agent.sh`: downloads `opentelemetry-javaagent.jar`.
 
@@ -142,6 +143,62 @@ Do not compare OTel-attached latency directly against the headline baseline beca
 
 Use OTel/Jaeger to decide what to fix. Then run the final before/after measurement without `compose.otel.yml`.
 
+## Diagnostic Entry Stage Metrics
+
+OTel auto-instrumentation did not split the successful Entry `200` path enough. Long root spans still had gaps between child Redis/Kafka spans.
+
+Decision:
+
+- Do not add inline timers to `EntryApplicationService`.
+- Keep production default behavior unchanged.
+- Add diagnostic-only AOP timing behind the `diagnostic` Spring profile.
+
+Implementation:
+
+- `entry-service/src/main/java/com/axon/entry_service/config/diagnostic/EntryDiagnosticTimingAspect.java`
+- Active only when `SPRING_PROFILES_ACTIVE` includes `diagnostic`.
+- Records Micrometer timer `axon.entry.diagnostic.stage`.
+- Emits structured slow-stage logs only when a stage exceeds `axon.diagnostic.entry.slow-threshold-ms` (default `100ms`).
+
+Stages:
+
+- `entry_total`
+- `meta_lookup`
+- `token_generate`
+- `token_lookup`
+- `token_issue`
+- `fast_validation`
+- `heavy_validation`
+- `redis_reserve`
+- `backend_event_publish_async`
+
+Suggested diagnostic run settings:
+
+```bash
+ENTRY_SPRING_PROFILES_ACTIVE=diagnostic \
+AXON_DIAGNOSTIC_ENTRY_SLOW_THRESHOLD_MS=100 \
+ENTRY_CPUS=1.5 \
+docker compose \
+  -f compose.app.yml \
+  -f compose.resources.yml \
+  -f compose.diagnostic.yml \
+  up -d --build entry-service axon-nginx
+```
+
+Use Prometheus or actuator metrics to inspect:
+
+```text
+axon_entry_diagnostic_stage_seconds_count
+axon_entry_diagnostic_stage_seconds_sum
+axon_entry_diagnostic_stage_seconds_max
+```
+
+Guardrails:
+
+- Treat this as a diagnostic profile, not the operating profile.
+- Do not use diagnostic-profile latency as portfolio headline latency.
+- After identifying the bottleneck, rerun headline measurements with `diagnostic` and OTel disabled.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
@@ -177,6 +234,56 @@ Cache stampede was a real contributor:
 - After meta warm-up, Core GET disappeared from recent Entry traces.
 - k6 p95 improved from roughly `8.5s` to the `3s` range in comparable diagnostic runs.
 
+Focused A/B script:
+
+```bash
+# PRELOAD_CAMPAIGN_META=false/true is controlled by the wrapper below.
+REPEATS=3 \
+NUM_USERS=3000 \
+FCFS_LIMIT_COUNT=600 \
+MAX_VUS=600 \
+SCENARIO=waiting_burst \
+FLOW=reservation \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+./scripts/load-test/run-cache-stampede-ab-compose.sh
+```
+
+Use this only when cache stampede needs an independent evidence table. The script keeps the FCFS scenario fixed and alternates `PRELOAD_CAMPAIGN_META=false` and `true`, then writes a summary under `artifacts/load-test/*-cache-stampede-ab/summary.md`.
+
+Portfolio wording guardrail:
+
+- Strong: Jaeger showed repeated Core metadata lookup on cache miss, and metadata preload removes that lookup from the burst path.
+- Strong if the focused A/B confirms it: timeout/error tendency and p95 improved under the same resource profile.
+- Weak unless re-run as focused A/B: exact percentage improvement caused only by cache stampede removal.
+
+Focused A/B result from `20260707-040148-cache-stampede-ab`:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+
+PRELOAD_CAMPAIGN_META=false
+run1: Core activity markers 70, success 600, error 0, reservation p95 170.05ms
+run2: Core activity markers 60, success 600, error 0, reservation p95 297ms
+avg reservation p95: 233.52ms
+
+PRELOAD_CAMPAIGN_META=true
+run1: Core activity markers 0, success 600, error 0, reservation p95 118ms
+run2: Core activity markers 0, success 600, error 0, reservation p95 115ms
+avg reservation p95: 116.50ms
+```
+
+Interpretation:
+
+- At the current `600` VU diagnostic shape, cache stampede did not cause failures.
+- It still produced `60~70` unnecessary Core metadata lookups during the cache-miss window.
+- Metadata preload removed those lookups and reduced reservation p95 by roughly half in this run.
+- This should be positioned as proactive hot-path risk removal for larger bursts, not as the main outage-level bottleneck fix.
+
 Redis Lua and Kafka were not the dominant bottlenecks:
 
 - Sold-out `410` traces mostly contained `GET`, `GET`, and `EVALSHA`.
@@ -193,13 +300,36 @@ run2: error 494, success 105, p95 10000ms, rps 84.5
 improved ENTRY_CPUS=1.5
 run1: error 0, success 599, p95 4325ms, rps 162.2
 run2: error 0, success 599, p95 4311ms, rps 167.8
+
+follow-up ENTRY_CPUS=2.0 with PRELOAD_CAMPAIGN_META=true
+run1: error 0, success 600, p95 4200ms, rps 185.7
 ```
+
+Clean measurement was re-run after stopping non-Axon containers (`opicnic_*`) and Jaeger:
+
+```text
+clean baseline ENTRY_CPUS=0.6
+run1: error 706,  success 71,  p95 10000ms, rps 79.6
+run2: error 1078, success 70,  p95 10000ms, rps 77.6
+
+clean improved ENTRY_CPUS=1.5
+run1: error 0, success 600, p95 4390ms, rps 161.9
+run2: error 0, success 600, p95 6480ms, rps 156.8
+```
+
+The clean runs keep the same conclusion:
+
+- `ENTRY_CPUS=0.6` cannot reliably return responses before the k6 timeout even though Redis eventually reaches `600`.
+- `ENTRY_CPUS=1.5` removes timeout-class errors and returns all `600` successful reservation responses.
+- p95 still has run-to-run variance, so it should not be overclaimed as fully solved.
+- The defensible headline is stability/error elimination and roughly doubled throughput, not perfect tail latency.
 
 Prometheus samples supported the CPU diagnosis:
 
 - Entry CPU hit `1.0` during tests.
 - JVM live threads stayed low, around the 20s.
 - This points to CPU quota / CPU contention rather than Tomcat thread exhaustion.
+- With `ENTRY_CPUS=2.0`, throughput improved again, but p95 stayed around the `4s` range. This suggests `0.6 -> 1.5` fixed the dominant CPU quota bottleneck, while the remaining tail latency is likely in the successful `200` reservation path or same-VM load-generator contention.
 
 ### Current Conclusion
 
@@ -211,6 +341,82 @@ The result is strong enough for an engineering note:
 
 ### Remaining Work
 
-- Re-run the CPU comparison with `PRELOAD_CAMPAIGN_META=true` so `fcfs_success_count` reaches `600` instead of `599`.
-- Consider a follow-up `ENTRY_CPUS=2.0` run to see whether p95 drops below the `4s` range.
+- Re-run the `ENTRY_CPUS=1.5` comparison with `PRELOAD_CAMPAIGN_META=true` if a clean `success=600` table is needed.
+- Inspect successful `200` traces with `{"http.response.status_code":"200"}` to reduce the remaining p95.
+- Compare an external k6 run against the VM-local k6 run to separate application latency from same-VM load-generator contention.
 - For headline portfolio numbers, keep OTel disabled and collect only k6/nginx/Prometheus summaries.
+
+## Next Session Handoff
+
+Status at compact time:
+
+- Cache stampede A/B script exists at `scripts/load-test/run-cache-stampede-ab-compose.sh`.
+- The VM also has the latest quiet version of that script copied manually.
+- Java production code should not contain manual stage timers. A direct `EntryStageMetrics` attempt was reverted.
+- `entry-service/gradlew compileJava` passed after reverting that manual instrumentation.
+
+Important evidence:
+
+```text
+Cache stampede focused A/B:
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260707-040148-cache-stampede-ab
+shape: 3000 users / FCFS 600 / MAX_VUS 600 / reservation / Entry CPU 1.5
+
+PRELOAD=false:
+Core activity markers: 70, 60
+reservation p95 avg: 233.52ms
+success: 600
+error: 0
+
+PRELOAD=true:
+Core activity markers: 0, 0
+reservation p95 avg: 116.50ms
+success: 600
+error: 0
+```
+
+Interpretation:
+
+- Cache stampede was not the outage-level bottleneck at this scale.
+- It is still valid as proactive hot-path risk removal because burst-time Core metadata lookup fell from `60~70` to `0`.
+- Portfolio wording should say `hot-path external lookup removal`, not `system failure fixed`.
+
+OTel run caution:
+
+```text
+OTel diagnostic run:
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260707-043055-otel-entry15-preload-200path
+shape: Entry CPU 1.5 / PRELOAD=true / 3000 users / FCFS 600 / MAX_VUS 600
+result: success 600, error 0, sold out 2400
+http p95: 7885ms
+```
+
+- Do not use OTel-attached latency as performance evidence.
+- The OTel run is useful only for trace shape.
+- Jaeger showed successful `200` traces with these child spans:
+  - `GET campaign:1:meta`
+  - `GET RESERVATION_TOKEN:*`
+  - `EVALSHA`
+  - `SET RESERVATION_TOKEN:*`
+  - `axon.event.behavior publish`
+- In long `200` traces, child Redis/Kafka spans were small; the root span had large gaps between child spans.
+- This does not prove the remaining bottleneck is any specific method. It means automatic instrumentation is insufficient to split the Entry internal path.
+
+Rules for next session:
+
+- Do not scp uncommitted Java production code to the VM for performance claims.
+- If code changes are needed, use git commit/push/pull or an explicitly named diagnostic branch.
+- Do not permanently pollute `EntryApplicationService` with inline timing wrappers.
+- If stage-level timing is needed, prefer one of:
+  - a diagnostic-only Spring profile,
+  - an AOP/aspect around `EntryApplicationService.createEntry`,
+  - Micrometer timers isolated behind a small instrumentation component and clearly documented as diagnostic,
+  - or non-code evidence from existing Jaeger/Prometheus/nginx logs.
+- Before claiming OTel overhead, run a controlled `OTel off -> OTel on -> OTel off` comparison under the same `ENTRY_CPUS`, `PRELOAD_CAMPAIGN_META`, and traffic shape.
+
+Recommended next action:
+
+1. Keep `ENTRY_CPUS=1.5` as the diagnostic stability profile, not as final operating resource.
+2. Decide whether to build diagnostic-only stage metrics or stop at the current trace evidence.
+3. If building stage metrics, implement it in a way that does not make `EntryApplicationService` harder to read.
+4. After diagnosis, rerun headline measurements with OTel off.
