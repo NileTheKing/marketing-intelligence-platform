@@ -606,6 +606,61 @@ Interpretation:
 - Dedicated backend-event executor shows a favorable steady-state signal under strong warm-up, but do not claim it as a standalone proven p95 optimization without more repeated A/B runs.
 - Safe portfolio wording: "Separated backend event publishing into a dedicated executor and validated that the warmed reservation path remained stable under 3,000 waiting users / FCFS 600; repeated measurements showed lower tail latency, while cold-start readiness was treated as a separate concern."
 
+Reservation-path timeline:
+
+```text
+0.6 CPU baseline:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: timeout-class errors, p95 around 10s
+  interpretation: Entry CPU quota was insufficient for the burst.
+
+1.5 CPU early runs:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: success 600, error 0, but p95 still around 4~6s
+  interpretation: CPU quota fixed timeout-class errors, but tail latency was still unstable.
+
+Cache preload A/B:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: Core metadata lookups fell from 60~70 to 0; p95 moved toward the 100~200ms range.
+  interpretation: campaign meta cache warm-up removed unnecessary Core metadata calls.
+
+Repeated warmed runs:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: p95 143~162ms, then validated warm wrapper p95 115~127ms.
+  interpretation: cold-start and measurement-protocol effects were a major part of the earlier 4~6s tail.
+
+Strong warm-up:
+  shape: first full-size warm-up, then measured runs under the same reservation shape
+  result: before executor warmup p95 6100ms -> measured p95 390/349ms; after executor measured p95 206/99ms.
+  interpretation: warm-up is likely the largest factor behind the sudden p95 drop, but the exact warm-up component is not isolated.
+```
+
+Warm-up uncertainty:
+
+- Strong evidence: the same code/resource/shape can move from multi-second p95 on the first full-size run to sub-second p95 on immediately following measured runs.
+- Not yet proven: which warm-up component dominates. Candidate contributors are JVM/JIT, Kafka producer metadata/connection, Redis connection reuse, nginx/Tomcat connection path, campaign meta preload, OS/page cache, and k6/load-generator warm-up.
+- Portfolio-safe framing: the improvement should be described as separating cold-start readiness from warmed steady-state measurement, not as proving one internal warm-up mechanism.
+
+Next scope: payment/end-to-end diagnosis:
+
+- Reservation-only now covers Entry FCFS hot path.
+- Core follow-up cannot be evaluated from reservation-only because Kafka/Core DB persistence is skipped.
+- Next run should use `FLOW=payment` to drive reservation -> payment prepare -> payment confirm -> Kafka -> Core consume -> DB persistence.
+- Main metrics should shift from HTTP p95 alone to DB convergence and asynchronous processing health.
+
+Payment-flow metrics to add/check:
+
+- DB entries convergence seconds.
+- DB purchases convergence seconds.
+- Final Redis counter/users vs DB entries/purchases consistency.
+- DLQ count.
+- If needed: Kafka consumer lag, `CampaignActivityCommandBuffer` depth, `PurchaseHandler` buffer depth, flush latency, and retry fallback count.
+
+Scope boundary:
+
+- If payment prepare/confirm becomes the dominant bottleneck, treat it as a separate prerequisite bottleneck rather than forcing it into the Core follow-up story.
+- If payment confirm succeeds but DB convergence is slow or inconsistent, move into Core consumer/buffer/flush/DB persistence diagnosis.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
