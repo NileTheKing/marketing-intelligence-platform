@@ -141,7 +141,7 @@ for container in $OBSERVE_CONTAINERS; do
   docker logs --since "$K6_STARTED_AT" "$container" > "$RESULT_DIR/${container}.log" 2>&1 || true
 done
 
-FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" "$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
+FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" FLOW="$FLOW" "$SCRIPT_DIR/check-results-compose.sh" "$ACTIVITY_ID" | tee "$RESULT_DIR/domain-check.log"
 
 docker stats --no-stream > "$RESULT_DIR/docker-stats.txt"
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" > "$RESULT_DIR/docker-ps.txt"
@@ -217,7 +217,7 @@ for name, key in [
 PY
 fi
 
-tar -C "$PROJECT_ROOT/artifacts/load-test" -czf "$RESULT_ARCHIVE" "$(basename "$RESULT_DIR")"
+tar -C "$(dirname "$RESULT_DIR")" -czf "$RESULT_ARCHIVE" "$(basename "$RESULT_DIR")"
 cp "$RESULT_ARCHIVE" "$LATEST_ARCHIVE"
 cat > "$LATEST_META" <<EOF
 result_dir=$RESULT_DIR

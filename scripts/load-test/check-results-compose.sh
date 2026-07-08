@@ -32,6 +32,7 @@ if [ -n "$REDIS_PASSWORD_FROM_FILE" ]; then
 fi
 
 ACTIVITY_ID="${1:-1}"
+FLOW="${FLOW:-full}"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
@@ -69,7 +70,7 @@ DB_ENTRY_COUNT="$(mysql_query "SELECT COUNT(*) FROM campaign_activity_entries WH
 DB_PURCHASE_COUNT="$(mysql_query "SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${ACTIVITY_ID};")"
 
 EXPECTED_PURCHASES="${FCFS_LIMIT_COUNT:-0}"
-if [[ "$EXPECTED_PURCHASES" =~ ^[0-9]+$ ]] && [ "$EXPECTED_PURCHASES" -gt 0 ]; then
+if [ "$FLOW" != "reservation" ] && [[ "$EXPECTED_PURCHASES" =~ ^[0-9]+$ ]] && [ "$EXPECTED_PURCHASES" -gt 0 ]; then
   for _ in $(seq 1 30); do
     if [[ "$DB_PURCHASE_COUNT" =~ ^[0-9]+$ ]] && [ "$DB_PURCHASE_COUNT" -ge "$EXPECTED_PURCHASES" ]; then
       break
@@ -87,7 +88,12 @@ echo "Redis counter:       $REDIS_COUNT"
 echo "Redis unique users:  $REDIS_SET_SIZE"
 echo "DB entries:          $DB_ENTRY_COUNT"
 echo "DB purchases:        $DB_PURCHASE_COUNT"
+echo "Flow:                $FLOW"
 echo ""
+
+if [ "$FLOW" = "reservation" ]; then
+  echo "Reservation-only flow: Redis reservation count is the domain check target; DB persistence is not expected."
+fi
 
 if [[ "$REDIS_COUNT" =~ ^[0-9]+$ ]] && [[ "$DB_ENTRY_COUNT" =~ ^[0-9]+$ ]]; then
   ENTRY_DIFF=$((REDIS_COUNT - DB_ENTRY_COUNT))
