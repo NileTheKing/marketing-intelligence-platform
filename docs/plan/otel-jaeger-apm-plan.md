@@ -434,6 +434,99 @@ Next validation:
 - Compare against the prior publish-on baseline and publish-off runs.
 - During a bad run, collect thread dumps and inspect whether `backend-event-*` threads are active, queued, or blocked around Kafka send/callback work.
 
+### 2026-07-08 Backend Event Executor Validation
+
+Run shape:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+PRELOAD_CAMPAIGN_META: true
+Entry URL: http://127.0.0.1:28080
+Profile: diagnostic
+OTel Java agent: off
+Backend publish: enabled
+Commit: 5c52e26
+```
+
+Initial run after redeploy:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-020049-diagnostic-backend-dedicated-executor
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 6084.1ms
+http_req_duration p95: 6003.34ms
+http_reqs: 152.67/s
+```
+
+Actuator snapshot after the initial run:
+
+```text
+backend_event_publish_async: 600 calls, sum 19.25s
+spring_kafka_template_seconds: 600 calls, sum 12.25s
+executor_completed_tasks_total{name="backendEventTaskExecutor"}: 600
+executor_queued_tasks{name="backendEventTaskExecutor"}: 0
+executor_active_threads{name="backendEventTaskExecutor"}: 0
+```
+
+Interpretation:
+
+- The dedicated executor reduced the measured `backend_event_publish_async` stage compared with the previous publish-on baseline.
+- However, the initial post-redeploy run still had a high p95.
+- This means executor isolation alone was not enough evidence to call Kafka publish the steady-state bottleneck.
+- The result needed repeat runs under the same shape before making a production claim.
+
+Follow-up sampling wrapper:
+
+```text
+scripts/observability/run-entry-kafka-sampling.sh
+```
+
+The wrapper:
+
+- Restarts `axon-nginx`.
+- Requires the unauthenticated nginx probe to return `403` before load generation.
+- Runs the existing `scripts/load-test/run-baseline-compose.sh`.
+- Samples Entry actuator/Prometheus metrics during the run.
+
+Warm repeated runs under the same shape:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-021037-entry-kafka-sampling-compose-baseline
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 162ms
+http_req_duration p95: 125.16ms
+http_reqs: 241.45/s
+
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-021150-entry-kafka-sampling-compose-baseline
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 143ms
+http_req_duration p95: 119.12ms
+http_reqs: 250.03/s
+```
+
+Sampling observations:
+
+- `spring_kafka_template_seconds_count` increased by `600` per measured run.
+- `spring_kafka_template_seconds_sum` increased by only a few seconds per measured run.
+- `executor_queued_tasks` remained `0` in sampled tails.
+- `executor_active_threads` returned to `0` after publish completion.
+- The successful warm runs show Kafka publish is not currently proven to be the steady-state p95 bottleneck for this reservation-only shape.
+
+Current interpretation:
+
+- The first slow dedicated-executor run is likely affected by cold/warm-up factors such as JVM/JIT, Kafka producer metadata/connection warm-up, or immediately-after-redeploy runtime state.
+- Do not use the first post-redeploy run alone as the baseline.
+- For portfolio-grade before/after measurements, run an explicit warm-up and then compare repeated measured runs.
+- If cold-start behavior itself becomes the target, treat it as a separate problem from steady-state burst handling.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
