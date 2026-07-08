@@ -557,6 +557,23 @@ K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
 
 Use this for steady-state before/after comparisons. Use the first post-deploy run only when the explicit target is cold-start readiness.
 
+Validated warm baseline on 2026-07-08:
+
+```text
+commit: be6975a
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-074127-warm-baseline
+shape: waiting_burst / reservation / 3000 users / MAX_VUS 600 / FCFS 600 / nginx path
+
+warmup:    status 0, success 50,  error 0, reservation p95 5ms
+measured1: status 0, success 600, error 0, reservation p95 127.10ms, http p95 111.28ms, http_reqs/s 244.25
+measured2: status 0, success 600, error 0, reservation p95 115.05ms, http p95 102.43ms, http_reqs/s 248.36
+```
+
+Harness fixes made before this run:
+
+- `FLOW=reservation` now treats Redis reservation count as the domain check target; DB entry/purchase persistence is not expected.
+- Nested `RESULT_DIR` artifact paths are archived relative to their actual parent directory, avoiding false `tar: measured-* Cannot stat` failures.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?

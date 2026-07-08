@@ -178,6 +178,17 @@ K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
 
 This wrapper intentionally runs a small real reservation-path warm-up, then runs the measured baseline after `run-baseline-compose.sh` resets the test data again. Treat the warm-up run as setup, not as a measured result.
 
+Known-good validation:
+
+```text
+commit: be6975a
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-074127-warm-baseline
+measured-1: status 0, success 600, error 0, reservation p95 127.10ms
+measured-2: status 0, success 600, error 0, reservation p95 115.05ms
+```
+
+For `FLOW=reservation`, DB entries and purchases are not expected. The reservation-only domain target is Redis counter/users matching `FCFS_LIMIT_COUNT`.
+
 Fast debug loop on the VM. Use this only to isolate obvious server-side failures before running the external Mac baseline:
 
 ```bash
