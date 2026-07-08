@@ -1,6 +1,7 @@
 package com.axon.entry_service.service;
 
 import com.axon.entry_service.adapter.BehaviorEventAdapter;
+import com.axon.entry_service.config.BackendEventAsyncConfig;
 import com.axon.entry_service.event.ReservationApprovedEvent;
 import com.axon.messaging.dto.UserBehaviorEventMessage;
 import com.axon.messaging.topic.KafkaTopics;
@@ -38,7 +39,7 @@ public class BackendEventPublisher {
      *
      * @param event the reservation approved domain event
      */
-    @Async
+    @Async(BackendEventAsyncConfig.BACKEND_EVENT_TASK_EXECUTOR)
     @EventListener
     public void handleReservationApproved(ReservationApprovedEvent event) {
         if (!backendEventPublishEnabled) {

@@ -45,6 +45,12 @@ axon:
     base-url: ${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}
   cors:
     allowed-origins: ${AXON_CORS_ALLOWED_ORIGINS:${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}}
+  backend-event:
+    executor:
+      core-size: ${AXON_BACKEND_EVENT_EXECUTOR_CORE_SIZE:2}
+      max-size: ${AXON_BACKEND_EVENT_EXECUTOR_MAX_SIZE:2}
+      queue-capacity: ${AXON_BACKEND_EVENT_EXECUTOR_QUEUE_CAPACITY:1000}
+      thread-name-prefix: ${AXON_BACKEND_EVENT_EXECUTOR_THREAD_NAME_PREFIX:backend-event-}
 
 # Actuator and Metrics
 management:

@@ -319,6 +319,121 @@ Interpretation guardrail:
 - Treat it as evidence to isolate or backpressure the async publisher, tune its executor, or move it behind a more durable staging/outbox path.
 - Final performance measurements must run with the production behavior restored.
 
+### 2026-07-07 Backend Event Publish Off Run
+
+Artifact:
+
+```text
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-083033-diagnostic-backend-publish-off
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-083638-backend-publish-ab
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-085112-diagnostic-backend-publish-off2
+```
+
+Run shape:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+PRELOAD_CAMPAIGN_META: true
+AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED=false
+```
+
+Result:
+
+```text
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 4433.05ms
+http_req_duration p95: 4.43s
+http_reqs: 162.08/s
+Redis counter/users: 600/600
+```
+
+Diagnostic stage totals from Prometheus:
+
+```text
+entry_total OK: 600 calls, sum 1725.71s, max 4.38s
+entry_total GONE: 2400 calls, sum 872.72s, max 2.53s
+meta_lookup: 3000 calls, sum 729.87s, max 1.31s
+token_lookup: 3000 calls, sum 748.85s, max 1.32s
+redis_reserve: 3000 calls, sum 584.93s, max 1.31s
+token_issue: 600 calls, sum 388.22s, max 1.31s
+backend_event_publish_async: 600 calls, sum 0.01s, max 0.002s
+token_generate: 3000 calls, sum 0.38s, max 0.06s
+```
+
+Comparison to pool 8 baseline:
+
+```text
+pool 8 baseline:
+reservation p95 5335.25ms, http p95 5.33s, http_reqs 148.86/s
+backend publish off:
+reservation p95 4433.05ms, http p95 4.43s, http_reqs 162.08/s
+```
+
+Repeated A/B summary:
+
+```text
+on1:
+success 600, error 0, reservation p95 5963.2ms, http p95 5901.877ms, http_reqs 158.623/s
+backend_event_publish_async sum 573.361s
+
+off1:
+success 600, error 0, reservation p95 3291.05ms, http p95 3289.556ms, http_reqs 160.606/s
+backend_event_publish_async sum 0.008s
+
+on2:
+success 51, error 2949, reservation p95 10002ms, http p95 10000ms, http_reqs 45.307/s
+Redis counter/users 229/229
+
+off2:
+success 600, error 0, reservation p95 3963.05ms, http p95 3.96s, http_reqs 156.321/s
+backend_event_publish_async sum 0.008s
+```
+
+Interpretation:
+
+- Disabling backend approved-event publish improved repeated diagnostic runs.
+- `on2` also reproduced a severe timeout/error run while the corresponding `off` runs remained stable.
+- This supports the hypothesis that successful-path side work, especially async backend behavior-event publish, competes with Entry resources during the burst.
+- It does not justify removing analytics publishing.
+- The next production-oriented fix should isolate this async work from the hot path, e.g. a dedicated bounded executor, backpressure policy, or durable staging/outbox-like path.
+- After these off runs, the VM was restored to `AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED=true`.
+
+### Backend Event Executor Isolation
+
+Production-candidate change:
+
+- `BackendEventPublisher` now uses `@Async("backendEventTaskExecutor")`.
+- `backendEventTaskExecutor` is a dedicated `ThreadPoolTaskExecutor`.
+- Default thread prefix: `backend-event-`.
+- Default pool: `core=2`, `max=2`, `queue=1000`.
+
+Configuration:
+
+```text
+AXON_BACKEND_EVENT_EXECUTOR_CORE_SIZE=2
+AXON_BACKEND_EVENT_EXECUTOR_MAX_SIZE=2
+AXON_BACKEND_EVENT_EXECUTOR_QUEUE_CAPACITY=1000
+AXON_BACKEND_EVENT_EXECUTOR_THREAD_NAME_PREFIX=backend-event-
+```
+
+Why:
+
+- The previous `@Async` path used the default async executor, making backend analytics publish hard to isolate in dumps and metrics.
+- A dedicated executor makes thread dumps identifiable by `backend-event-*`.
+- Spring Boot Actuator/Micrometer can expose executor metrics tagged by the bean name `backendEventTaskExecutor`.
+
+Next validation:
+
+- Re-run the same `3000/600/MAX_VUS=600` publish-on scenario.
+- Compare against the prior publish-on baseline and publish-off runs.
+- During a bad run, collect thread dumps and inspect whether `backend-event-*` threads are active, queued, or blocked around Kafka send/callback work.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
