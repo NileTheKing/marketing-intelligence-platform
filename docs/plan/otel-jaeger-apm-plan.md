@@ -574,6 +574,38 @@ Harness fixes made before this run:
 - `FLOW=reservation` now treats Redis reservation count as the domain check target; DB entry/purchase persistence is not expected.
 - Nested `RESULT_DIR` artifact paths are archived relative to their actual parent directory, avoiding false `tar: measured-* Cannot stat` failures.
 
+Executor before/after check with the same warm wrapper:
+
+```text
+CPU: ENTRY_CPUS=1.5
+shape: waiting_burst / reservation / 3000 users / MAX_VUS 600 / FCFS 600 / nginx path
+
+Weak warm-up: 50 users / 5 VUs / FCFS 50
+before executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-before-executor-warm
+  measured1: status 0, success 600, error 0, reservation p95 2648.05ms
+  measured2: status 0, success 600, error 0, reservation p95 343.05ms
+after executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-after-executor-warm
+  measured1: status 0, success 600, error 0, reservation p95 3008.15ms
+  measured2: status 0, success 600, error 0, reservation p95 365.05ms
+
+Strong warm-up: 3000 users / 600 VUs / FCFS 600
+before executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-before-executor-strong-warm
+  warmup:    status 99, success 600, error 0, reservation p95 6100.20ms
+  measured1: status 0,  success 600, error 0, reservation p95 390.00ms
+  measured2: status 0,  success 600, error 0, reservation p95 349.05ms
+after executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-after-executor-strong-warm
+  warmup:    status 0, success 600, error 0, reservation p95 412.05ms
+  measured1: status 0, success 600, error 0, reservation p95 206.05ms
+  measured2: status 0, success 600, error 0, reservation p95 99.00ms
+```
+
+Interpretation:
+
+- The weak warm-up is not enough after entry redeploy; measured-1 still includes cold-start/JIT/Kafka/connection effects.
+- The strong warm-up makes the steady-state comparison more useful.
+- Dedicated backend-event executor shows a favorable steady-state signal under strong warm-up, but do not claim it as a standalone proven p95 optimization without more repeated A/B runs.
+- Safe portfolio wording: "Separated backend event publishing into a dedicated executor and validated that the warmed reservation path remained stable under 3,000 waiting users / FCFS 600; repeated measurements showed lower tail latency, while cold-start readiness was treated as a separate concern."
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
