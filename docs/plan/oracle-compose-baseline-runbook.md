@@ -158,6 +158,26 @@ nginx_entry_http=403
 
 `403` means nginx reached Entry and Spring Security rejected the unauthenticated request. That is a valid path check. `502`, `499`, or `connect() failed ... upstream` means do not run the load test yet.
 
+Warm-run before/after loop. Use this when comparing code or config changes and the first post-deploy cold run would hide the real signal:
+
+```bash
+cd ~/apps/axon
+
+SCENARIO=waiting_burst \
+FLOW=reservation \
+WARMUP_NUM_USERS=50 \
+WARMUP_MAX_VUS=5 \
+WARMUP_FCFS_LIMIT_COUNT=50 \
+MEASURED_NUM_USERS=3000 \
+MEASURED_MAX_VUS=600 \
+MEASURED_FCFS_LIMIT_COUNT=600 \
+MEASURED_RUNS=2 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-warm-baseline-compose.sh 1
+```
+
+This wrapper intentionally runs a small real reservation-path warm-up, then runs the measured baseline after `run-baseline-compose.sh` resets the test data again. Treat the warm-up run as setup, not as a measured result.
+
 Fast debug loop on the VM. Use this only to isolate obvious server-side failures before running the external Mac baseline:
 
 ```bash

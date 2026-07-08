@@ -527,6 +527,36 @@ Current interpretation:
 - For portfolio-grade before/after measurements, run an explicit warm-up and then compare repeated measured runs.
 - If cold-start behavior itself becomes the target, treat it as a separate problem from steady-state burst handling.
 
+Warm-run protocol:
+
+```text
+deploy
+-> restart nginx and require 403 unauthenticated Entry probe
+-> small hot-path warm-up
+-> reset test data
+-> measured run 1
+-> reset test data
+-> measured run 2
+```
+
+Helper:
+
+```bash
+SCENARIO=waiting_burst \
+FLOW=reservation \
+WARMUP_NUM_USERS=50 \
+WARMUP_MAX_VUS=5 \
+WARMUP_FCFS_LIMIT_COUNT=50 \
+MEASURED_NUM_USERS=3000 \
+MEASURED_MAX_VUS=600 \
+MEASURED_FCFS_LIMIT_COUNT=600 \
+MEASURED_RUNS=2 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+./scripts/load-test/run-warm-baseline-compose.sh 1
+```
+
+Use this for steady-state before/after comparisons. Use the first post-deploy run only when the explicit target is cold-start readiness.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
