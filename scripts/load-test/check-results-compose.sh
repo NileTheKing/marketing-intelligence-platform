@@ -70,11 +70,30 @@ DB_ENTRY_COUNT="$(mysql_query "SELECT COUNT(*) FROM campaign_activity_entries WH
 DB_PURCHASE_COUNT="$(mysql_query "SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${ACTIVITY_ID};")"
 
 EXPECTED_PURCHASES="${FCFS_LIMIT_COUNT:-0}"
+ENTRY_CONVERGENCE_SECONDS="n/a"
+PURCHASE_CONVERGENCE_SECONDS="n/a"
 if [ "$FLOW" != "reservation" ] && [[ "$EXPECTED_PURCHASES" =~ ^[0-9]+$ ]] && [ "$EXPECTED_PURCHASES" -gt 0 ]; then
-  for _ in $(seq 1 30); do
-    if [[ "$DB_PURCHASE_COUNT" =~ ^[0-9]+$ ]] && [ "$DB_PURCHASE_COUNT" -ge "$EXPECTED_PURCHASES" ]; then
+  for second in $(seq 0 30); do
+    if [ "$ENTRY_CONVERGENCE_SECONDS" = "n/a" ] \
+      && [[ "$DB_ENTRY_COUNT" =~ ^[0-9]+$ ]] \
+      && [ "$DB_ENTRY_COUNT" -ge "$EXPECTED_PURCHASES" ]; then
+      ENTRY_CONVERGENCE_SECONDS="$second"
+    fi
+
+    if [ "$PURCHASE_CONVERGENCE_SECONDS" = "n/a" ] \
+      && [[ "$DB_PURCHASE_COUNT" =~ ^[0-9]+$ ]] \
+      && [ "$DB_PURCHASE_COUNT" -ge "$EXPECTED_PURCHASES" ]; then
+      PURCHASE_CONVERGENCE_SECONDS="$second"
+    fi
+
+    if [ "$ENTRY_CONVERGENCE_SECONDS" != "n/a" ] && [ "$PURCHASE_CONVERGENCE_SECONDS" != "n/a" ]; then
       break
     fi
+
+    if [ "$second" -eq 30 ]; then
+      break
+    fi
+
     sleep 1
     DB_ENTRY_COUNT="$(mysql_query "SELECT COUNT(*) FROM campaign_activity_entries WHERE campaign_activity_id = ${ACTIVITY_ID};")"
     DB_PURCHASE_COUNT="$(mysql_query "SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${ACTIVITY_ID};")"
@@ -89,6 +108,8 @@ echo "Redis unique users:  $REDIS_SET_SIZE"
 echo "DB entries:          $DB_ENTRY_COUNT"
 echo "DB purchases:        $DB_PURCHASE_COUNT"
 echo "Flow:                $FLOW"
+echo "Entries convergence seconds:   $ENTRY_CONVERGENCE_SECONDS"
+echo "Purchases convergence seconds: $PURCHASE_CONVERGENCE_SECONDS"
 echo ""
 
 if [ "$FLOW" = "reservation" ]; then
