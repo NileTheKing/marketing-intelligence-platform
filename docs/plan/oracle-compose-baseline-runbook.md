@@ -189,6 +189,39 @@ measured-2: status 0, success 600, error 0, reservation p95 115.05ms
 
 For `FLOW=reservation`, DB entries and purchases are not expected. The reservation-only domain target is Redis counter/users matching `FCFS_LIMIT_COUNT`.
 
+Payment flow warm-run validation:
+
+```bash
+cd ~/apps/axon
+
+SCENARIO=waiting_burst \
+FLOW=payment \
+WARMUP_NUM_USERS=50 \
+WARMUP_MAX_VUS=5 \
+WARMUP_FCFS_LIMIT_COUNT=50 \
+MEASURED_NUM_USERS=3000 \
+MEASURED_MAX_VUS=600 \
+MEASURED_FCFS_LIMIT_COUNT=600 \
+MEASURED_RUNS=1 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+  ./scripts/load-test/run-warm-baseline-compose.sh 1
+```
+
+Known-good validation:
+
+```text
+commit: 93a29a5
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-payment-main-600
+measured-1: status 0, success 600, error 0, reservation p95 1194.20ms, http p95 1621.06ms
+domain: Redis 600/600, DB entries/purchases 600/600, convergence 0s/0s
+
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260709-payment-main-600-repeat
+measured-1: status 0, success 600, error 0, reservation p95 613.05ms, http p95 799.01ms
+domain: Redis 600/600, DB entries/purchases 600/600, convergence 0s/0s
+```
+
+For `FLOW=payment`, `check-results-compose.sh` prints DB entries/purchases convergence seconds. Use this as the first split between payment-path failure and Core async persistence delay.
+
 Fast debug loop on the VM. Use this only to isolate obvious server-side failures before running the external Mac baseline:
 
 ```bash

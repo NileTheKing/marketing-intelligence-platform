@@ -661,6 +661,50 @@ Scope boundary:
 - If payment prepare/confirm becomes the dominant bottleneck, treat it as a separate prerequisite bottleneck rather than forcing it into the Core follow-up story.
 - If payment confirm succeeds but DB convergence is slow or inconsistent, move into Core consumer/buffer/flush/DB persistence diagnosis.
 
+2026-07-08/09 payment-flow validation:
+
+```text
+shape: payment / waiting_burst / 3000 users / MAX_VUS 600 / nginx path
+tooling: run-warm-baseline-compose.sh + check-results-compose.sh DB convergence output
+
+smoke:
+  artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-payment-smoke-300
+  FCFS limit: 300
+  result: status 0, success 300, error 0
+  reservation p95: 2654ms
+  http p95: 2894ms
+  DB entries/purchases: 300/300
+  entries convergence: 0s
+  purchases convergence: 0s
+
+main:
+  artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-payment-main-600
+  FCFS limit: 600
+  result: status 0, success 600, error 0
+  reservation p95: 1194ms
+  http p95: 1621ms
+  DB entries/purchases: 600/600
+  entries convergence: 0s
+  purchases convergence: 0s
+
+repeat:
+  artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260709-payment-main-600-repeat
+  FCFS limit: 600
+  result: status 0, success 600, error 0
+  reservation p95: 613ms
+  http p95: 799ms
+  DB entries/purchases: 600/600
+  entries convergence: 0s
+  purchases convergence: 0s
+```
+
+Interpretation:
+
+- At `3000 users / FCFS 600 / MAX_VUS 600`, payment prepare/confirm did not fail in the measured runs.
+- Core DB persistence also did not show delayed convergence in these runs.
+- Therefore the next Core-focused diagnosis needs either a higher success load, finer async pipeline metrics, or a separate scenario that stresses Core independently of Entry reservation capacity.
+- Do not claim this proves Core has no bottleneck. It only proves the current warmed payment scenario did not expose one.
+
 ## Questions To Answer
 
 - Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
