@@ -16,6 +16,7 @@ NUM_USERS="${NUM_USERS:-${1:-1000}}"
 ACTIVITY_ID="${ACTIVITY_ID:-${2:-1}}"
 MAX_VUS="${MAX_VUS:-100}"
 SCENARIO="${SCENARIO:-spike}"
+PRELOAD_CAMPAIGN_META="${PRELOAD_CAMPAIGN_META:-true}" # warm campaign meta cache on the VM before the measured burst
 FLOW="${FLOW:-payment}"
 FCFS_LIMIT_COUNT="${FCFS_LIMIT_COUNT:-200}"
 ARRIVAL_PRE_ALLOCATED_VUS="${ARRIVAL_PRE_ALLOCATED_VUS:-200}"
@@ -88,7 +89,7 @@ EOF
 
 echo ""
 echo "== Step 1/4: prepare VM seed and JWT tokens =="
-ssh_vm "cd '$REMOTE_DIR' && FCFS_LIMIT_COUNT='$FCFS_LIMIT_COUNT' PRODUCT_ID='$PRODUCT_ID' ./scripts/load-test/prepare-load-test-compose.sh '$NUM_USERS' '$ACTIVITY_ID'"
+ssh_vm "cd '$REMOTE_DIR' && PRELOAD_CAMPAIGN_META='$PRELOAD_CAMPAIGN_META' FCFS_LIMIT_COUNT='$FCFS_LIMIT_COUNT' PRODUCT_ID='$PRODUCT_ID' ./scripts/load-test/prepare-load-test-compose.sh '$NUM_USERS' '$ACTIVITY_ID'"
 
 REMOTE_TOKEN_COUNT="$(ssh_vm "cd '$REMOTE_DIR' && python3 -c 'import json; j=json.load(open(\"scripts/load-test/jwt-tokens.json\")); print(len(j))'")"
 echo "Remote JWT tokens: $REMOTE_TOKEN_COUNT / $NUM_USERS"
