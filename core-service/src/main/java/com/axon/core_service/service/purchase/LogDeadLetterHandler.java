@@ -1,6 +1,7 @@
 package com.axon.core_service.service.purchase;
 
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.messaging.topic.KafkaTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 class LogDeadLetterHandler implements DeadLetterHandler<PurchaseInfoDto> {
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final CorePipelineMetrics pipelineMetrics;
 
     @Override
     public void handle(PurchaseInfoDto data, Throwable reason) {
@@ -26,6 +28,7 @@ class LogDeadLetterHandler implements DeadLetterHandler<PurchaseInfoDto> {
         // [PORTFOLIO POINT] Persistent DLQ for Auditability
         try {
             kafkaTemplate.send(KafkaTopics.PURCHASE_FAILED_DLT, data);
+            pipelineMetrics.recordDltRouted("purchase", 1);
             log.info("📢 [DLQ] Failed purchase sent to {}: userId={}", KafkaTopics.PURCHASE_FAILED_DLT, data.userId());
         } catch (Exception e) {
             log.error("❌ [DLQ] Failed to send message to DLT: {}", e.getMessage());

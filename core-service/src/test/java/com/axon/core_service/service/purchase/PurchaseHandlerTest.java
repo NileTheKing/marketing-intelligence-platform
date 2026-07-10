@@ -4,7 +4,9 @@ import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.service.ProductService;
 import com.axon.core_service.service.UserSummaryService;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -44,8 +46,19 @@ class PurchaseHandlerTest {
     @Mock
     private DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
 
+    @Mock
+    private CorePipelineMetrics pipelineMetrics;
+
     @InjectMocks
     private PurchaseHandler purchaseHandler;
+
+    @BeforeEach
+    void executeMeasuredPurchaseFlush() {
+        lenient().doAnswer(invocation -> {
+            invocation.getArgument(1, Runnable.class).run();
+            return null;
+        }).when(pipelineMetrics).recordPurchaseFlush(anyInt(), any(Runnable.class));
+    }
 
     @Test
     @DisplayName("일반 구매(SHOP) 이벤트는 즉시 처리되어야 한다")

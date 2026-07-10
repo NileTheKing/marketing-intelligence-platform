@@ -1,5 +1,6 @@
 package com.axon.core_service.service;
 
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 
@@ -19,6 +20,7 @@ public class CampaignActivityConsumerService {
     private final int kafkaBatchBuffer = 20;
     private final CampaignActivityCommandBuffer buffer;
     private final CampaignActivityCommandDispatcher dispatcher;
+    private final CorePipelineMetrics pipelineMetrics;
 
     /**
      * Handles an incoming campaign activity message from the CAMPAIGN_ACTIVITY_COMMAND topic and delegates processing to the matching CampaignStrategy.
@@ -65,7 +67,7 @@ public class CampaignActivityConsumerService {
         }
 
         log.info("Processing Micro batch: {} messages", messages.size());
-        dispatcher.dispatch(messages);
+        pipelineMetrics.recordCommandFlush(messages.size(), () -> dispatcher.dispatch(messages));
     }
     /**
      * 버퍼에서 메시지 추출

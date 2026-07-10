@@ -78,7 +78,7 @@ public class SecurityConfig {
                                                 .authenticated()
                                                 .requestMatchers("/api/v1/**").permitAll()
                                                 .requestMatchers("/core/api/v1/**").authenticated() // Core API 인증 필수
-                                                .requestMatchers("/actuator/health").permitAll()
+                                                .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                                                 // .requestMatchers("/admin/**").hasRole(Role.ADMIN.name())
                                                 .anyRequest().authenticated())
                                 .exceptionHandling(exceptions -> exceptions

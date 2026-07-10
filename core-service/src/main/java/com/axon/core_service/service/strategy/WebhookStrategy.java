@@ -2,6 +2,7 @@ package com.axon.core_service.service.strategy;
 
 import com.axon.core_service.client.WebhookClient;
 import com.axon.core_service.client.dto.WebhookRequest;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.batch.BatchStrategy;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
@@ -22,6 +23,7 @@ public class WebhookStrategy implements BatchStrategy {
 
     private final WebhookClient webhookClient;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final CorePipelineMetrics pipelineMetrics;
 
     @Override
     public CampaignActivityType getType() {
@@ -75,5 +77,6 @@ public class WebhookStrategy implements BatchStrategy {
         log.error("Webhook permanently failed. Sending to DLT: idempotencyKey={}",
                 request.getIdempotencyKey(), lastFailure);
         kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, request);
+        pipelineMetrics.recordDltRouted("webhook", 1);
     }
 }

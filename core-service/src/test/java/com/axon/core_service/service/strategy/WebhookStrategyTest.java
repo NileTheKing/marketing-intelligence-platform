@@ -2,6 +2,7 @@ package com.axon.core_service.service.strategy;
 
 import com.axon.core_service.client.WebhookClient;
 import com.axon.core_service.client.dto.WebhookRequest;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
@@ -29,10 +30,13 @@ class WebhookStrategyTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private CorePipelineMetrics pipelineMetrics;
+
     @Test
     @DisplayName("Webhook 전송 성공 시 idempotency key를 포함해 외부 호출해야 한다")
     void processBatch_WhenWebhookSucceeds_SendsRequest() {
-        WebhookStrategy strategy = new WebhookStrategy(webhookClient, kafkaTemplate);
+        WebhookStrategy strategy = new WebhookStrategy(webhookClient, kafkaTemplate, pipelineMetrics);
         CampaignActivityKafkaProducerDto message = message();
 
         strategy.processBatch(List.of(message));
@@ -50,7 +54,7 @@ class WebhookStrategyTest {
     @Test
     @DisplayName("Webhook 전송이 계속 실패하면 3회 재시도 후 DLT로 격리해야 한다")
     void processBatch_WhenWebhookKeepsFailing_SendsToDlt() {
-        WebhookStrategy strategy = new WebhookStrategy(webhookClient, kafkaTemplate);
+        WebhookStrategy strategy = new WebhookStrategy(webhookClient, kafkaTemplate, pipelineMetrics);
         doThrow(new RuntimeException("timeout"))
                 .when(webhookClient).send(any(WebhookRequest.class));
 
@@ -58,6 +62,7 @@ class WebhookStrategyTest {
 
         verify(webhookClient, times(3)).send(any(WebhookRequest.class));
         verify(kafkaTemplate).send(eq(KafkaTopics.WEBHOOK_FAILED_DLT), any(WebhookRequest.class));
+        verify(pipelineMetrics).recordDltRouted("webhook", 1);
     }
 
     private CampaignActivityKafkaProducerDto message() {

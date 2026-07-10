@@ -2,6 +2,7 @@ package com.axon.core_service.service.purchase;
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.event.CampaignActivityApprovedEvent;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.ProductService;
 import com.axon.core_service.service.UserSummaryService;
 import jakarta.annotation.PreDestroy;
@@ -33,6 +34,7 @@ public class PurchaseHandler {
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
+    private final CorePipelineMetrics pipelineMetrics;
 
     // Purchase 이벤트 버퍼
     private final ConcurrentLinkedQueue<PurchaseInfoDto> purchaseBuffer = new ConcurrentLinkedQueue<>();
@@ -97,7 +99,10 @@ public class PurchaseHandler {
         }
 
         log.info("Processing Purchase batch: {} purchases", purchases.size());
+        pipelineMetrics.recordPurchaseFlush(purchases.size(), () -> processBatch(purchases));
+    }
 
+    private void processBatch(List<PurchaseInfoDto> purchases) {
         boolean needRetry = false;
         try {
             // 2-1. Product별 재고 감소량 집계
@@ -169,6 +174,7 @@ public class PurchaseHandler {
     }
 
     private void retryIndividually(List<PurchaseInfoDto> purchases) {
+        pipelineMetrics.recordPurchaseIndividualRetry(purchases.size());
         for (PurchaseInfoDto purchase : purchases) {
             try {
                 // 1. 구매 저장 (REQUIRES_NEW Transaction in Service)
@@ -208,6 +214,10 @@ public class PurchaseHandler {
         }
 
         return drained;
+    }
+
+    public int bufferedPurchaseCount() {
+        return purchaseBuffer.size();
     }
 
     /**

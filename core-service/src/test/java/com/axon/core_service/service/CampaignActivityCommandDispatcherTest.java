@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.axon.core_service.service.strategy.CampaignStrategy;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
@@ -18,8 +19,9 @@ class CampaignActivityCommandDispatcherTest {
     void dispatchSendsFailedBatchToDlt() {
         CampaignStrategy strategy = new FailingCampaignStrategy();
         KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
         CampaignActivityCommandDispatcher dispatcher =
-                new CampaignActivityCommandDispatcher(List.of(strategy), kafkaTemplate);
+                new CampaignActivityCommandDispatcher(List.of(strategy), kafkaTemplate, pipelineMetrics);
         CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
                 .campaignActivityId(1L)
@@ -29,6 +31,7 @@ class CampaignActivityCommandDispatcherTest {
         dispatcher.dispatch(List.of(message));
 
         verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), eq(message));
+        verify(pipelineMetrics).recordDltRouted("campaign-command", 1);
     }
 
     private static class FailingCampaignStrategy implements CampaignStrategy {

@@ -1,5 +1,6 @@
 package com.axon.core_service.service;
 
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.batch.BatchStrategy;
 import com.axon.core_service.service.strategy.CampaignStrategy;
 import com.axon.messaging.CampaignActivityType;
@@ -19,13 +20,16 @@ public class CampaignActivityCommandDispatcher {
 
     private final Map<CampaignActivityType, CampaignStrategy> strategies;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final CorePipelineMetrics pipelineMetrics;
 
     public CampaignActivityCommandDispatcher(
             List<CampaignStrategy> strategyList,
-            KafkaTemplate<String, Object> kafkaTemplate) {
+            KafkaTemplate<String, Object> kafkaTemplate,
+            CorePipelineMetrics pipelineMetrics) {
         this.strategies = strategyList.stream()
                 .collect(Collectors.toUnmodifiableMap(CampaignStrategy::getType, Function.identity()));
         this.kafkaTemplate = kafkaTemplate;
+        this.pipelineMetrics = pipelineMetrics;
     }
 
     public void dispatch(List<CampaignActivityKafkaProducerDto> messages) {
@@ -62,6 +66,7 @@ public class CampaignActivityCommandDispatcher {
             log.error("Error processing batch for type {}: {}", type, e.getMessage(), e);
             log.warn("🚨 [DLQ] Sending {} failed messages to DLT: {}", batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
             batch.forEach(msg -> kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, msg));
+            pipelineMetrics.recordDltRouted("campaign-command", batch.size());
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.axon.core_service.scheduler;
 
 import com.axon.core_service.domain.purchase.Purchase;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.repository.PurchaseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.util.List;
 public class ReconciliationScheduler {
 
     private final PurchaseRepository purchaseRepository;
+    private final CorePipelineMetrics pipelineMetrics;
 
     /**
      * [Ghost Data 탐지 대사 배치]
@@ -35,12 +37,21 @@ public class ReconciliationScheduler {
 
         log.info("[Reconciliation] 시작: Ghost Purchase 스캔 기간 {} ~ {}", startDate, endDate);
 
-        List<Purchase> ghostPurchases = purchaseRepository.findGhostPurchases(startDate, endDate);
+        List<Purchase> ghostPurchases;
+        try {
+            ghostPurchases = purchaseRepository.findGhostPurchases(startDate, endDate);
+        } catch (RuntimeException e) {
+            pipelineMetrics.recordReconciliationFailure();
+            throw e;
+        }
 
         if (ghostPurchases.isEmpty()) {
+            pipelineMetrics.recordReconciliationResult(0);
             log.info("[Reconciliation] 정상: 발견된 Ghost 데이터가 없습니다.");
             return;
         }
+
+        pipelineMetrics.recordReconciliationResult(ghostPurchases.size());
 
         // 고아 데이터 발견 시 강력한 에러 로깅 (Sentry, ELK, Datadog 알람 연동 목적)
         log.error("🚨 [GHOST DETECTED] 데이터 정합성 오류 발생! 참여 기록 없이 결제된 고아 데이터 {}건 발견!", ghostPurchases.size());

@@ -3,6 +3,7 @@ package com.axon.core_service.scheduler;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.observability.CorePipelineMetrics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +26,9 @@ class ReconciliationSchedulerTest {
     @Mock
     private PurchaseRepository purchaseRepository;
 
+    @Mock
+    private CorePipelineMetrics pipelineMetrics;
+
     @InjectMocks
     private ReconciliationScheduler reconciliationScheduler;
 
@@ -41,6 +45,7 @@ class ReconciliationSchedulerTest {
         // Then
         verify(purchaseRepository, times(1))
                 .findGhostPurchases(any(LocalDateTime.class), any(LocalDateTime.class));
+        verify(pipelineMetrics).recordReconciliationResult(0);
         // 동작 간 예외가 발생하지 않고 무사히 넘어감을 보장합니다.
     }
 
@@ -66,6 +71,7 @@ class ReconciliationSchedulerTest {
         // Then
         verify(purchaseRepository, times(1))
                 .findGhostPurchases(any(LocalDateTime.class), any(LocalDateTime.class));
+        verify(pipelineMetrics).recordReconciliationResult(1);
         // 로깅 로직 수행 중 NPE 등 크러시가 발생하지 않는지 검증합니다.
     }
 }
