@@ -1,5 +1,8 @@
 server:
   port: 8081
+  tomcat:
+    mbeanregistry:
+      enabled: true # expose tomcat connector/thread MBeans as metrics for burst diagnosis
 spring:
   threads:
     virtual:
@@ -61,3 +64,6 @@ management:
   metrics:
     tags:
       application: ${spring.application.name:entry-service}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true # publish _bucket series so Prometheus can compute server-side p95 per endpoint
