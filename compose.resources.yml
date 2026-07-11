@@ -22,7 +22,10 @@ services:
       JAVA_TOOL_OPTIONS: ${CORE_JAVA_TOOL_OPTIONS:--Xms512m -Xmx2g}
 
   entry-service:
-    cpus: ${ENTRY_CPUS:-0.6}
+    # 1.5 is the validated FCFS spike value (0.6 was measured insufficient). ceil(1.5)=2 virtual-thread carriers.
+    # Note: with all defaults this profile sums to ~4.65 on a 4 vCPU host; it relies on measured idle headroom
+    # in mysql/kafka/redis under the spike. Rebalance those down if you need the paper sum <= 4.
+    cpus: ${ENTRY_CPUS:-1.5}
     mem_limit: ${ENTRY_MEM_LIMIT:-2g}
     environment:
       JAVA_TOOL_OPTIONS: ${ENTRY_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1536m}
