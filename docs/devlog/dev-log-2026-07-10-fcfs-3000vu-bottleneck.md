@@ -53,15 +53,35 @@ With host nginx already tuned, the remaining apparent "collapses" traced to meas
 
 Each config is a **single run** (N=1); variance under identical conditions was not characterized. Client `reservation_duration` p95 is capped by k6 `timeout: '10s'`; "10 s (clipped)" means the true latency was worse and requests were aborted (→ nginx 499).
 
-## Primary server-side explanation: virtual-thread carrier count
+## What CPU does here: carrier count (`ceil` of quota) — stated by confidence tier
 
-Entry runs on virtual threads (`spring.threads.virtual.enabled: true`). The carrier (platform) thread count the scheduler uses is `Runtime.availableProcessors()`, which the JVM derives in a cgroup as `ceil(cpu.max)` and Micrometer exposes as `system_cpu_count`:
+Entry runs on virtual threads (`spring.threads.virtual.enabled: true`). The carrier (platform) thread count the scheduler uses is `Runtime.availableProcessors()`, which the JVM derives in a cgroup as `ceil(cpu.max)` and Micrometer exposes as `system_cpu_count`.
 
-- entry 1.5 → `ceil(1.5) = 2` carriers (`system_cpu_count=2`) → reservation server p95 **4,197 ms**
-- entry 2.0 → `ceil(2.0) = 2` carriers (same count) → **no server-side improvement**
-- entry 2.5 → `ceil(2.5) = 3` carriers (`system_cpu_count=3`) → reservation server p95 **1,781 ms**
+Server-side reservation p95 observed (each a **single, warmup-inconsistent run** — do not read as a clean curve):
 
-Interpretation (defensive): under this JVM/cgroup configuration, **carrier count is the primary explanation** for server-side reservation latency, and raising the CPU quota *without* changing `ceil(cpu.max)` did not help. This is a strong single-run result plus a documented mechanism (ForkJoinPool parallelism = `availableProcessors`), confirmed by `system_cpu_count`. It is **not** yet a variance-quantified conclusion — repeats under identical conditions are needed before stating it as settled. The improvement is invisible in client E2E p95 because Axis-B confound #4 swamps it, which is exactly why the server-side histogram had to be enabled.
+| entry | `ceil` = carriers | reservation server p95 |
+|---|---|---|
+| 0.6 | 1 | (prior work: timeout-class errors, see Tier 2) |
+| 1.5 | 2 | 4,197 ms |
+| 2.0 | 2 | ~5,100 ms |
+| 2.1 | 3 | 5,173 ms **and** 2,017 ms (two runs) |
+| 2.5 | 3 | 1,781 ms |
+
+Stated by confidence, not as a settled "saturation curve":
+
+- **Tier 1 — fact:** carrier count = `ceil(cpu.max)`, confirmed via `system_cpu_count` (0.6→1, 1.5→2, 2.5→3). Documented JVM behaviour; no repeats needed.
+- **Tier 2 — well supported (partly via prior docs):** 0.6 is far worse than 1.5. Basis: the earlier `otel-jaeger-apm-plan` result recorded *timeout-class errors eliminated and throughput ~2×* (a categorical effect, not a small p95 shift, so it resists run noise), plus the mechanism — `ceil(0.6)=1` serialises all virtual threads through a single carrier. Confident on direction; the exact "2×" magnitude was not re-verified this session.
+- **Tier 3 — NOT established (was over-claimed):** the effect of going above 1.5 (2→3 carriers). Our 1.5–2.5 runs are N=1 and confounded by the warm-up ramp (below); the same config (2.1) produced 5,173 ms and 2,017 ms. So we **failed to measure** a reliable difference — this is *inconclusive*, not evidence that more carriers do not help. Settling it needs identical-protocol repeats (recreate → multi-burst warm-up → N≥3).
+
+Whatever the server-side truth, it is invisible in client E2E p95 because Axis-B confound #4 swamps it — which is why the server-side histogram had to be enabled.
+
+### Reservation is robust; the payment path is the fragile part; warm-up is a multi-burst ramp
+
+Two findings from a `FLOW=reservation` isolation run (external, entry 1.5):
+
+- **Reservation-only never collapsed**: 3× runs each 800/800, error 0. All the collapses, 499s, and orphan reservations were a **payment-flow** phenomenon (the `entry→core` prepare/confirm hops), not the FCFS admission path. Redis-Lua admission itself is solid.
+- **`entry↔core` contention costs ~1,200 ms**: reservation server p95 was 2,966 ms with core idle (CPU 0.27) in reservation-only, versus 4,197 ms with core busy (CPU 0.64) under payment. Payment makes entry and core compete for the shared 4 cores at the same instant.
+- **Warm-up is a ramp, not a one-shot**: successive reservation-only runs gave client p95 8,316 → 6,044 → 3,545 ms (monotonic). One warm-up burst is not "warmed". This is a large part of why the single-run CPU numbers above are noisy, and it upgrades the warm-up gate from "Ready ≠ warmed" to "one burst ≠ warmed".
 
 ### Rejected causes (measured innocent)
 
@@ -83,7 +103,7 @@ Under contamination the signature is consistent: Redis Lua admits exactly `FCFS_
    - `run-external-compose-baseline.sh` forwards `PRELOAD_CAMPAIGN_META` (default true) to the VM prepare step.
 2. **Config drift fix**: VM `.env` pins `ENTRY_CPUS=1.5`, `CORE_CPUS=1.2`; and the repo default in `compose.resources.yml` was corrected from the stale `0.6` to the validated `1.5` (see git history). Previously 1.5 lived only in an ephemeral shell env, so a plain `docker compose up` would silently revert entry to `0.6`.
 
-Entry was returned to 1.5 (2 carriers) as the validated baseline. Entry 2.5 (3 carriers) is a measured server-side improvement and a candidate for adoption; it fits the box (`2.5 + core 1.2 + datastores ≈ 3.7 < 4`), pending variance repeats.
+Entry was returned to 1.5 (2 carriers) as the validated steady-state baseline: it reliably serves 800/800, keeps headroom for core (the fragile payment path, which is also not owned by this workstream), and the big CPU win (0.6→1.5) is already banked there. Raising entry (2.1/2.5 → 3 carriers) is *not* an established improvement (Tier 3 above) and, on a shared 4-core box, a larger entry limit mainly lets entry win more contention against whatever else runs concurrently. A defensible use of a higher value is a **dedicated event window** (pause batch/scheduler, bump entry via `.env`, revert after) — i.e. part of pre-event tuning, not the steady-state default.
 
 ## Remaining limits and conclusion
 
