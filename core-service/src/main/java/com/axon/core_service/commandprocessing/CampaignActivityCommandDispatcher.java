@@ -1,8 +1,6 @@
-package com.axon.core_service.service;
+package com.axon.core_service.commandprocessing;
 
 import com.axon.core_service.observability.CorePipelineMetrics;
-import com.axon.core_service.service.batch.BatchStrategy;
-import com.axon.core_service.service.strategy.CampaignStrategy;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;

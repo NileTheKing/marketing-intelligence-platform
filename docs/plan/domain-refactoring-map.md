@@ -92,6 +92,10 @@ Cross-cutting code stays at the root: `config`, `config/auth`, `aop`, `observabi
 - Keep package names lowercase and concise. Prefer `entry`, not `campaignactivityentry`; the class name already carries the detailed noun.
 - A source file used by two features stays with the feature that owns its state or decision. The other feature depends on its public application/domain contract; do not duplicate entities or repositories to avoid an import.
 
+### Migration Progress
+
+- 2026-07-14: `commandprocessing` moved without behavior changes. This includes the Kafka consumer, command buffer, dispatcher, batch/typed strategies, command DLT routing, pipeline-metrics buffer import, and their focused tests. `CohortLtvBatchService` intentionally remains under Purchase ownership despite its historical `batch` package name.
+
 ### High-Traffic Flow
 
 1. `EntryController.createEntry()` maps HTTP input to `EntryApplicationService`; the application service validates request/user/meta and calls Redis reservation.

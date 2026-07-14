@@ -1,11 +1,10 @@
-package com.axon.core_service.service.strategy;
+package com.axon.core_service.commandprocessing;
 
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntryStatus;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.service.ActivityUserKey;
 import com.axon.core_service.service.CampaignActivityEntryService;
-import com.axon.core_service.service.batch.BatchStrategy;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import lombok.RequiredArgsConstructor;

@@ -1,7 +1,6 @@
-package com.axon.core_service.service.batch;
+package com.axon.core_service.commandprocessing;
 
 
-import com.axon.core_service.service.strategy.CampaignStrategy;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 
 import java.util.List;

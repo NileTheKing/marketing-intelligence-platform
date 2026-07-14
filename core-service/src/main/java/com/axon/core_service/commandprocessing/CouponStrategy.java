@@ -1,10 +1,9 @@
-package com.axon.core_service.service.strategy;
+package com.axon.core_service.commandprocessing;
 
 import com.axon.core_service.domain.coupon.Coupon;
 import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.UserCouponRepository;
-import com.axon.core_service.service.batch.BatchStrategy;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import lombok.RequiredArgsConstructor;

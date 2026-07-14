@@ -1,10 +1,9 @@
-package com.axon.core_service.service;
+package com.axon.core_service.commandprocessing;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.axon.core_service.service.strategy.CampaignStrategy;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;

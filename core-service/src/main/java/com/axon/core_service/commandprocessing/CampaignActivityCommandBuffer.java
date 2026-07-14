@@ -1,4 +1,4 @@
-package com.axon.core_service.service;
+package com.axon.core_service.commandprocessing;
 
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import java.util.ArrayList;

@@ -1,4 +1,4 @@
-package com.axon.core_service.service;
+package com.axon.core_service.commandprocessing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

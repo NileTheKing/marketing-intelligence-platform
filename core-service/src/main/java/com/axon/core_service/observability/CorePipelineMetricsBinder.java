@@ -1,6 +1,6 @@
 package com.axon.core_service.observability;
 
-import com.axon.core_service.service.CampaignActivityCommandBuffer;
+import com.axon.core_service.commandprocessing.CampaignActivityCommandBuffer;
 import com.axon.core_service.service.purchase.PurchaseHandler;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;

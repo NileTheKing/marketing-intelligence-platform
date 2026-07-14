@@ -1,4 +1,4 @@
-package com.axon.core_service.service;
+package com.axon.core_service.commandprocessing;
 
 import com.axon.core_service.domain.campaign.Campaign;
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;

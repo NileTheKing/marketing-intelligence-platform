@@ -1,4 +1,4 @@
-package com.axon.core_service.service.strategy;
+package com.axon.core_service.commandprocessing;
 
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
