@@ -101,13 +101,13 @@ generate_funnel() {
         SESSION_ID="session-$uid-$(date +%s)"
         
         # 1. PAGE_VIEW
-        curl -s -X POST "${ENTRY_SERVICE_URL}/entry/api/v1/behavior/events" \
+        curl -s -X POST "${ENTRY_SERVICE_URL}/api/v1/behavior-events" \
             -H "Content-Type: application/json" \
             -d "{\"eventName\":\"PAGE_VIEW\",\"triggerType\":\"PAGE_VIEW\",\"occurredAt\":\"$OCCURRED_AT\",\"userId\":$uid,\"sessionId\":\"$SESSION_ID\",\"pageUrl\":\"/campaign-activity/$aid/view\",\"properties\":{\"activityId\":$aid}}" > /dev/null
 
         # 2. CLICK
         if [ $((i * 100 / visits)) -lt $click_rate_pct ]; then
-            curl -s -X POST "${ENTRY_SERVICE_URL}/entry/api/v1/behavior/events" \
+            curl -s -X POST "${ENTRY_SERVICE_URL}/api/v1/behavior-events" \
                 -H "Content-Type: application/json" \
                 -d "{\"eventName\":\"CLICK\",\"triggerType\":\"CLICK\",\"occurredAt\":\"$OCCURRED_AT\",\"userId\":$uid,\"sessionId\":\"$SESSION_ID\",\"pageUrl\":\"/campaign-activity/$aid/view\",\"properties\":{\"activityId\":$aid}}" > /dev/null
 

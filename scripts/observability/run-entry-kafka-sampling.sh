@@ -13,7 +13,7 @@ ACTIVITY_ID="${2:-1}"
 SAMPLE_SECONDS="${SAMPLE_SECONDS:-35}"
 SAMPLE_INTERVAL_SECONDS="${SAMPLE_INTERVAL_SECONDS:-1}"
 ENTRY_ACTUATOR_URL="${ENTRY_ACTUATOR_URL:-http://127.0.0.1:8081/actuator/prometheus}"
-NGINX_ENTRY_URL="${NGINX_ENTRY_URL:-http://127.0.0.1:28080/entry/api/v1/entries}"
+NGINX_ENTRY_URL="${NGINX_ENTRY_URL:-http://127.0.0.1:28080/api/v1/entries}"
 
 RUN_ID="$(date '+%Y%m%d-%H%M%S')-entry-kafka-sampling"
 RESULT_ROOT="${RESULT_ROOT:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID-compose-baseline}"

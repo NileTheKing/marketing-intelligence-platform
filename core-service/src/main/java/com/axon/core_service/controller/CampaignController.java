@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/campaign")
+@RequestMapping("/api/v1/campaigns")
 @RequiredArgsConstructor
 public class CampaignController {
 

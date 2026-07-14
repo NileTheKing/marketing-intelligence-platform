@@ -71,7 +71,7 @@ function setupEventListeners() {
         };
 
         try {
-            const url = isEdit ? `/api/coupons/${couponId}` : '/api/coupons';
+            const url = isEdit ? `/api/v1/coupons/${couponId}` : '/api/v1/coupons';
             const method = isEdit ? 'PUT' : 'POST';
 
             const response = await fetch(url, {
@@ -146,7 +146,7 @@ function openEditModal(coupon) {
 function deleteCoupon(id) {
     if (!confirm('정말로 이 쿠폰을 삭제하시겠습니까?')) return;
 
-    fetch(`/api/coupons/${id}`, {
+    fetch(`/api/v1/coupons/${id}`, {
         method: 'DELETE'
     })
         .then(response => {
@@ -283,7 +283,7 @@ function validateForm() {
 
 async function fetchCoupons() {
     try {
-        const response = await fetch('/api/coupons');
+        const response = await fetch('/api/v1/coupons');
         const coupons = await response.json();
         renderCouponList(coupons);
     } catch (error) {

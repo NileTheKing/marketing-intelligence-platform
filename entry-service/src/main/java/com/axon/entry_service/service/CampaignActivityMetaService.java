@@ -125,7 +125,7 @@ public class CampaignActivityMetaService {
         try {
             String accessToken = jwtTokenProvider.generateAccessToken(0L);// system user
             return campaignRestClient.get()
-                    .uri("/api/v1/campaign/activities/{id}", campaignActivityId)
+                    .uri("/api/v1/campaign-activities/{id}", campaignActivityId)
                     .header("Authorization", "Bearer " + accessToken)
                     .retrieve()
                     .body(CampaignActivitySummaryResponse.class);

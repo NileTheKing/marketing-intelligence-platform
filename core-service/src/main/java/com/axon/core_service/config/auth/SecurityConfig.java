@@ -61,21 +61,22 @@ public class SecurityConfig {
                                                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))  // Allow session for OAuth2 login to preserve original request
                                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
                                 .authorizeHttpRequests(authz -> authz
-                                                .requestMatchers("/", "/mainshop", "/css/**", "/image/**", "/images/**", "/js/**", "/uploads/**",
+                                                .requestMatchers("/", "/shop", "/css/**", "/image/**", "/images/**", "/js/**", "/uploads/**",
                                                                         "/h2-console/**", "/favicon.ico", "/welcomepage",
                                                                 "/welcomepage.html", "/test/**")
                                                 .permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/campaign/**", "/api/v1/dashboard/**",
-                                                                "/api/v1/store/**", "/api/v1/products/**")
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**",
+                                                                "/api/v1/dashboard/**", "/api/v1/store/**", "/api/v1/products/**")
                                                 .permitAll()
-                                                .requestMatchers(HttpMethod.POST, "/api/v1/campaign/**", "/api/v1/files/**")
+                                                .requestMatchers(HttpMethod.POST, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**", "/api/v1/files/**")
                                                 .authenticated()
-                                                .requestMatchers(HttpMethod.PUT, "/api/v1/campaign/**")
+                                                .requestMatchers(HttpMethod.PUT, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**")
                                                 .authenticated()
-                                                .requestMatchers(HttpMethod.PATCH, "/api/v1/campaign/**")
+                                                .requestMatchers(HttpMethod.PATCH, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**")
                                                 .authenticated()
-                                                .requestMatchers(HttpMethod.DELETE, "/api/v1/campaign/**")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**")
                                                 .authenticated()
+                                                .requestMatchers("/api/v1/coupons/**").authenticated()
                                                 .requestMatchers("/api/v1/**").permitAll()
                                                 .requestMatchers("/core/api/v1/**").authenticated() // Core API 인증 필수
                                                 .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
@@ -95,7 +96,7 @@ public class SecurityConfig {
                                                 .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/naver")))
                                 .logout(logout -> logout
                                                 .logoutUrl("/logout")
-                                                .logoutSuccessUrl("/mainshop")
+                                                .logoutSuccessUrl("/shop")
                                                 .deleteCookies("accessToken", "refreshToken")  // Delete JWT cookies
                                                 .addLogoutHandler(customLogoutHandler)  // Custom cleanup (Redis, events)
                                                 .permitAll())

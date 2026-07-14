@@ -23,8 +23,8 @@
             // Production: use /entry path (Nginx routing)
             const isLocal = window.location.hostname === 'localhost';
             window.__AXON_TRACKER_COLLECT_ENDPOINT__ = isLocal
-                ? 'http://localhost:8081/entry/api/v1/behavior/events'
-                : '/entry/api/v1/behavior/events';
+                ? 'http://localhost:8081/api/v1/behavior-events'
+                : '/api/v1/behavior-events';
 
             /*[# th:if="${#authentication != null and #authentication.principal != 'anonymousUser'}"]*/
                 try {

@@ -29,7 +29,7 @@ public class StoreController {
     @Value("${axon.entry-service-url}")
     private String entryServiceUrl;
 
-    @GetMapping("/mainshop")
+    @GetMapping("/shop")
     public String mainshop(@RequestParam(required = false) String category, Model model) {
         StoreViewService.MainShopViewData viewData = storeViewService.getMainShopViewData(category);
 
@@ -47,7 +47,7 @@ public class StoreController {
         return "mainshop";
     }
 
-    @GetMapping("/product/{id}")
+    @GetMapping("/products/{id}")
     public String productDetail(@PathVariable Long id, Model model) {
         model.addAttribute("product", storeViewService.getProductDisplay(id));
         return "product/detail";
@@ -84,7 +84,7 @@ public class StoreController {
         return "campaign-activities";
     }
 
-    @GetMapping("/campaign-activity/{id}")
+    @GetMapping("/campaign-activities/{id}")
     public String getCampaignActivityDetail(@PathVariable Long id, Model model) {
         StoreViewService.CampaignActivityDisplayDto campaignActivity =
                 storeViewService.getActiveCampaignActivity(id);

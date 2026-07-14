@@ -76,7 +76,7 @@ class CampaignActivityControllerTest {
                 .thenReturn(response);
 
         mockMvc.perform(
-                        post("/api/v1/campaign/{campaignId}/activities", 1L)
+                        post("/api/v1/campaigns/{campaignId}/activities", 1L)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -107,7 +107,7 @@ class CampaignActivityControllerTest {
 
         Mockito.when(campaignActivityService.getCampaignActivities(3L)).thenReturn(List.of(activity));
 
-        mockMvc.perform(get("/api/v1/campaign/{campaignId}/activities", 3L))
+        mockMvc.perform(get("/api/v1/campaigns/{campaignId}/activities", 3L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(activity.getId()))
                 .andExpect(jsonPath("$[0].participantCount").value(activity.getParticipantCount()));

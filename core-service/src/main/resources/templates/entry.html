@@ -312,7 +312,7 @@
 
             window.__AXON_TRACKER_OVERRIDES__ = {
                 apiBaseUrl: '',
-                collectEndpoint: window.ENTRY_SERVICE_BASE + '/entry/api/v1/behavior/events',
+                collectEndpoint: window.ENTRY_SERVICE_BASE + '/api/v1/behavior-events',
                 tokenProvider: () => common.getCookie('accessToken'),
                 debug: true
             };
@@ -505,7 +505,7 @@
                             productId: [[${ campaignActivity.productId }]]
                         };
 
-                        fetch(window.ENTRY_SERVICE_BASE + '/entry/api/v1/entries', {
+                        fetch(window.ENTRY_SERVICE_BASE + '/api/v1/entries', {
                             method: 'POST',
                             credentials: 'include',
                             headers: {

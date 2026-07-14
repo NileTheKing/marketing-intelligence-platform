@@ -4,7 +4,7 @@
 ENTRY_SERVICE_URL="${ENTRY_SERVICE_URL:-http://localhost:8081}"
 
 ACTIVITY_ID=${1:-11}
-EVENT_ENDPOINT="$ENTRY_SERVICE_URL/entry/api/v1/behavior/events"
+EVENT_ENDPOINT="$ENTRY_SERVICE_URL/api/v1/behavior-events"
 RESERVE_ENDPOINT="$ENTRY_SERVICE_URL/api/v1/test/reserve"
 
 echo "Streaming traffic burst for Activity: $ACTIVITY_ID"

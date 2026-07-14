@@ -111,7 +111,7 @@ public class ReservationTokenService {
 
         // Redis에 없으면 토큰 자체를 검증 (오버 엔지니어링 또는 부하가 예상되면 뺄 예정)
         if (verifyTokenSignature(token)) {
-            log.warn("토큰 서명은 유효하지만 Redis에 없음 (만료 또는 첫 시도): token={}...", substring);
+            log.debug("토큰 서명은 유효하지만 Redis에 없음 (만료 또는 첫 시도): token={}...", substring);
         } else {
             log.warn("토큰 검증 실패 (위변조 또는 잘못된 형식): token={}...", substring);
         }

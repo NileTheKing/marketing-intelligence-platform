@@ -14,13 +14,12 @@ import org.springframework.web.bind.annotation.*;
 
 @Slf4j
 @RestController
-@RequestMapping("/entry/api/v1/entries")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*") // Same-origin via Ingress, wildcard for flexibility
 public class EntryController {
     private final EntryApplicationService entryApplicationService;
 
-    @PostMapping("/coupon")
+    @PostMapping("/api/v1/coupon-entries")
     public ResponseEntity<?> issueCoupon(@Valid @RequestBody EntryRequestDto requestDto,
             @RequestHeader("Authorization") String token,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -48,7 +47,7 @@ public class EntryController {
      *         500 Internal Server Error for unexpected reservation failures.
      */
 
-    @PostMapping
+    @PostMapping("/api/v1/entries")
     public ResponseEntity<?> createEntry(@Valid @RequestBody EntryRequestDto requestDto,
             @RequestHeader("Authorization") String token,
             @AuthenticationPrincipal UserDetails userDetails) {

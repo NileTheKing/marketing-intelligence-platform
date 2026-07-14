@@ -175,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function fetchAndRenderCoupons() {
-        fetch('/api/coupons')
+        fetch('/api/v1/coupons')
             .then(res => res.json())
             .then(coupons => {
                 loadedCoupons = coupons;
@@ -224,7 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Basic Logic ---
     function loadCampaigns() {
-        fetch("/api/v1/campaign")
+        fetch("/api/v1/campaigns")
             .then(res => res.json())
             .then(campaigns => {
                 campaigns.forEach(campaign => {
@@ -480,7 +480,7 @@ document.addEventListener("DOMContentLoaded", () => {
             };
 
             try {
-                const response = await fetch(`/api/v1/campaign/${campaignId}/activities`, {
+                const response = await fetch(`/api/v1/campaigns/${campaignId}/activities`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)

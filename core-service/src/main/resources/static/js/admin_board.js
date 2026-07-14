@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.adminModalHandler.showCreateActivityModal(selectedCampaignId);
                 } else {
                     // Fallback to navigating to the create activity page with campaign ID
-                    window.location.href = `/admin-create-campaign-activities?campaignId=${selectedCampaignId}`;
+                    window.location.href = `/admin/campaign-activities/new?campaignId=${selectedCampaignId}`;
                 }
             } else {
                 alert('캠페인을 먼저 선택해주세요.');
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function fetchCampaigns() {
-        fetch('/api/v1/campaign')
+        fetch('/api/v1/campaigns')
             .then((response) => response.json())
             .then((data) => {
                 campaignsData = data;

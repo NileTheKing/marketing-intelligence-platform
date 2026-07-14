@@ -6,8 +6,8 @@
   'use strict';
 
   const DEFAULT_API_BASE = ''; // Use relative path (same origin via Ingress)
-  const DEFAULT_COLLECT_ENDPOINT = '/entry/api/v1/behavior/events'; // entry-service via Ingress
-  const DEFAULT_DIAGNOSTICS_ENDPOINT = '/entry/api/v1/behavior/events/diagnostics';
+  const DEFAULT_COLLECT_ENDPOINT = '/api/v1/behavior-events'; // entry-service via Ingress
+  const DEFAULT_DIAGNOSTICS_ENDPOINT = '/api/v1/behavior-events/diagnostics';
   const DEFAULT_SCRIPT_SRC = '/js/behavior-tracker.js';
 
   const overrides = global.__AXON_TRACKER_OVERRIDES__ || {};

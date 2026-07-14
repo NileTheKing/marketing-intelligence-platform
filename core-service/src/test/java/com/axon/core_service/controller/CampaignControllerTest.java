@@ -77,7 +77,7 @@ class CampaignControllerTest {
         Mockito.when(campaignService.createCampaign(Mockito.any(CampaignRequest.class))).thenReturn(response);
 
         mockMvc.perform(
-                        post("/api/v1/campaign")
+                        post("/api/v1/campaigns")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -107,7 +107,7 @@ class CampaignControllerTest {
 
         Mockito.when(campaignService.getCampaigns()).thenReturn(List.of(response));
 
-        mockMvc.perform(get("/api/v1/campaign"))
+        mockMvc.perform(get("/api/v1/campaigns"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(response.getId()))
                 .andExpect(jsonPath("$[0].name").value(response.getName()));
@@ -127,7 +127,7 @@ class CampaignControllerTest {
 
         Mockito.when(campaignService.getCampaign(campaignId)).thenReturn(response);
 
-        mockMvc.perform(get("/api/v1/campaign/{id}", campaignId))
+        mockMvc.perform(get("/api/v1/campaigns/{id}", campaignId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(campaignId))
                 .andExpect(jsonPath("$.name").value("Spring Sale"));

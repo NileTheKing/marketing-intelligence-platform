@@ -26,8 +26,8 @@ public class WebController {
      */
     @GetMapping("/")
     public String index() {
-        log.info("Redirecting to /mainshop");
-        return "redirect:/mainshop";
+        log.info("Redirecting to /shop");
+        return "redirect:/shop";
     }
 
     /**
@@ -90,7 +90,7 @@ public class WebController {
      *
      * @return the view name "admin_create_campaignActivitys"
      */
-    @GetMapping("/admin-create-campaign-activities")
+    @GetMapping("/admin/campaign-activities/new")
     public String admin_create_event() {
         log.info("Serving admin_create_campaignActivitys.html");
         return "admin_create_campaignActivitys";

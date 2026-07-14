@@ -38,7 +38,7 @@ window.adminModalHandler = {
         confirmDeleteBtn.addEventListener('click', async () => {
             const token = common.getCookie("accessToken");
             try {
-                const res = await fetch(`/api/v1/campaign/activities/${campaignActivityId}`, {
+                const res = await fetch(`/api/v1/campaign-activities/${campaignActivityId}`, {
                     method: 'DELETE',
                     headers: { "Authorization": `Bearer ${token}` },
                 });
@@ -63,8 +63,8 @@ window.adminModalHandler = {
         if (existingModal) existingModal.remove();
 
         const [activityDetails, campaigns] = await Promise.all([
-            fetch(`/api/v1/campaign/activities/${campaignActivityId}`).then(res => res.ok ? res.json() : Promise.reject('캠페인 활동 정보를 불러오는데 실패했습니다.')),
-            fetch('/api/v1/campaign').then(res => res.ok ? res.json() : Promise.reject('캠페인 목록을 불러오는데 실패했습니다.'))
+            fetch(`/api/v1/campaign-activities/${campaignActivityId}`).then(res => res.ok ? res.json() : Promise.reject('캠페인 활동 정보를 불러오는데 실패했습니다.')),
+            fetch('/api/v1/campaigns').then(res => res.ok ? res.json() : Promise.reject('캠페인 목록을 불러오는데 실패했습니다.'))
         ]).catch(error => {
             console.error('Error fetching data for edit modal:', error);
             alert(error);
@@ -469,7 +469,7 @@ window.adminModalHandler = {
         }
 
         function fetchAndRenderCoupons() {
-            fetch('/api/coupons')
+            fetch('/api/v1/coupons')
                 .then(res => res.json())
                 .then(coupons => {
                     loadedCoupons = coupons;
@@ -684,7 +684,7 @@ window.adminModalHandler = {
             };
 
             try {
-                const res = await fetch(`/api/v1/campaign/activities/${campaignActivityId}`, {
+                const res = await fetch(`/api/v1/campaign-activities/${campaignActivityId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${common.getCookie("accessToken")}` },
                     body: JSON.stringify(payload)
@@ -747,7 +747,7 @@ window.adminModalHandler = {
         confirmBtn.addEventListener('click', async () => {
             const token = common.getCookie("accessToken");
             try {
-                const res = await fetch(`/api/v1/campaign/activities/${campaignActivityId}/status?status=${newStatus}`, {
+                const res = await fetch(`/api/v1/campaign-activities/${campaignActivityId}/status?status=${newStatus}`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
@@ -770,7 +770,7 @@ window.adminModalHandler = {
         if (existingModal) existingModal.remove();
 
         try {
-            const res = await fetch(`/api/v1/campaign/${campaignId}`);
+            const res = await fetch(`/api/v1/campaigns/${campaignId}`);
             if (!res.ok) throw new Error('캠페인 정보를 불러오는데 실패했습니다.');
             const campaign = await res.json();
 
@@ -853,7 +853,7 @@ window.adminModalHandler = {
                 const token = common.getCookie("accessToken");
 
                 try {
-                    const res = await fetch(`/api/v1/campaign/${campaignId}`, {
+                    const res = await fetch(`/api/v1/campaigns/${campaignId}`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
@@ -963,7 +963,7 @@ window.adminModalHandler = {
             if (!name) { alert('캠페인 이름을 입력하세요.'); return; }
 
             try {
-                const res = await fetch(`/api/v1/campaign/exists?name=${encodeURIComponent(name)}`);
+                const res = await fetch(`/api/v1/campaigns/exists?name=${encodeURIComponent(name)}`);
                 const isTaken = await res.json();
 
                 if (isTaken) {
@@ -1021,7 +1021,7 @@ window.adminModalHandler = {
             const token = common.getCookie("accessToken");
 
             try {
-                const res = await fetch('/api/v1/campaign', {
+                const res = await fetch('/api/v1/campaigns', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

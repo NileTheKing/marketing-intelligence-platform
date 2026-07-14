@@ -15,7 +15,7 @@
             <h2 class="text-3xl font-black mb-8" th:text="${selectedCategory} + ' PRODUCTS'">CATEGORY</h2>
             <div class="grid grid-cols-4 gap-x-5 gap-y-8">
                 <div th:each="item : ${categoryProducts}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/product/' + ${item.id} + '\''">
+                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
                     <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
                         <img th:src="${item.imageUrl}"
                             class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
@@ -134,7 +134,7 @@
 
             <div class="grid grid-cols-5 gap-x-5 gap-y-8 mb-24 mx-[3%]">
                 <div th:each="item, stat : ${rankings}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/product/' + ${item.id} + '\''">
+                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
                     <div class="w-full aspect-[3/4] bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
                         <div class="absolute top-0 left-0 bg-black text-white w-9 h-9 flex items-center justify-center font-extrabold text-lg z-10"
                             th:text="${stat.count}">1</div>
@@ -160,12 +160,12 @@
             <!-- Tech Section -->
             <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
                 <h3 class="text-2xl font-extrabold text-black tracking-tight">테크 특가</h3>
-                <a href="/mainshop?category=TECH"
+                <a href="/shop?category=TECH"
                     class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
             </div>
             <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
                 <div th:each="item : ${techDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/product/' + ${item.id} + '\''">
+                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
                     <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
                         <img th:src="${item.imageUrl}"
                             class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
@@ -186,12 +186,12 @@
             <!-- Food Section -->
             <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
                 <h3 class="text-2xl font-extrabold text-black tracking-tight">푸드 특가</h3>
-                <a href="/mainshop?category=FOOD"
+                <a href="/shop?category=FOOD"
                     class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
             </div>
             <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
                 <div th:each="item : ${foodDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/product/' + ${item.id} + '\''">
+                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
                     <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
                         <img th:src="${item.imageUrl}"
                             class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
@@ -212,12 +212,12 @@
             <!-- Fashion Section -->
             <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
                 <h3 class="text-2xl font-extrabold text-black tracking-tight">패션 특가</h3>
-                <a href="/mainshop?category=FASHION"
+                <a href="/shop?category=FASHION"
                     class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
             </div>
             <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
                 <div th:each="item : ${fashionDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/product/' + ${item.id} + '\''">
+                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
                     <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
                         <img th:src="${item.imageUrl}"
                             class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
@@ -238,12 +238,12 @@
             <!-- Home Section -->
             <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
                 <h3 class="text-2xl font-extrabold text-black tracking-tight">홈/리빙 특가</h3>
-                <a href="/mainshop?category=HOME"
+                <a href="/shop?category=HOME"
                     class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
             </div>
             <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
                 <div th:each="item : ${homeDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/product/' + ${item.id} + '\''">
+                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
                     <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
                         <img th:src="${item.imageUrl}"
                             class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
