@@ -105,7 +105,7 @@ graph TB
 ### 실행 및 검증 환경
 
 - **대표 검증 환경**: KT Cloud K2P(Kubernetes to Production) 기반. Core/Entry 서비스 분리 배포, Kafka/Redis/MySQL/Elasticsearch, Prometheus/Grafana, Fluent Bit/Kibana 구성을 통해 3,000 VU 스파이크 시나리오를 검증했습니다.
-- **현재 재현 환경**: Oracle Cloud A1 Flex VM + Docker Compose. Core/Entry/MySQL/Redis/Kafka를 단일 VM에서 실행하고, k6 baseline과 Pinpoint/Actuator 기반 병목 분석을 위한 경량 실행 경로로 사용합니다.
+- **현재 재현 환경**: Oracle Cloud A1 Flex VM + Docker Compose. Core/Entry/MySQL/Redis/Kafka를 단일 VM에서 실행하고, k6 baseline과 OpenTelemetry/Jaeger 기반 병목 분석을 위한 경량 실행 경로로 사용합니다.
 - **Network & Security**: K2P 환경에서는 Public IP를 특정 워커 노드에 1:1 매핑(Static NAT)하고, 방화벽 설정으로 필요한 포트만 허용했습니다.
 - **배포 자동화**: K2P용 GitHub Actions/Kubernetes 매니페스트는 `Legacy Manual` 경로로 보존하고, 현재 VM 배포는 `compose.app.yml` 기반 GitHub Actions workflow로 운영합니다.
 
@@ -238,6 +238,6 @@ graph TB
 
 - 분석 파이프라인(Elasticsearch/Kibana/Kafka Connect): `docker compose -f compose.app.yml -f compose.analytics.yml up -d`
 - 메트릭(Prometheus/Grafana): `docker compose -f compose.app.yml -f compose.metrics.yml up -d`
-- APM 진단(Pinpoint agent 주입): `docker compose -f compose.app.yml -f compose.resources.yml -f compose.trace.yml up -d --build`
+- APM 진단(OpenTelemetry/Jaeger): `docker compose -f compose.app.yml -f compose.resources.yml -f compose.otel.yml up -d --build`
 - Compose baseline 부하 테스트: `./scripts/load-test/run-baseline-compose.sh 1000 1`
 - K2P/Kubernetes 배포 파일: `k8s/`, `helm/`, `.github/workflows/deploy.yml`에 보존되어 있습니다. 최신 코드로 재배포하려면 현재 멀티모듈 Docker build context와 런타임 profile을 환경에 맞게 점검해야 합니다.

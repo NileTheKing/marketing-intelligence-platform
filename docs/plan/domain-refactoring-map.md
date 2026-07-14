@@ -27,9 +27,74 @@ The project currently mixes two package styles.
 | Layer package | `controller`, `service`, `repository`, `domain/dto` | Easy to find Spring stereotypes, but business boundary is not visible from the package tree. |
 | Partial domain package | `domain/campaignactivity`, `domain/coupon`, `service/strategy`, `service/purchase` | Some business concepts are grouped, but services still cross several concepts. |
 
+This is a layered Spring application with partial feature packaging, not a full DDD or hexagonal package layout. The directory tree is not the architecture itself: the meaningful architecture is service/module ownership and dependency direction. Packages are useful when they make those boundaries easier to read.
+
+### Core Package Direction
+
+The final cleanup may cover the whole Core service, but do not make it one unreviewable package-move commit. Split the mechanical move by feature boundary so compile failures and incorrect ownership decisions remain local.
+
+Target orientation:
+
+```text
+core-service
+├── campaign/
+│   ├── api/               # CampaignController, request/response DTO
+│   ├── application/       # CampaignService
+│   ├── domain/            # Campaign entity and domain policy
+│   └── persistence/       # CampaignRepository
+├── entry/                 # durable CampaignActivityEntry persistence/retry/query
+├── commandprocessing/     # Kafka listener, buffer, dispatcher, strategies
+├── marketing/             # rule evaluation + action definition/emission
+├── coupon/                # coupon definition and user coupon state
+├── purchase/              # purchase and user-summary projection
+├── behavior/              # behavior collection/query/funnel mapping
+├── dashboard/             # dashboard API/query/assembly
+├── store/                 # Thymeleaf store views
+├── catalog/               # Product API/domain/persistence
+├── eventdefinition/       # operator-defined event configuration
+└── config, observability, support
+```
+
+This is a vertical feature-first navigation goal, not a partial move of only `service` and `repository`. A feature owns its API/controller, application service, domain model, and persistence adapter together, so a reader can follow one capability without jumping through global layer folders. DDD does not require this fixed template; it is a navigation choice that makes the chosen domain boundaries visible. Existing stable code stays where it is unless a concrete change already touches that boundary.
+
+### Core Feature Package Migration Map
+
+This map is the agreed target for a behavior-preserving package refactor. It is based on current collaboration, not a rule that every package must have `api/application/domain/persistence` subfolders. Keep a feature flat until it has enough files to justify another level.
+
+| Target feature | Move together | Keep outside the feature | Reason |
+|---|---|---|---|
+| `campaign` | `CampaignController`, `CampaignActivityController`, `CampaignService`, `CampaignActivityService`, `Campaign`, `CampaignActivity`, campaign/activity request-response-filter DTOs, `CampaignRepository`, `CampaignActivityRepository` | `CampaignActivityEntry*` | Campaign and activity definition/administration change together; a durable participation record has a different lifecycle. |
+| `entry` | `CampaignActivityEntryQueryController`, `CampaignActivityEntry*` services, entity/status/page DTOs, repository, `ReconciliationScheduler`, eligibility validation API/services | Redis reservation and payment token logic in entry-service | Core owns durable participation persistence, retry, query, and reconciliation. |
+| `commandprocessing` | `CampaignActivityConsumerService`, command buffer, dispatcher, `CampaignStrategy`, `BatchStrategy`, FCFS/coupon/webhook strategies, command DLT handling, command-pipeline metrics | `MarketingRule` evaluation | This owns Kafka command intake, buffering, dispatch, and failure isolation. It executes a command; it does not decide whether a marketing action should exist. |
+| `marketing` | `MarketingRule`, `MarketingAction`, their repositories, `BehaviorTriggerScheduler`, rule/action evaluation helpers | command consumer and strategy dispatch | This owns condition evaluation and action selection. It emits commands to the processing boundary. |
+| `coupon` | `CouponController`, `CouponService`, `Coupon`, `UserCoupon`, coupon DTOs, coupon repositories | `CouponStrategy` | Coupon definition and user coupon state are a business capability. The strategy is a Kafka command handler, so it remains in command processing. |
+| `purchase` | `Purchase`, `PurchaseService`, `PurchaseHandler`, dead-letter handler, purchase repository/DTOs, `UserSummary`, user-summary service/repository, purchase scheduler, cohort/LTV/RFM services and schedulers | OAuth user authentication | These are durable commerce facts and projections derived from purchase flow. |
+| `behavior` | `BehaviorEventService`, core behavior publisher/adapter, funnel definition/step, behavior-event collection/query controller if it remains in Core | dashboard assembly | This owns behavior-event interpretation; dashboard consumes its query result. |
+| `dashboard` | dashboard REST/SSR/query controllers, `DashboardService`, metric/realtime services, calculator, dashboard DTOs/domain values, LLM query services | raw behavior storage/query | This owns dashboard response assembly and controlled insight querying. |
+| `store` | `StoreController`, `StoreViewService`, store-only view routes | admin/dashboard views | This owns Thymeleaf shopping experience composition. |
+| `catalog` | `ProductController`, `ProductService`, `Product`, `ProductRepository` | store view composition | Product is a catalog capability reused by campaign and store. |
+| `eventdefinition` | `EventController`, `EventService`, `Event`, `EventDefinitionAudit`, related repository/DTO/converter | behavior events | Existing `Event` means operator-defined event configuration, not a collected `BehaviorEvent`; keep the distinction visible. |
+
+Cross-cutting code stays at the root: `config`, `config/auth`, `aop`, `observability`, `support`, generic exception handling, application bootstrap, and test fixtures. `MonitoringController` stays with `observability`; `FileController` and fake-data/test controllers remain support/test-only adapters until a concrete feature owns them.
+
+### Explicit Ownership Decisions
+
+1. `CampaignActivity` belongs to `campaign`, while `CampaignActivityEntry` belongs to `entry`. The former defines an event; the latter records a user's durable participation.
+2. `MarketingAction` belongs to `marketing`, while `CouponStrategy` and `WebhookStrategy` belong to `commandprocessing`. Marketing decides and emits; command processing executes and isolates failure.
+3. `DashboardService` remains separate from `behavior`. Dashboard assembles read models across behavior, campaigns, and purchases; it should not own raw behavior collection semantics.
+4. Scheduled jobs move with their business owner where clear: behavior-trigger → `marketing`, reconciliation → `entry`, purchase projection/cohort/RFM → `purchase`. The scheduler annotation is an adapter detail, not a reason to collect all jobs in one global package.
+
+### Migration Rules
+
+- This is a package/import refactor only. Do not alter HTTP contracts, Kafka topics, Spring bean names, database mappings, scheduling policy, or business logic in the same change.
+- Move main code and its focused tests together. Test packages mirror the new production feature package where possible.
+- Use one commit per feature boundary. Start with `commandprocessing`, then `marketing`, then `campaign` + `entry`; leave dashboard/purchase/store for separate commits because their file count and dependency surface are larger.
+- Keep package names lowercase and concise. Prefer `entry`, not `campaignactivityentry`; the class name already carries the detailed noun.
+- A source file used by two features stays with the feature that owns its state or decision. The other feature depends on its public application/domain contract; do not duplicate entities or repositories to avoid an import.
+
 ### High-Traffic Flow
 
-1. `EntryController.createEntry()` validates request/user/meta and calls Redis reservation.
+1. `EntryController.createEntry()` maps HTTP input to `EntryApplicationService`; the application service validates request/user/meta and calls Redis reservation.
 2. `EntryReservationService.reserve()` executes Lua script and publishes `ReservationApprovedEvent`.
 3. Payment flow uses `PaymentController.preparePayment()` and `PaymentController.confirmPayment()`.
 4. `PaymentService.sendToKafkaWithRetry()` sends `CampaignActivityKafkaProducerDto` to Kafka and waits for broker ACK.
@@ -52,6 +117,7 @@ The project currently mixes two package styles.
 2. It queries behavior data through `BehaviorEventService`.
 3. It creates `CampaignActivityKafkaProducerDto` reward commands.
 4. Existing Kafka command processing handles `COUPON` / `WEBHOOK` through strategy dispatch.
+5. `MarketingRule` is the condition and has active `MarketingAction` children. `BehaviorTriggerScheduler` evaluates each active action independently, so one rule can issue a coupon, invoke a webhook, or do both. Action-level Redis dedup and Kafka send-failure cleanup are handled per action.
 
 ## 2. Ubiquitous Language Draft
 
@@ -69,6 +135,7 @@ The project currently mixes two package styles.
 | `FunnelStep` | Dashboard-facing common step. | `VISIT`, `ENGAGE`, `QUALIFY`, `PURCHASE`. |
 | `TriggerType` | Raw behavior event type. | `PAGE_VIEW`, `CLICK`, `PURCHASE`, etc. |
 | `MarketingRule` | Operator-defined condition for behavior-triggered reward. | Scheduler/evaluation domain. |
+| `MarketingAction` | Executable action attached to a rule. | Current action types are coupon issue and webhook; future push/email use the same rule-to-action boundary. |
 
 ### Terms That Currently Collide
 
@@ -93,7 +160,7 @@ These are candidates, not mandatory package moves.
 | Entry Persistence | Durable `CampaignActivityEntry` upsert, batch retry, purchase event publication after approved entry. | Kafka listener mechanics, Redis reservation. | `CampaignActivityEntryService`, `CampaignActivityEntryRetryService`, `CampaignActivityEntryRepository` |
 | Purchase / Commerce | Durable purchase records, LTV/cohort, user summary purchase metrics. | Payment API token validation. | `PurchaseService`, `PurchaseHandler`, `CohortAnalysisService`, `CohortLtvBatchService`, `UserSummaryService` |
 | Behavior Analytics | Behavior event collection/query, funnel mapping, dashboard stats. | Campaign mutation and payment command execution. | `BehaviorEventService`, `DashboardService`, `CampaignFunnelDefinition`, `FunnelStep`, `TriggerType` |
-| Marketing Automation | Rule evaluation, reward command emission, execution history if added later. | Coupon persistence internals and webhook HTTP delivery internals. | `BehaviorTriggerScheduler`, `MarketingRule`, `CouponStrategy`, `WebhookStrategy` |
+| Marketing Automation | Rule evaluation, action-level dedup, reward command emission. | Coupon persistence internals and webhook HTTP delivery internals. | `BehaviorTriggerScheduler`, `MarketingRule`, `MarketingAction`, `CouponStrategy`, `WebhookStrategy` |
 | LLM Query | Controlled dashboard query/tooling, answer formatting, metadata boundary. | Direct DB mutation or uncontrolled operations. | `GeminiLLMQueryService`, `MockLLMQueryService`, `LLMQueryService` |
 
 ## 4. Martin Fowler Style Code Smells
@@ -103,14 +170,14 @@ These are candidates, not mandatory package moves.
 | File | Evidence | Risk | Small refactoring direction |
 |---|---|---|---|
 | `core-service/src/main/java/com/axon/core_service/service/DashboardService.java` | One service assembles activity, campaign, global dashboard, heatmap, GMV, ROAS, ranking, and ES error fallback. | Hard to test dashboard calculations independently; future metric changes can touch a large class. | Extract calculation helpers such as `DashboardMetricCalculator`; later extract query assemblers by dashboard level. |
-| `entry-service/src/main/java/com/axon/entry_service/controller/EntryController.java` | Controller performs meta loading, time/status validation, fast validation, heavy validation, product/type tamper check, retry token check, Redis reservation, token creation, coupon event emission. | Controller is doing use-case orchestration and response mapping together; adding activity types increases branching. | Extract `EntryApplicationService` and `CouponIssueApplicationService`; controller only maps HTTP. |
-| `core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java` | Kafka listener, in-memory buffer, flush scheduling, type grouping, strategy dispatch, DLT send, shutdown flush live in one class. | Hard to reason about thread/backpressure/failure policy separately. | Extract `CampaignActivityCommandBuffer` and `CampaignActivityCommandDispatcher`. Keep listener thin. |
+| `entry-service/src/main/java/com/axon/entry_service/service/entry/EntryApplicationService.java` | FCFS and coupon-entry use cases are intentionally orchestrated here after the controller extraction. | It is a central application-flow class, so unrelated activity flows must not accumulate here. | Keep controllers HTTP-only; split only if coupon and FCFS validation rules diverge materially. |
+| `core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java` | Now owns Kafka listener, scheduled flush, and shutdown flush only. Buffering and dispatch/DLT moved to named collaborators. | The flush policy remains a separate future backpressure concern, but responsibility is no longer hidden in one class. | Keep `CampaignActivityCommandBuffer` and `CampaignActivityCommandDispatcher` separate. |
 
 ### 4.2 Long Method
 
 | File/method | Evidence | Small refactoring direction |
 |---|---|---|
-| `EntryController.createEntry()` | Validation, retry token handling, reservation, response status mapping are in one method. | Extract request validation/result mapping first. Do not change flow. |
+| `EntryApplicationService.createEntry()` | Validation, retry token handling, reservation, and token issuance are one FCFS application use case. | Keep its flow coherent; extract only a repeated validation policy with a clear owner. |
 | `DashboardService.buildOverviewDataByCampaign()` | Fetch campaign, read stats, loop activities, calculate totals/rates/table in one method. | Extract `buildActivityComparison()`, `accumulateOverview()`, and pure metric calculator. |
 | `CampaignActivityEntryService.upsertBatch()` | Existing lookup, entity mutation, purchase event decision, saveAll fallback retry, event publishing in one method. | Extract key creation and purchase event creation first. Keep transaction boundary unchanged. |
 
@@ -128,7 +195,7 @@ These are candidates, not mandatory package moves.
 |---|---|---|---|
 | `CampaignActivityEntryService` | Entry persistence publishes `PurchaseInfoDto` when approved and purchase-related. | Entry persistence knows purchase event shape. This is acceptable as current event boundary, but it is a coupling point. | If this grows, introduce domain event record dedicated to approved entry, then purchase listener maps it. |
 | `DashboardService` | Reads `CampaignActivity.getProduct().getCategory()` while building campaign comparison. | Dashboard aggregation depends on entity graph and lazy associations. | Keep repository fetch graph explicit. Later project query DTO for dashboard. |
-| `EntryController` | Reads `CampaignActivityMeta` internals and decides tamper validation. | HTTP layer knows domain validation policy. | Move checks into application service; return domain result enum. |
+| `EntryApplicationService` | Reads `CampaignActivityMeta` and applies request/meta tamper validation. | This is now correctly in the application layer; it can still grow if every activity type adds special cases. | Keep result mapping in `EntryUseCaseResult`; extract type-specific validation only when duplication appears. |
 
 ### 4.5 Switch / Type Code Branching
 
@@ -136,13 +203,13 @@ These are candidates, not mandatory package moves.
 |---|---|---|---|
 | `CampaignActivityConsumerService` | Groups by `CampaignActivityType` and dispatches to `CampaignStrategy`. | Mostly good: strategy map already exists. | Rename around command processing to clarify the type is a strategy dispatch key. |
 | `CampaignFunnelDefinition` | Type-specific funnel mapping exists. | Good recent improvement. | Keep unsupported types empty; do not fallback to FCFS. |
-| `EntryController` | Coupon and FCFS entry flows are separate endpoints but share validation fragments manually. | Duplication risk. | Extract reusable validator/use-case, not an abstract generic activity framework. |
+| `EntryApplicationService` | Coupon and FCFS entry flows are separate use-case methods and share some validation dependencies. | Duplication risk if their rules continue to diverge. | Extract a narrow shared validator only after repeated policy is visible; do not create a generic activity framework. |
 
 ### 4.6 Comments Explaining Instead Of Structure
 
 | File | Evidence | Direction |
 |---|---|---|
-| `CampaignActivityConsumerService` | Comments explain listener/buffer/flush/dispatch roles inside one class. | Split roles into named classes so comments become less necessary. |
+| `CampaignActivityConsumerService` | Listener/flush coordination remains, while buffering and dispatch are now named classes. | The class is readable enough for the current flow. | Preserve the split; revisit only with a concrete queue/backpressure change. |
 | `DashboardService` | Section banners split dashboard levels but class remains broad. | Section banners are a signal that extract-class may help. |
 
 ### 4.7 Naming Smells

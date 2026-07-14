@@ -656,6 +656,23 @@ Payment-flow metrics to add/check:
 - DLQ count.
 - If needed: Kafka consumer lag, `CampaignActivityCommandBuffer` depth, `PurchaseHandler` buffer depth, flush latency, and retry fallback count.
 
+### VU-Capped Waiting Burst Boundary
+
+`waiting_burst` uses k6 `shared-iterations`. Its interpretation depends on the relationship between total users and VUs:
+
+```text
+NUM_USERS = MAX_VUS
+-> every user starts the reaction delay at event open
+-> flash-crowd / waiting-room model
+
+NUM_USERS > MAX_VUS
+-> only MAX_VUS users start initially
+-> each completed VU receives the next unique user iteration
+-> VU-capped throughput and Core drain model, not a full waiting-room flash crowd
+```
+
+Therefore every `3000 users / MAX_VUS 600` result below means 3,000 unique users processed through 600 active k6 execution slots. It is valid for capped end-to-end throughput, queue drain, and DB convergence, but must not be described as 3,000 simultaneous event-open clicks.
+
 Scope boundary:
 
 - If payment prepare/confirm becomes the dominant bottleneck, treat it as a separate prerequisite bottleneck rather than forcing it into the Core follow-up story.
@@ -922,7 +939,96 @@ Rules for next session:
 
 Recommended next action:
 
-1. Keep `ENTRY_CPUS=1.5` as the diagnostic stability profile, not as final operating resource.
-2. Decide whether to build diagnostic-only stage metrics or stop at the current trace evidence.
-3. If building stage metrics, implement it in a way that does not make `EntryApplicationService` harder to read.
-4. After diagnosis, rerun headline measurements with OTel off.
+1. Add Core-side pipeline metrics before changing queue or persistence behavior: consumer lag, internal queue depth, flush duration, retry/DLT count, and DB convergence.
+2. Run a warmed `FLOW=payment` boundary test above FCFS `600` (start at `800`, then `1000` if clean) with OTel off for headline latency.
+3. If Core delay or inconsistency appears, use OTel only to inspect trace shape and diagnose the relevant consumer/flush/DB path.
+4. Apply the smallest evidence-backed improvement, then repeat the same payment scenario and compare DB convergence and consistency.
+5. Do not start pre-event scale-out/warm-up automation until this Core capacity boundary and operational metric set are established.
+
+## 2026-07-10 Core Pipeline Metric Baseline
+
+Implemented metric exposure before changing Core queue or persistence behavior:
+
+```text
+axon.pipeline.queue.depth{pipeline=campaign-command|purchase}
+axon.pipeline.flush{pipeline=campaign-command|purchase}
+axon.pipeline.flush.batch.size{pipeline=campaign-command|purchase}
+axon.pipeline.retry.individual{pipeline=purchase}
+axon.pipeline.dlt.routed{source=campaign-command|purchase|webhook}
+axon.reconciliation.mismatch.count
+axon.reconciliation.run{outcome=clean|mismatch|failure}
+```
+
+`compose.metrics.yml` now scrapes `core-service:8080/actuator/prometheus`; Core permits this endpoint while its application port remains bound to the host loopback and is not proxied by the public Nginx route.
+
+Oracle VM verification:
+
+- Prometheus reports `up{job="axon-core"} = 1` for `core-service:8080`.
+- Core exposes the custom queue/flush/retry/reconciliation metrics after deployment.
+- Kafka client metrics already expose `kafka_consumer_fetch_manager_records_lag_max` for `consumer-axon-group-1`, so no group-offset poller is needed for the current single consumer scenario.
+
+Metric boundary:
+
+- `records_lag_max` is the active consumer client's maximum fetch lag, not a separately calculated committed group lag across all group members.
+- If multi-partition/group-wide lag becomes an operating requirement, add a broker/group-offset exporter or dedicated lag collector then.
+- Alert routing/thresholds remain out of scope for this baseline. There is no Alertmanager or Slack notification path yet.
+
+2026-07-10 warmed payment boundary run:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260710-payment-main-800
+shape: payment / waiting_burst executor / 3000 total users / 600 active VUs / FCFS 800 / nginx path
+warmup: 50 users / FCFS 50 / MAX_VUS 5
+
+result:
+  success: 800
+  error: 0
+  reservation p95: 883.35ms
+  HTTP p95: 700.25ms
+  DB entries/purchases: 800 / 800
+  entries/purchases convergence: 0s / 0s
+  purchase individual retry: 0
+  reconciliation mismatch: 0
+
+Prometheus observation:
+  command queue max: 143
+  purchase queue max: 20
+  command flush: 87 batches / 4.33s total / 20 max batch size
+  purchase flush: 87 batches / 5.10s total / 20 max batch size
+  Kafka records_lag_max: 0 at observed scrape points
+```
+
+Interpretation:
+
+- The internal queues absorbed a short burst and drained without persistence mismatch at FCFS 800.
+- `records_lag_max = 0` does not prove there was no sub-5-second lag spike because Prometheus scrapes every 5 seconds; it only shows no lag was observed at sampled points.
+- Step 0 minimum observability is now live. Step 1 should increase the same payment shape to FCFS 1000 before changing queue or persistence code.
+
+2026-07-10 warmed payment boundary repeat:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260710-payment-main-1000
+shape: payment / waiting_burst executor / 3000 total users / 600 active VUs / FCFS 1000 / nginx path
+warmup: 50 users / FCFS 50 / MAX_VUS 5
+
+result:
+  success: 1000
+  error: 0
+  reservation p95: 659.05ms
+  HTTP p95: 705.99ms
+  DB entries/purchases: 1000 / 1000
+  entries/purchases convergence: 0s / 0s
+  purchase individual retry: 0
+  reconciliation mismatch: 0
+
+Prometheus observation:
+  command queue max: 103
+  purchase queue max: 20
+  Kafka records_lag_max: 0 at observed scrape points
+```
+
+Interpretation:
+
+- FCFS 1000 also completed without an observed Core persistence or consistency failure at the same 600-VU concurrency cap.
+- The 800 and 1000 runs changed successful transaction volume while holding the VU cap fixed; they do not yet establish a higher-concurrency Entry/payment boundary.
+- Before changing Core code, either raise FCFS success volume again with the same cap to test sustained drain capacity, or separately raise `MAX_VUS` when the next question is end-to-end concurrency capacity.

@@ -145,7 +145,7 @@ docker restart axon-nginx
 
 curl -fsS http://127.0.0.1:8081/actuator/health
 curl -sS -o /tmp/nginx-entry.out -w "nginx_entry_http=%{http_code} time=%{time_total}\n" \
-  -X POST http://127.0.0.1:28080/entry/api/v1/entries \
+  -X POST http://127.0.0.1:28080/api/v1/entries \
   -H "Content-Type: application/json" \
   -d "{}"
 ```
@@ -159,6 +159,8 @@ nginx_entry_http=403
 `403` means nginx reached Entry and Spring Security rejected the unauthenticated request. That is a valid path check. `502`, `499`, or `connect() failed ... upstream` means do not run the load test yet.
 
 Warm-run before/after loop. Use this when comparing code or config changes and the first post-deploy cold run would hide the real signal:
+
+> `MEASURED_NUM_USERS=3000` and `MEASURED_MAX_VUS=600` is a VU-capped shared-iteration throughput run. It processes 3,000 unique users through at most 600 active k6 VUs; it is not a 3,000-person simultaneous waiting-room flash crowd. Use `MAX_VUS=3000` when the test question is event-open concurrency.
 
 ```bash
 cd ~/apps/axon

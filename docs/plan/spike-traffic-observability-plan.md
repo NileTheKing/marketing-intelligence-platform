@@ -24,7 +24,7 @@ Target environment:
 - Redis single instance
 - MySQL single instance
 - Elasticsearch and Kafka Connect when full-stack behavior-log flow is needed
-- Pinpoint for request tracing
+- OpenTelemetry/Jaeger for request tracing
 - k6 for load generation
 
 This environment is for backend bottleneck analysis. It is separate from the previous KT Cloud K2P Kubernetes environment, which was used to validate Kubernetes deployment structure, Ingress routing, Service discovery, resource limits, and HPA configuration.
@@ -85,7 +85,7 @@ Compose files:
 docker compose -f compose.app.yml -f compose.resources.yml up -d --build
 ```
 
-Do not attach Pinpoint to the official baseline/final comparison run.
+Do not attach OTel/Jaeger to the official baseline/final comparison run.
 
 ### Diagnostic Mode
 
@@ -99,7 +99,7 @@ Components:
 - Kafka
 - Redis
 - MySQL
-- Pinpoint
+- OpenTelemetry/Jaeger
 
 Optional exclusions:
 
@@ -116,7 +116,7 @@ Purpose:
 - Separate controller/service/repository time, DB connection wait, SQL execution, Redis calls, Kafka publish/consume, and scheduled flush delay.
 - Guide one concrete code or configuration change.
 
-Pinpoint-attached latency may be used as diagnostic evidence, but it is not the headline before/after performance number because the agent adds tracing overhead.
+OTel-attached latency may be used as diagnostic evidence, but it is not the headline before/after performance number because the agent adds tracing overhead.
 
 ### Final Measurement Mode
 
@@ -127,7 +127,7 @@ Rules:
 - Use the same Oracle VM.
 - Use the same Compose files: `compose.app.yml + compose.resources.yml`.
 - Use the same k6 scenario, users, `MAX_VUS`, `FCFS_LIMIT_COUNT`, and seed assumptions.
-- Keep Pinpoint detached.
+- Keep OTel detached.
 - Compare only against the matching measurement baseline.
 
 ### Full Pipeline / k3s Mode
@@ -228,7 +228,7 @@ If testing operational durability later:
 
 ## Observability Targets
 
-Pinpoint should answer:
+OpenTelemetry/Jaeger should answer:
 
 - Which API is slow under spike load?
 - How much time is spent in controller/service/repository layers?
@@ -342,10 +342,10 @@ Each test should follow the same loop:
 2. Reset or seed the same dataset.
 3. Run the same k6 scenario.
 4. Capture k6 summary, domain check, and container stats.
-5. Attach Pinpoint in a separate diagnostic run if the baseline exposes a bottleneck.
+5. Attach OTel/Jaeger in a separate diagnostic run if the baseline exposes a bottleneck.
 6. Identify one bottleneck only.
 7. Apply one change.
-8. Run the same measurement scenario again without Pinpoint.
+8. Run the same measurement scenario again without OTel.
 9. Compare only results from the same Oracle VM environment and same resource profile.
 
 Do not compare Oracle results directly against the previous K2P results. K2P and Oracle differ in CPU model, memory, disk I/O, network path, Kubernetes overhead, and deployed component shape.
@@ -436,7 +436,7 @@ Next diagnostic evidence to collect before claiming a root cause:
 - Entry-service logs during the failing window.
 - `docker stats` during the burst, not only after completion.
 - `ss -s` before and after the burst.
-- Pinpoint / Actuator metrics for Entry and Core in a separate diagnostic run.
+- OTel/Jaeger / Actuator metrics for Entry and Core in a separate diagnostic run.
 - Hikari active/idle/pending connections and DB connection wait if available.
 
 2026-07-02 diagnostic update:
@@ -467,7 +467,7 @@ Current interpretation:
 
 APM transition:
 
-- Move to Pinpoint/metrics diagnostic mode before making further code-level performance claims.
+- Move to OTel/Jaeger and metrics diagnostic mode before making further code-level performance claims.
 - Trace Entry reservation, Redis Lua call, reservation token handling, Kafka publish, payment prepare/confirm, Core consumer processing, and DB persistence.
 - Continue collecting nginx timing logs, `ss -s`, and short `docker stats` snapshots around the burst window.
 - Keep same-VM k6 results as diagnostic evidence only. Official before/after numbers should still come from a stable, repeated scenario with the same route and resource profile.
@@ -487,7 +487,7 @@ Backend changes:
 - Add cache warm-up for event-start metadata.
 - Add TTL jitter to reduce simultaneous cache expiration.
 - Add cache miss lock for high-traffic metadata keys.
-- Review SQL execution plans for slow queries found by Pinpoint or MySQL slow query log.
+- Review SQL execution plans for slow queries found by OTel/Jaeger or MySQL slow query log.
 - Consider covering indexes only after confirming table lookup cost is relevant.
 
 Runtime/config changes:
@@ -503,7 +503,7 @@ Runtime/config changes:
 
 Safe wording:
 
-> The earlier KT Cloud K2P test validated the Kubernetes deployment shape, including Ingress routing, Service discovery, resource limits, and HPA configuration. The later Oracle VM test used Docker Compose to reduce orchestration variables and focus on backend bottleneck analysis with Pinpoint and k6.
+> The earlier KT Cloud K2P test validated the Kubernetes deployment shape, including Ingress routing, Service discovery, resource limits, and HPA configuration. The later Oracle VM test used Docker Compose to reduce orchestration variables and focus on backend bottleneck analysis with OpenTelemetry/Jaeger and k6.
 
 Safe wording:
 

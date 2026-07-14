@@ -1,5 +1,11 @@
 # Pinpoint + Actuator + k6 Pre-VM Prep
 
+Status: legacy
+
+Superseded by: `docs/plan/otel-jaeger-apm-plan.md`
+
+Do not use this as the current APM setup plan. The Pinpoint path was stopped on the ARM Oracle VM because the official Pinpoint Docker stack pulled amd64 HBase/agent-related images and `pinpoint-hbase` restarted before Web could read `/hbase/hbaseid`.
+
 ## Goal
 
 Prepare the Axon codebase so that, once the Oracle VM is available, spike-traffic bottleneck analysis can start immediately.

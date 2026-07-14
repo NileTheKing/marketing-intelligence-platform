@@ -6,16 +6,24 @@ This file separates current working documents from old backlog and portfolio sou
 
 Do not delete old documents just because they are outdated. Mark their current role instead.
 
+## Start Here (entry point)
+
+| Document | Status | Use |
+|---|---|---|
+| `docs/architecture-map.md` | active | **새 투입자/에이전트 진입점.** 정체성 2축, 서비스, 이벤트 emit/consume 흐름, Kafka 토픽, 스코프 경계. 반 페이지. 상세는 flow 문서로 분기. |
+
 ## Current Planning Documents
 
 | Document | Status | Use |
 |---|---|---|
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
-| `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions: transaction self-invocation, DTO/OSIV boundary, lazy loading, webhook timeout, PaymentService retry policy |
+| `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
 | `docs/plan/domain-refactoring-map.md` | active | DDD-style structure map, ubiquitous language draft, bounded context candidates, and small Fowler-style refactoring units |
 | `docs/plan/spike-traffic-observability-plan.md` | active | Oracle VM Docker Compose based spike bottleneck analysis |
-| `docs/plan/pinpoint-actuator-k6-prep.md` | active | pre-VM Pinpoint/Actuator/k6 readiness checklist |
+| `docs/plan/otel-jaeger-apm-plan.md` | active | current OpenTelemetry/Jaeger APM setup and FCFS trace diagnosis plan |
 | `docs/plan/oracle-compose-baseline-runbook.md` | active | current Oracle VM Compose FCFS baseline execution steps and artifact boundary |
+| `docs/plan/rest-api-route-clean-cutover-plan.md` | active (implemented) | current SSR/API route contract and 2026-07-14 clean-cutover record |
+| `docs/plan/marketing-rule-multi-action-handoff.md` | active (implemented) | implemented MarketingRule 1:N action expansion; records the bounded scope, acceptance tests, and required VM schema cutover |
 
 ## Active / Current Implementation References
 
@@ -44,6 +52,7 @@ These are still useful, but code must win if there is a conflict.
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T24_*.md` | active | Testcontainers and concurrency tests |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T25_*.md` | active | webhook failure isolation |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T26_*.md` | active | common funnel modeling and unsupported-type boundary |
+| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T27_*.md` | active | OTel/Jaeger/Actuator based FCFS/nginx bottleneck diagnosis and Docker Compose payment load-test results |
 
 ## Reference Documents
 
@@ -70,9 +79,10 @@ These are still useful, but code must win if there is a conflict.
 | Document | Status | Reason |
 |---|---|---|
 | `docs/plan/remaining-tasks-and-improvements.md` | legacy backlog | contains old plans, completed items, and outdated claims such as Redisson-based load-test wording |
+| `docs/plan/pinpoint-actuator-k6-prep.md` | legacy/reference | superseded by OTel/Jaeger plan after Pinpoint Docker HBase path failed on ARM Oracle VM |
 | `docs/FCFS_Refactor.md` | legacy/reference | verify against current Redis Lua implementation before reuse |
 | `docs/FLUENT_BIT_DEPLOYMENT.md` | legacy/reference | useful for old K8s log collection context, not current Oracle VM plan |
-| `docs/MONITORING_DEPLOYMENT.md` | legacy/reference | older monitoring stack; first-pass plan now prefers Pinpoint + Actuator without Prometheus/Grafana |
+| `docs/MONITORING_DEPLOYMENT.md` | legacy/reference | older monitoring stack; first-pass plan now prefers OTel/Jaeger + Actuator for tracing diagnosis |
 | `docs/infrastructure-status-report.md` | legacy/reference | old infrastructure state; do not mix with Oracle VM/k3s plan without rechecking |
 | `docs/flow/behavior-event-fluentd-plan.md` | legacy/reference | Fluentd/Fluent Bit behavior-event plan; current behavior pipeline facts should come from code/T3 |
 | `docs/project-tasks.md` | legacy backlog | old 4-week project plan; not a current implementation source |
@@ -110,7 +120,7 @@ Use these names for new work:
 3. DLQ Failure Triage Agent
 4. MarketingRule ExecutionHistory
 5. Reconciliation issue history if consistency operations are expanded
-6. Pre-hardening cleanup: actuator boundary, test/debug profile separation, controller responsibility split, coupon duplicate prefetch
+6. Pre-hardening cleanup: actuator boundary, test/debug profile separation, controller responsibility split, coupon duplicate prefetch, Core idempotency/backpressure, Purchase/UserSummary projection split, global scheduler safety
 7. Webhook delivery isolation through outbox/worker when external integration becomes a stronger story
 
 Avoid creating new documents with broad names such as:

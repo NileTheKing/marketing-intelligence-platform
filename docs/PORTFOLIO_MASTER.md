@@ -397,10 +397,10 @@ flowchart LR
 flowchart LR
     SDK["JS SDK\n(이벤트 수집)"] --> Kafka1{{Kafka}} --> ES[(Elasticsearch\n행동 로그)]
     ES -->|"매 시간\nPAGE_VIEW 집계"| Trigger["BehaviorTriggerScheduler\n임계값 ≥3회 감지"]
-    Trigger -->|"Redis setIfAbsent\nTTL 30일"| Kafka2{{Kafka\nCOUPON 발행}}
+    Trigger -->|"Redis setIfAbsent\ndedupTtlDays"| Kafka2{{Kafka\nCOUPON 발행}}
     DB[(MarketingRule DB
 behaviorType·threshold
-lookbackDays·rewardType)] -.->|"구조 설계 완료"| Trigger
+lookbackDays·dedupTtlDays·rewardType)] -.->|"구조 설계 완료"| Trigger
 ```
 
 **문제**
@@ -410,8 +410,8 @@ lookbackDays·rewardType)] -.->|"구조 설계 완료"| Trigger
 
 **해결**
 - **행동 수집 레이어**: JS SDK가 `campaign_id·activity_id` 메타를 이벤트 페이로드에 포함하여 수집 — Kafka → ES 적재 시 역정규화로 삽입, ES 단일 버킷 집계로 캠페인 단위 통계 산출
-- **룰 트리거 레이어**: `BehaviorTriggerScheduler` — ES Term 집계로 MarketingRule 기준 행동 임계값 초과 유저 추출 → `Redis setIfAbsent`(MarketingRule 설정 TTL)로 중복 발급 방지 → Kafka `COUPON` 이벤트 발행
-- **Configurable 정책 관리**: 수집 이벤트 스키마를 DB에서 관리하고 JS SDK가 폴링하여 재배포 없이 항목 변경 가능한 구조 구현 — 트리거 룰(`behaviorType`, `thresholdCount`, `lookbackDays`, `rewardType`)도 `MarketingRule` 테이블로 DB에서 관리하는 구조 설계 완료
+- **룰 트리거 레이어**: `BehaviorTriggerScheduler` — ES Term 집계로 MarketingRule 기준 행동 임계값 초과 유저 추출 → `Redis setIfAbsent`(`dedupTtlDays`)로 중복 발급 방지 → Kafka `COUPON` 이벤트 발행
+- **Configurable 정책 관리**: 수집 이벤트 스키마를 DB에서 관리하고 JS SDK가 폴링하여 재배포 없이 항목 변경 가능한 구조 구현 — 트리거 룰(`behaviorType`, `thresholdCount`, `lookbackDays`, `dedupTtlDays`, `rewardType`)도 `MarketingRule` 테이블로 DB에서 관리하는 구조 설계 완료
 
 **결과**
 - 행동 수집 → 임계값 감지 → 자동 쿠폰 발행 E2E 파이프라인 구현, 마케팅 리텐션 액션 자동화
@@ -551,14 +551,14 @@ flowchart LR
 
 ## 14. CRM 루프 전주기: FCFS 모객 → 세그멘테이션 → 자동 트리거
 
-> ⚠️ **TODO**: 외부 발송 연동(쿠폰 실제 지급, 알림 발송) 구현 완료 후 결과 수치 및 내용 보완 필요.
+> ⚠️ **TODO**: 관리자 UI/API 기반 룰 편집과 외부 알림 발송 연동 완료 후 결과 수치 및 내용 보완 필요.
 
 ```mermaid
 flowchart LR
     FCFS["FCFS 이벤트\n모객"] --> SDK["JS SDK\n행동 수집"]
     SDK --> ES[("Elasticsearch\n행동 로그")]
     ES -->|"매 시간\nPAGE_VIEW 집계"| Trigger["BehaviorTriggerScheduler\n(≥3회 조회 감지)"]
-    Trigger -->|"Redis setIfAbsent\n중복 방지 TTL 30일"| Kafka[("Kafka\nCOUPON 발행")]
+    Trigger -->|"Redis setIfAbsent\ndedupTtlDays"| Kafka[("Kafka\nCOUPON 발행")]
     Purchase[("MySQL\n구매 이력")] -->|"일 단위"| RFM["RfmSegmentationScheduler\nVIP / LOYAL / AT_RISK / DORMANT"]
     RFM --> LTV["LTV 코호트 배치\n(Section 11)"]
     LTV --> AI["AI 전략 리포트\n(Section 10)"]
@@ -566,12 +566,12 @@ flowchart LR
 
 **구현 범위 (현재)**
 - **RFM 세그멘테이션**: 구매 이력 기반 4단계 분류 — VIP(Recency≤30일·Frequency≥3·Monetary≥10만), LOYAL, AT_RISK, DORMANT.
-- **행동 기반 트리거 감지**: ES에서 7일간 PAGE_VIEW 집계 → 임계값(3회) 초과 유저·상품 추출 → Redis `setIfAbsent`로 30일 내 중복 발급 방지 → Kafka `COUPON` 타입 메시지 발행.
-- **MarketingRule DB**: `behaviorType`, `thresholdCount`, `lookbackDays`, `rewardType` 컬럼으로 룰을 DB에서 동적 관리할 수 있는 구조 설계 완료.
+- **행동 기반 트리거 감지**: ES에서 7일간 PAGE_VIEW 집계 → 임계값(3회) 초과 유저·상품 추출 → Redis `setIfAbsent`와 `dedupTtlDays`로 중복 발급 방지 → Kafka `COUPON` 타입 메시지 발행.
+- **MarketingRule DB**: `behaviorType`, `thresholdCount`, `lookbackDays`, `dedupTtlDays`, `rewardType` 컬럼으로 룰을 DB에서 동적 관리할 수 있는 구조 설계 완료.
 
 **TODO (미구현)**
-- 쿠폰 실제 지급 및 외부 알림 발송(이메일·카카오 등) 연동
-- MarketingRule 기반 동적 룰 적용 (현재 스케줄러에 하드코딩)
+- 관리자 UI/API에서 MarketingRule 생성·수정
+- 외부 알림 발송(이메일·카카오 등) 연동
 
 ---
 

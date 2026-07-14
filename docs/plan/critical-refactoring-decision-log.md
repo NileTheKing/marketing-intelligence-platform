@@ -292,6 +292,209 @@ Reason:
 - DTO conversion should happen first.
 - Then OSIV can be disabled to catch accidental lazy loading outside the service boundary.
 
+## Interview Prep Follow-up Backlog
+
+Status: active backlog
+
+Context:
+
+- During ABLY interview preparation, several implementation boundaries were clarified against the current code.
+- These items are not portfolio wording tasks. They are code debt items to resolve step by step.
+- Do not implement all of them in one pass. Each item needs a focused change, test, and verification.
+
+### 1. Add DB-level idempotency for `CampaignActivityEntry`
+
+Status: implemented (2026-07-14)
+
+Current issue:
+
+- Core currently reduces duplicate entry processing with batch-level dedup and existing-entry lookup.
+- This is useful, but it is still application-level dedup.
+- `Purchase` has a `(campaign_activity_id, user_id)` unique constraint, but `CampaignActivityEntry` should also have a DB-level guard if it is treated as the participation idempotency boundary.
+
+Implemented direction:
+
+- Add a composite unique constraint on `(campaign_activity_id, user_id)` for `CampaignActivityEntry`.
+- Keep the current batch dedup and existing-entry lookup as a query optimization and early guard.
+- Treat duplicate-key exceptions during insert as idempotent success where appropriate.
+
+Remaining verification:
+
+- Kafka duplicate-message test proves duplicate entry messages do not create duplicate rows.
+- Concurrent insert race test covers two transactions attempting the same `(activityId, userId)`.
+
+### 2. Replace unbounded Core command buffer with measurable backpressure
+
+Current issue:
+
+- `CampaignActivityCommandBuffer` uses an unbounded in-memory queue.
+- This separates listener and flush work, but it does not provide production-grade backpressure.
+- Under sustained overload, backlog can move from Kafka to application heap.
+
+Target direction:
+
+- Introduce a bounded queue or a queue policy with explicit limits.
+- Add queue depth and flush duration metrics before changing behavior.
+- When queue depth crosses a high watermark, pause/resume Kafka consumption instead of allowing heap growth.
+
+Verify:
+
+- Unit or integration test covers offer failure / overflow policy.
+- Manual load test records queue depth, consumer lag, and flush duration.
+
+### 3. Split command processing by type when metrics justify it
+
+Current issue:
+
+- `FIRST_COME_FIRST_SERVE`, `COUPON`, `WEBHOOK`, and `GIVEAWAY` currently share the same command topic, queue, and flush cycle before strategy dispatch.
+- Webhook-style external I/O can have different latency and retry behavior from DB-only FCFS persistence.
+
+Target direction:
+
+- First measure per-strategy processing time and DLT count.
+- If a slow type delays the common flush path, split by type-level queue/worker.
+- If operational ownership, retry policy, or lag visibility needs to diverge, split Kafka topics/consumer groups.
+
+Do not:
+
+- Do not split topics speculatively without metrics.
+- Do not claim current common queue is type-isolated.
+
+Verify:
+
+- Strategy-level timing metric exists.
+- A slow webhook test does not delay FCFS processing after the split.
+
+### 4. Make Purchase the source-of-truth path and move UserSummary to projection semantics
+
+Current issue:
+
+- `PurchaseHandler` still mixes `UserSummary` update and `Purchase` persistence in the hot path.
+- `UserSummary` is a derived read model, but failures can still be coupled to purchase handling.
+- Current `UserSummaryService.recordPurchaseBatch()` loads `User` entities and updates through lazy one-to-one `UserSummary`, which can add entity loading, lazy loading, persistence-context, and dirty-checking overhead.
+
+Target direction:
+
+- Store `Purchase` first.
+- On purchase batch failure, keep batch-to-single fallback and DLQ around purchase persistence.
+- Update `UserSummary` only after successful purchase persistence.
+- Give UserSummary its own retry/DLQ/rebuild path, separate from purchase DLQ.
+- Consider explicit JDBC batch update for `user_summary` instead of loading `User` aggregates for timestamp-style projection updates.
+
+Verify:
+
+- Purchase failure does not create or require UserSummary success.
+- UserSummary failure does not trigger purchase fallback.
+- A rebuild path can recompute UserSummary from Purchase rows.
+
+### 5. Evaluate JDBC multi-row insert for append-heavy Purchase persistence
+
+Current issue:
+
+- JPA `saveAll` is application-level batching, not necessarily DB bulk insert.
+- `Purchase` uses `GenerationType.IDENTITY`, so Hibernate may need individual inserts to obtain generated IDs.
+- The current code should not be described as DB bulk insert unless SQL logs prove that.
+
+Target direction:
+
+- If purchase insert throughput becomes a measured bottleneck, evaluate `JdbcTemplate.batchUpdate` or multi-row insert.
+- Keep `(campaign_activity_id, user_id)` unique constraint as the business idempotency key.
+- Decide how to handle duplicate-key rows and partial batch errors explicitly.
+
+Verify:
+
+- SQL log or datasource proxy shows actual statement count before and after.
+- k6 or focused integration test shows whether insert path latency improves.
+
+### 6. Add the missing reverse reconciliation query
+
+Current issue:
+
+- Existing reconciliation mainly covers `Purchase O, Entry X` style mismatch.
+- Core in-memory event handoff can also produce `Entry O, Purchase X` under some crash boundaries.
+
+Target direction:
+
+- Add a reconciliation scan for approved entries without corresponding purchase rows.
+- Store mismatch history rather than only logging it.
+- Make retry/recovery action explicit and auditable.
+
+Verify:
+
+- Seed `APPROVED Entry` without Purchase and confirm the scheduler detects it.
+- Seed valid Entry/Purchase pair and confirm no false positive.
+
+### 7. Add scheduler single-runner protection and execution history
+
+Current issue:
+
+- Global schedulers are different from Kafka consumers.
+- Kafka consumer groups handle partition ownership, but scheduled jobs can run on every pod unless guarded.
+- This affects `BehaviorTriggerScheduler` and stock sync style jobs under multi-instance deployment.
+
+Target direction:
+
+- Add ShedLock, DB advisory lock, Redis lock, or another single-runner mechanism for global schedulers.
+- Add execution history tables for behavior trigger and stock sync jobs.
+- Record started/succeeded/failed counts, duration, last error, and next retry decision.
+
+Verify:
+
+- Two application instances do not execute the same global scheduler job concurrently.
+- Execution history shows run result and can be queried from admin/debug paths.
+
+### 8. Harden BehaviorTrigger publish reliability
+
+Current issue:
+
+- `BehaviorTriggerScheduler` evaluates ES conditions and publishes reward commands.
+- Redis `setIfAbsent` reduces repeated trigger attempts, and `UserCoupon(user_id, coupon_id)` guards final coupon duplication.
+- Kafka publish failure tracking and trigger execution audit are still weak.
+
+Target direction:
+
+- Track trigger candidate, dedup result, publish result, and downstream outcome.
+- Add retry/outbox-style persistence if reward command delivery must be guaranteed.
+- Keep Redis TTL dedup as a fast guard, not as the final consistency guarantee.
+
+Verify:
+
+- Publish failure is observable and retryable.
+- Duplicate trigger attempts do not produce duplicate coupons.
+- Operators can answer why a coupon was or was not issued.
+
+### 9. Add pipeline-level observability before further feature expansion
+
+Current issue:
+
+- Kafka, Redis, ES, and internal queues increase flexibility but also increase the number of failure points.
+- Current code has test and load-test evidence, but not enough operational metrics.
+
+Target direction:
+
+- FCFS path:
+  - Entry API latency
+  - Redis Lua latency
+  - success/sold-out/duplicate/error counters
+  - Kafka publish latency/failure
+- Core path:
+  - consumer lag
+  - internal queue depth
+  - flush duration
+  - strategy-level processing time
+  - DLQ count
+  - reconciliation mismatch count
+- Behavior path:
+  - behavior event POST latency
+  - Kafka Connect task status
+  - ES indexing failure/latency
+  - dashboard query latency
+
+Verify:
+
+- Metrics are visible locally or on the Oracle VM test environment.
+- A spike test artifact includes at least API latency, Redis latency, queue depth, consumer lag, and flush duration.
+
 ## Summary
 
 Immediate refactoring target:
@@ -303,6 +506,7 @@ Immediate refactoring target:
 5. Replace entity setter-style mutation with intention-revealing methods.
 6. Add explicit webhook timeout.
 7. Clean up PaymentService timeout/retry policy without introducing outbox yet.
+8. Use the interview prep backlog above as the next focused hardening queue after the current pass.
 
 Main boundary:
 
@@ -805,7 +1009,7 @@ Portfolio value:
 Review targets:
 
 - Logs around Kafka consumer, batch flush, DLQ, reconciliation, webhook, and scheduler jobs.
-- Metrics/Actuator/Pinpoint readiness.
+- Metrics/Actuator/OpenTelemetry readiness.
 - Batch result counts and mismatch counts.
 
 Questions:
@@ -816,7 +1020,7 @@ Questions:
 
 Portfolio value:
 
-- High if later connected to Pinpoint/APM bottleneck analysis or incident-style troubleshooting notes.
+- High if later connected to OTel/APM bottleneck analysis or incident-style troubleshooting notes.
 
 ### Recommended next scan order
 
@@ -913,6 +1117,37 @@ Do not overclaim:
 
 - Current queue design is "listener/flush responsibility separation", not full backpressure control.
 
+### 2-a. Purchase micro-batch is not guaranteed DB bulk insert
+
+Classification: `performance investigation` / `portfolio wording correction`.
+
+Evidence:
+
+- `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java:29` drains purchase events in batches of 20.
+- `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseService.java:64` uses `purchaseRepository.saveAll(purchaseEntities)`.
+- `core-service/src/main/java/com/axon/core_service/domain/purchase/Purchase.java:31` uses `GenerationType.IDENTITY`.
+- `core-service/src/main/resources/application.yml` has no `hibernate.jdbc.batch_size`, `hibernate.order_inserts`, or `hibernate.order_updates` setting.
+
+Why it matters:
+
+- `saveAll` means application-level batch handling, not guaranteed DB bulk insert.
+- With MySQL `IDENTITY`/auto-increment, Hibernate commonly needs the generated id after each insert, which can limit JDBC insert batching.
+- For the current FCFS portfolio scenario, this is acceptable as a pragmatic implementation, but "batch insert" should not be overclaimed unless SQL logs/APM prove JDBC batching or multi-row insert.
+
+Recommended direction:
+
+- First measure with OTel/APM plus SQL logging or datasource proxy:
+- query count per 20 purchase flush,
+- `PurchaseHandler.flushBatch` duration,
+- `PurchaseService.createPurchaseBatch` duration,
+- generated SQL shape.
+- If this path becomes a real bottleneck, consider JDBC multi-row insert or `JdbcTemplate.batchUpdate` for `Purchase`, because `Purchase` is append-like and generated `purchase.id` is not needed immediately in the current flow.
+- Keep unique key/idempotency policy explicit for `(campaign_activity_id, user_id)`.
+
+Do not overclaim:
+
+- Current `PurchaseService.createPurchaseBatch` is a micro-batch at the application level, not proven database-level bulk insert.
+
 ### 3. DLT send is isolated but not operationally traceable enough
 
 Classification: `portfolio upgrade`.
@@ -960,7 +1195,7 @@ Recommended direction:
 
 - Keep `health` public.
 - Restrict `metrics`/`prometheus` to an internal network, monitoring profile, or admin-only security rule.
-- If using Pinpoint only, keep actuator minimal unless Prometheus is intentionally enabled.
+- If using APM tracing only, keep actuator minimal unless Prometheus is intentionally enabled.
 
 Implemented:
 

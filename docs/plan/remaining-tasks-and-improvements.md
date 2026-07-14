@@ -4,7 +4,7 @@
 >
 > 이 문서는 2025년 말 기준 계획과 당시 미완료/완료 항목이 섞여 있다. 현재 포트폴리오·구현 기준의 source of truth로 사용하지 않는다.
 >
-> 현재 진행 방향은 `docs/plan/2026-h2-portfolio-hardening-roadmap.md`, `docs/plan/spike-traffic-observability-plan.md`, `docs/plan/pinpoint-actuator-k6-prep.md`를 우선한다.
+> 현재 진행 방향은 `docs/plan/2026-h2-portfolio-hardening-roadmap.md`, `docs/plan/spike-traffic-observability-plan.md`, `docs/plan/otel-jaeger-apm-plan.md`를 우선한다.
 >
 > 특히 Redisson, Webhook 미구현, Prometheus/Grafana 전제 등은 현재 코드/전략과 다를 수 있으므로 재사용 전 반드시 코드와 최신 T파일을 확인한다.
 
@@ -110,29 +110,32 @@
 
 ---
 
-## 4. 🔗 외부 발송 연동 고도화 (Priority: Medium)
+## 4. 🔗 MarketingRule 액션 모델 고도화 (Priority: Medium)
 
-> **현재 상태**: `BehaviorTriggerScheduler`가 행동 조건을 평가하고 Kafka로 `COUPON` 메시지를 발행하면, `CouponStrategy`가 내부 `UserCoupon`을 저장한다. 이메일, 카카오 알림, 외부 Webhook 호출처럼 외부 시스템으로 실제 발송하는 구현은 아직 없다.
+> **현재 상태**: `BehaviorTriggerScheduler`가 행동 조건을 평가하고 Kafka `CAMPAIGN_ACTIVITY_COMMAND`를 발행한다. 현재 코드는 `RewardType.COUPON`이면 `CouponStrategy`가 `UserCoupon`을 저장하고, `RewardType.WEBHOOK`이면 `WebhookStrategy`가 외부 endpoint를 호출한 뒤 실패 시 3회 재시도 및 `WEBHOOK_FAILED_DLT`로 격리한다. 단, `MarketingRule` 하나가 단일 `rewardType`/`rewardReferenceId`만 가지므로 "쿠폰 발급 + 알림 발송"처럼 한 조건에 여러 액션을 붙이는 구조는 아직 아니다.
 
 ### 목표
-*   행동 조건 판정과 액션 실행을 Kafka 메시지 계약으로 분리한 현재 구조를 외부 Webhook 발송까지 확장한다.
-*   외부 발송 실패가 트리거 배치나 내부 쿠폰 발급 파이프라인을 막지 않도록 재시도와 DLQ로 격리한다.
+*   행동 조건 판정(`MarketingRule`)과 실행할 일(`MarketingAction`)을 분리한다.
+*   한 조건 만족이 쿠폰 발급, 외부 CRM webhook, 카카오/앱푸시, 이메일 같은 복수 액션으로 이어질 수 있게 한다.
+*   외부 발송 실패가 트리거 배치나 내부 쿠폰 발급 파이프라인을 막지 않도록 재시도와 DLQ 또는 실패 이력으로 격리한다.
 *   포트폴리오에서는 구현 전/후 표현 범위를 명확히 분리한다.
 
 ### 구현 범위
 *   **도메인 확장**
-    - [ ] `RewardType`에 `WEBHOOK` 추가
+    - [x] `RewardType.WEBHOOK` 추가
+    - [ ] `MarketingRule.rewardType/rewardReferenceId` 단일 액션 모델을 `MarketingRule` 1:N `MarketingAction` 모델로 확장
     - [ ] 외부 발송 대상 URL, 인증 헤더, payload 템플릿을 저장할 `WebhookEndpoint` 또는 `WebhookTemplate` 설계
+    - [ ] 액션별 `actionType`, `referenceId`, `executionOrder`, `failurePolicy` 정의
 *   **이벤트 발행**
-    - [ ] `BehaviorTriggerScheduler`가 `WEBHOOK` 룰에 대해 `WEBHOOK_COMMAND` Kafka 메시지 발행
+    - [x] `BehaviorTriggerScheduler`가 `WEBHOOK` 룰에 대해 `CampaignActivityType.WEBHOOK` Kafka 메시지 발행
+    - [ ] 한 `MarketingRule`에 연결된 active action들을 조회해 action별 command 발행
     - [ ] 메시지에 `activityId`, `userId`, `ruleId`, `eventId`, `payload`를 포함하여 추적 가능하게 설계
 *   **외부 호출 처리**
-    - [ ] `WebhookConsumer` / `WebhookPublisher` 구현
-    - [ ] 외부 URL로 HTTP POST 호출
+    - [x] `WebhookStrategy`에서 외부 URL로 HTTP POST 호출
     - [ ] 2xx는 성공 처리, 4xx/5xx/timeout은 실패 이력 저장
 *   **실패 처리**
-    - [ ] `retryCount`, `nextRetryAt`, `lastError` 기반 재시도 정책 추가
-    - [ ] 최대 재시도 초과 시 DLT 또는 실패 테이블로 격리
+    - [x] 최대 3회 재시도 후 `WEBHOOK_FAILED_DLT` 격리
+    - [ ] `retryCount`, `nextRetryAt`, `lastError` 기반 재시도 정책과 실패 테이블 추가
     - [ ] 같은 `eventId`가 중복 처리되지 않도록 idempotency key 적용 검토
 *   **검증**
     - [ ] WireMock 또는 MockWebServer로 외부 시스템을 대체한 통합 테스트 작성
@@ -140,9 +143,9 @@
     - [ ] 테스트 결과를 `docs/` 또는 k6/검증 리포트에 근거 파일로 남김
 
 ### 포트폴리오 표현 기준
-*   **현재 표현 가능**: "Kafka 기반 내부 쿠폰 발급 파이프라인", "외부 발송 시스템 연동을 고려한 이벤트 인터페이스 설계"
-*   **구현 후 표현 가능**: "Webhook 기반 외부 시스템 연동", "외부 발송 실패를 retry/DLQ로 격리한 비동기 연동 구조"
-*   **구현 전 금지**: "이메일/카카오/외부 발송 시스템 연동 완료", "외부 API 연동 운영 경험"
+*   **현재 표현 가능**: "MarketingRule 기반 행동 조건 감지", "쿠폰 발급과 webhook 호출을 reward type별 strategy로 분기", "Webhook 실패를 retry/DLT로 격리"
+*   **고도화 후 표현 가능**: "한 조건에 쿠폰·CRM webhook·푸시·이메일 등 복수 액션을 연결하는 마케팅 자동화 모델", "액션별 실행 이력/재시도/실패 정책 관리"
+*   **구현 전 금지**: "쿠폰 발급 후 카카오/이메일 알림까지 자동 발송 완료", "multi-action CRM automation 운영 경험"
 
 ---
 
