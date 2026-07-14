@@ -22,6 +22,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -100,5 +104,42 @@ public class CampaignActivityEntryRetryTest extends AbstractIntegrationTest {
         // then: 2번 유저(정상 데이터)가 DB에 저장되어 있어야 함
         assertThat(campaignActivityEntryRepository.findByCampaignActivity_IdAndUserId(activity.getId(), userIdNormal)).isPresent();
         assertThat(campaignActivityEntryRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("동일 메시지가 다른 배치에서 동시에 처리되어도 Entry는 하나만 저장된다")
+    void concurrentDuplicateBatchCreatesOneEntry() throws Exception {
+        CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
+                .userId(1L)
+                .campaignActivityId(activity.getId())
+                .productId(activity.getProduct().getId())
+                .build();
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        for (int i = 0; i < 2; i++) {
+            executor.submit(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    campaignActivityEntryService.upsertBatch(
+                            Map.of(activity.getId(), activity),
+                            List.of(message),
+                            CampaignActivityEntryStatus.APPROVED
+                    );
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+
+        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+        start.countDown();
+        executor.shutdown();
+        assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(campaignActivityEntryRepository.count()).isEqualTo(1);
     }
 }

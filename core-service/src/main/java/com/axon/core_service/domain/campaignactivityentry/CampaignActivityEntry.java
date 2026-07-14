@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -22,7 +23,13 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(name = "campaign_activity_entries")
+@Table(
+        name = "campaign_activity_entries",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_campaign_activity_entry_activity_user",
+                columnNames = {"campaign_activity_id", "user_id"}
+        )
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CampaignActivityEntry extends BaseTimeEntity {
 

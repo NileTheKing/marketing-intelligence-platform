@@ -10,9 +10,12 @@ import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ public class CampaignActivityEntryService {
     private final CampaignActivityEntryRepository campaignActivityEntryRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final CampaignActivityEntryRetryService campaignActivityEntryRetryService;
+    private final CampaignActivityEntryBatchPersistenceService campaignActivityEntryBatchPersistenceService;
 
     @DistributedLock(key = "'lock:entry:' + #campaignActivity.id + ':' + #dto.userId", waitTime = 3, leaseTime = 5)
     @Transactional
@@ -111,8 +115,9 @@ public class CampaignActivityEntryService {
                         entry -> entry
                 ));
 
-        List<CampaignActivityEntry> toSave = new ArrayList<>();
-        List<PurchaseInfoDto> purchaseEvents = new ArrayList<>();
+        Map<ActivityUserKey, CampaignActivityEntry> entriesByKey = new HashMap<>(existingMap);
+        Set<ActivityUserKey> newEntryKeys = new HashSet<>();
+        Map<ActivityUserKey, PurchaseInfoDto> purchaseEventsByKey = new HashMap<>();
 
         for (CampaignActivityKafkaProducerDto dto : messages) {
             CampaignActivity activity = activityMap.get(dto.getCampaignActivityId());
@@ -125,25 +130,25 @@ public class CampaignActivityEntryService {
                     .map(Instant::ofEpochMilli)
                     .orElseGet(Instant::now);
 
-            CampaignActivityEntry entry = existingMap.getOrDefault(key,
-                    CampaignActivityEntry.create(
-                            activity,
-                            dto.getUserId(),
-                            dto.getProductId(),
-                            requestedAt
-                    ));
+            CampaignActivityEntry entry = entriesByKey.computeIfAbsent(key, ignored -> {
+                newEntryKeys.add(key);
+                return CampaignActivityEntry.create(
+                        activity,
+                        dto.getUserId(),
+                        dto.getProductId(),
+                        requestedAt
+                );
+            });
 
             entry.updateProduct(dto.getProductId());
             entry.updateStatus(status);
             entry.markProcessedNow();
-            toSave.add(entry);
-
             boolean isApproved = (status == CampaignActivityEntryStatus.APPROVED);
             boolean isPurchaseRelated = activity.getActivityType().isPurchaseRelated();
-            boolean isNewEntry = !existingMap.containsKey(key);
+            boolean isNewEntry = newEntryKeys.contains(key);
 
             if (isApproved && isPurchaseRelated && isNewEntry) {
-                purchaseEvents.add(new PurchaseInfoDto(
+                purchaseEventsByKey.put(key, new PurchaseInfoDto(
                         activity.getCampaignId(),
                         activity.getId(),
                         dto.getUserId(),
@@ -157,29 +162,43 @@ public class CampaignActivityEntryService {
             }
         }
 
+        List<CampaignActivityEntry> toSave = new ArrayList<>(entriesByKey.values());
+        Set<ActivityUserKey> savedNewEntryKeys = new HashSet<>();
         if (!toSave.isEmpty()) {
             try {
-                campaignActivityEntryRepository.saveAll(toSave);
+                campaignActivityEntryBatchPersistenceService.saveBatch(toSave);
+                savedNewEntryKeys.addAll(newEntryKeys);
                 log.info("[Entry] Saved {} entries successfully", toSave.size());
             } catch (Exception e) {
                 log.warn("[Entry] Batch failed, retrying individually. Error: {}", e.getMessage());
-                int savedCount = retryEntriesIndividually(toSave);
+                int savedCount = retryEntriesIndividually(toSave, newEntryKeys, savedNewEntryKeys);
                 log.info("[Entry] Recovered {}/{} entries via individual retry", savedCount, toSave.size());
             }
         }
 
-        if (!purchaseEvents.isEmpty()) {
-            purchaseEvents.forEach(eventPublisher::publishEvent);
-            log.info("[Purchase Event] Published {} events", purchaseEvents.size());
+        if (!savedNewEntryKeys.isEmpty()) {
+            List<PurchaseInfoDto> savedPurchaseEvents = savedNewEntryKeys.stream()
+                    .map(purchaseEventsByKey::get)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            savedPurchaseEvents.forEach(eventPublisher::publishEvent);
+            log.info("[Purchase Event] Published {} events", savedPurchaseEvents.size());
         }
     }
 
-    private int retryEntriesIndividually(List<CampaignActivityEntry> entries) {
+    private int retryEntriesIndividually(
+            List<CampaignActivityEntry> entries,
+            Set<ActivityUserKey> newEntryKeys,
+            Set<ActivityUserKey> savedNewEntryKeys) {
         int count = 0;
         for (CampaignActivityEntry entry : entries) {
             try {
                 campaignActivityEntryRetryService.saveSingleEntryInNewTransaction(entry);
                 count++;
+                ActivityUserKey key = new ActivityUserKey(entry.getCampaignActivity().getId(), entry.getUserId());
+                if (newEntryKeys.contains(key)) {
+                    savedNewEntryKeys.add(key);
+                }
             } catch (Exception ex) {
                 log.debug("Skipping failed entry: userId={}", entry.getUserId());
             }
