@@ -37,23 +37,25 @@ const FCFS_LIMIT_COUNT = parseInt(__ENV.FCFS_LIMIT_COUNT || '200');
 const USE_PRODUCTION_API = __ENV.USE_PRODUCTION_API === 'true';
 const USE_TOKEN_FILE = __ENV.USE_TOKEN_FILE !== 'false'; // 기본값: true
 const FLOW = __ENV.FLOW || 'full'; // behavior | reservation | payment | full
+const VIRTUAL_HOST = __ENV.VIRTUAL_HOST || '';
+const DEBUG_ERRORS = __ENV.DEBUG_ERRORS === 'true';
 
 // 시나리오 선택
 const SCENARIO = __ENV.SCENARIO || 'spike';
+const REACTION_MODE = __ENV.REACTION_MODE || 'random';
 
 // JWT 토큰 파일 (미리 발급된 토큰)
 const TOKEN_FILE_PATH = __ENV.TOKEN_FILE_PATH || './jwt-tokens.json';
 let PRE_GENERATED_TOKENS = {};
+let TOKEN_LOAD_ERROR = null;
 
 // 토큰 파일 로드 시도
 if (USE_PRODUCTION_API && USE_TOKEN_FILE && FLOW !== 'behavior') {
   try {
     const tokenFileContent = open(TOKEN_FILE_PATH);
     PRE_GENERATED_TOKENS = JSON.parse(tokenFileContent);
-    console.log(`✅ JWT 토큰 파일 로드 완료: ${Object.keys(PRE_GENERATED_TOKENS).length}개`);
   } catch (e) {
-    console.warn(`⚠️  JWT 토큰 파일 로드 실패: ${e.message}`);
-    console.warn('   실시간 JWT 발급 모드로 전환합니다.');
+    TOKEN_LOAD_ERROR = e.message;
   }
 }
 
@@ -70,6 +72,18 @@ function getPreparedJwtToken(data, userId) {
     return null;
   }
   return normalizeJwtToken(data.tokens[userId]);
+}
+
+function debugError(...args) {
+  if (DEBUG_ERRORS) {
+    console.error(...args);
+  }
+}
+
+function debugWarn(...args) {
+  if (DEBUG_ERRORS) {
+    console.warn(...args);
+  }
 }
 
 // 시나리오별 파라미터
@@ -101,6 +115,8 @@ const behaviorEventCount = new Counter('behavior_event_count');
 const reservationDuration = new Trend('reservation_duration');
 
 const userCount = USER_ID_END - USER_ID_START + 1;
+const WAITING_BURST_VUS = Math.min(MAX_VUS, userCount);
+const IS_FULL_WAITING_BURST = WAITING_BURST_VUS === userCount;
 
 // =========================================================================
 // 시나리오 정의
@@ -185,13 +201,15 @@ const arrival_scenario = {
   },
 };
 
-// Scenario 1-c: Waiting Burst - 선착순 오픈 전 대기자 flash crowd 모델
-// 각 iteration은 대기 중이던 유저 1명의 1회 참여이며, 클릭 반응속도만 다르게 둔다.
+// Scenario 1-c: Waiting Burst
+// MAX_VUS == userCount일 때만 모든 대기자가 오픈 시점부터 반응 시간을 갖는 flash crowd다.
+// MAX_VUS < userCount이면 shared-iterations executor가 VU가 비는 순서대로 다음 유저를 시작하므로,
+// 총 사용자 수를 처리하는 VU-capped throughput 모델로 해석해야 한다.
 const waiting_burst_scenario = {
   scenarios: {
     waiting_burst: {
       executor: 'shared-iterations',
-      vus: Math.min(MAX_VUS, userCount),
+      vus: WAITING_BURST_VUS,
       iterations: userCount,
       maxDuration: '60s',
     },
@@ -312,7 +330,9 @@ export const options = (() => {
 
     case 'waiting_burst':
       selectedScenario = waiting_burst_scenario;
-      scenarioName = `Waiting Burst - users=${userCount}, vus=${Math.min(MAX_VUS, userCount)}`;
+      scenarioName = IS_FULL_WAITING_BURST
+        ? `Waiting Burst (Flash Crowd) - users=${userCount}, activeVUs=${WAITING_BURST_VUS}`
+        : `Waiting Burst (VU-Capped Throughput) - users=${userCount}, activeVUs=${WAITING_BURST_VUS}`;
       break;
 
     case 'ramp':
@@ -336,7 +356,6 @@ export const options = (() => {
       console.warn(`⚠️  Unknown scenario '${SCENARIO}', using 'spike'`);
   }
 
-  console.log('📊 Scenario:', scenarioName);
   return selectedScenario;
 })();
 
@@ -349,6 +368,9 @@ export function setup() {
   console.log('='.repeat(70));
   console.log(`Entry Service: ${ENTRY_SERVICE_URL}`);
   console.log(`Core Service: ${CORE_SERVICE_URL}`);
+  if (VIRTUAL_HOST) {
+    console.log(`Virtual Host: ${VIRTUAL_HOST}`);
+  }
   console.log(`Activity ID: ${ACTIVITY_ID}`);
   console.log(`User ID Range: ${USER_ID_START} - ${USER_ID_END}`);
   console.log(`Production API: ${USE_PRODUCTION_API ? 'YES (JWT)' : 'NO (Test API)'}`);
@@ -359,6 +381,9 @@ export function setup() {
     if (tokenCount > 0) {
       console.log(`JWT 모드: 사전 발급 (${tokenCount}개 토큰)`);
     } else {
+      if (TOKEN_LOAD_ERROR) {
+        console.warn(`JWT 토큰 파일 로드 실패: ${TOKEN_LOAD_ERROR}`);
+      }
       console.log(`JWT 모드: 실시간 발급`);
     }
   }
@@ -372,9 +397,13 @@ export function setup() {
     console.log(`ARRIVAL_PRE_ALLOCATED_VUS: ${ARRIVAL_PRE_ALLOCATED_VUS}`);
     console.log(`ARRIVAL_RATE_MULTIPLIER: ${ARRIVAL_RATE_MULTIPLIER}`);
   } else if (SCENARIO === 'waiting_burst') {
-    console.log(`MAX_VUS: ${MAX_VUS}`);
-    console.log(`WAITING_USERS: ${userCount}`);
+    console.log(`TOTAL_USERS: ${userCount}`);
+    console.log(`ACTIVE_VUS: ${WAITING_BURST_VUS}`);
+    console.log(`REACTION_MODE: ${REACTION_MODE}`);
     console.log('Reaction model: 50% 0-1s, 30% 1-2s, 15% 2-4s, 5% 4-6s');
+    console.log(IS_FULL_WAITING_BURST
+      ? 'Model: all users start their reaction delay at event open.'
+      : 'Model: VU-capped shared iterations; later users start when a VU becomes available.');
   } else if (SCENARIO === 'constant') {
     console.log(`VUS_LIST: ${VUS_LIST.join(', ')}`);
     console.log(`DURATION_PER_STEP: ${DURATION_PER_STEP}`);
@@ -411,7 +440,7 @@ export default function (data) {
   const sessionId = `session-${userId}-${Date.now()}`;
 
   if (SCENARIO === 'waiting_burst') {
-    sleep(getWaitingBurstReactionDelay());
+    sleep(getWaitingBurstReactionDelay(uniqueIndex));
   }
 
   if (data.flow === 'behavior') {
@@ -437,7 +466,23 @@ export default function (data) {
   runReservationFlow(data, userId, true);
 }
 
-function getWaitingBurstReactionDelay() {
+function getWaitingBurstReactionDelay(iterationIndex) {
+  if (REACTION_MODE === 'deterministic') {
+    const bucket = iterationIndex % 100;
+    const offset = deterministicUnitInterval(iterationIndex);
+
+    if (bucket < 50) {
+      return offset;
+    }
+    if (bucket < 80) {
+      return 1 + offset;
+    }
+    if (bucket < 95) {
+      return 2 + offset * 2;
+    }
+    return 4 + offset * 2;
+  }
+
   const bucket = Math.random();
   if (bucket < 0.5) {
     return Math.random(); // 50%: 0-1s
@@ -449,6 +494,11 @@ function getWaitingBurstReactionDelay() {
     return 2 + Math.random() * 2; // 15%: 2-4s
   }
   return 4 + Math.random() * 2; // 5%: 4-6s
+}
+
+function deterministicUnitInterval(iterationIndex) {
+  const value = Math.imul(iterationIndex + 1, 1103515245) + 12345;
+  return (value >>> 0) / 4294967296;
 }
 
 function runBehaviorFlow(data, userId, sessionId) {
@@ -503,18 +553,13 @@ function sendBehaviorEvent(data, userId, sessionId, triggerType) {
     },
   });
 
-  // JWT 토큰이 있으면 헤더에 추가 (data.tokens 사용)
-  const headers = { 'Content-Type': 'application/json' };
   const token = getPreparedJwtToken(data, userId);
-  if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-  }
 
   const res = http.post(
-    `${data.entryServiceUrl}/entry/api/v1/behavior/events`,
+    `${data.entryServiceUrl}/api/v1/behavior-events`,
     payload,
     {
-      headers: headers,
+      headers: requestHeaders(token),
       tags: { name: 'behavior_event' },
     }
   );
@@ -556,7 +601,7 @@ function reserveWithJWT(data, userId) {
     if (tokenRes.status !== 200) return { token: null, isRetry: false };
     token = normalizeJwtToken(tokenRes.body);
     if (!token) {
-      console.error(`Invalid JWT token for reservation (user ${userId})`);
+      debugError(`Invalid JWT token for reservation (user ${userId})`);
       return { token: null, isRetry: false };
     }
   }
@@ -569,13 +614,10 @@ function reserveWithJWT(data, userId) {
   });
 
   const res = http.post(
-    `${data.entryServiceUrl}/entry/api/v1/entries`,
+    `${data.entryServiceUrl}/api/v1/entries`,
     payload,
     {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: requestHeaders(token),
       tags: { name: 'fcfs_reservation_jwt' },
       timeout: '10s',
     }
@@ -592,10 +634,10 @@ function reserveWithJWT(data, userId) {
                 isRetry: json.isRetry === true,
               };
           } else {
-              console.error(`No reservationToken in response for user ${userId}:`, json);
+              debugError(`No reservationToken in response for user ${userId}:`, json);
           }
       } catch(e) {
-          console.error(`Failed to parse reservation token for user ${userId}`, e);
+          debugError(`Failed to parse reservation token for user ${userId}`, e);
       }
   }
   return { token: null, isRetry: false };
@@ -614,12 +656,12 @@ function confirmPayment(data, userId, reservationToken) {
       { tags: { name: 'jwt_token_realtime_payment' } }
     );
     if (tokenRes.status !== 200) {
-      console.error(`Failed to get JWT token for payment (user ${userId}): ${tokenRes.status}`);
+      debugError(`Failed to get JWT token for payment (user ${userId}): ${tokenRes.status}`);
       return;
     }
     token = normalizeJwtToken(tokenRes.body);
     if (!token) {
-      console.error(`Invalid JWT token for payment (user ${userId})`);
+      debugError(`Invalid JWT token for payment (user ${userId})`);
       return;
     }
   }
@@ -633,17 +675,14 @@ function confirmPayment(data, userId, reservationToken) {
     `${data.entryServiceUrl}/api/v1/payments/prepare`,
     preparePayload,
     {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: requestHeaders(token),
       tags: { name: 'payment_prepare' },
       timeout: '10s',
     }
   );
 
   if (prepareRes.status !== 200) {
-      console.error(`Payment prepare failed for user ${userId}: ${prepareRes.status}`, prepareRes.body);
+      debugError(`Payment prepare failed for user ${userId}: ${prepareRes.status}`, prepareRes.body);
       return;
   }
 
@@ -656,12 +695,12 @@ function confirmPayment(data, userId, reservationToken) {
           approvalToken = json.ApprovalToken;
       }
   } catch (e) {
-      console.error(`Failed to parse prepare response for user ${userId}`, e);
+      debugError(`Failed to parse prepare response for user ${userId}`, e);
       return;
   }
 
   if (!approvalToken) {
-      console.error(`No approvalToken for user ${userId}`);
+      debugError(`No approvalToken for user ${userId}`);
       return;
   }
 
@@ -674,22 +713,30 @@ function confirmPayment(data, userId, reservationToken) {
     `${data.entryServiceUrl}/api/v1/payments/confirm`,
     confirmPayload,
     {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: requestHeaders(token),
       tags: { name: 'payment_confirm' },
       timeout: '10s',
     }
   );
 
   if (confirmRes.status !== 200) {
-      console.error(`Payment confirm failed for user ${userId}: ${confirmRes.status}`, confirmRes.body);
+      debugError(`Payment confirm failed for user ${userId}: ${confirmRes.status}`, confirmRes.body);
   }
 
   check(confirmRes, {
     'payment confirm success (200)': (r) => r.status === 200,
   });
+}
+
+function requestHeaders(token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (VIRTUAL_HOST) {
+    headers['Host'] = VIRTUAL_HOST;
+  }
+  return headers;
 }
 
 // =========================================================================
@@ -727,13 +774,13 @@ function handleReservationResponse(res, userId) {
     // ❌ 중복 참여 (분산 락 실패!)
     fcfsConflictRate.add(1);
     fcfsConflictCount.add(1);
-    console.warn(`⚠️  CONFLICT detected! Status: ${res.status}, Body: ${res.body}`);
+    debugWarn(`CONFLICT detected. Status: ${res.status}, Body: ${res.body}`);
 
   } else {
     // 기타 에러
     fcfsErrorRate.add(1);
     fcfsErrorCount.add(1);
-    console.error(`Error: ${res.status}, Body: ${res.body}`);
+    debugError(`Error: ${res.status}, Body: ${res.body}`);
   }
 
   check(res, {

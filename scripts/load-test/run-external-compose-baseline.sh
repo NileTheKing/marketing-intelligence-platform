@@ -29,6 +29,10 @@ VM_HOST="${VM_HOST:-ubuntu@134.185.100.15}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/oci_arm_key}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/apps/axon}"
 PUBLIC_URL="${PUBLIC_URL:-https://axon.opicnic.xyz}"
+VIRTUAL_HOST="${VIRTUAL_HOST:-}"
+REACTION_MODE="${REACTION_MODE:-random}"
+K6_INSECURE_SKIP_TLS_VERIFY="${K6_INSECURE_SKIP_TLS_VERIFY:-false}"
+K6_LOG_OUTPUT="${K6_LOG_OUTPUT:-none}"
 
 RUN_ID="${RUN_ID:-$(date '+%Y%m%d-%H%M%S')-external-compose-baseline}"
 RESULT_DIR="${RESULT_DIR:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID}"
@@ -44,6 +48,20 @@ mkdir -p "$RESULT_DIR"
 
 ssh_vm() {
   ssh -i "$SSH_KEY" "$VM_HOST" "$@"
+}
+
+capture_actuator_metrics() {
+  local phase="$1"
+
+  if ! ssh_vm "curl -fsS http://127.0.0.1:8081/actuator/prometheus" \
+    > "$RESULT_DIR/entry-${phase}.prom"; then
+    echo "Warning: failed to capture Entry metrics for ${phase}" >&2
+  fi
+
+  if ! ssh_vm "curl -fsS http://127.0.0.1:8080/actuator/prometheus" \
+    > "$RESULT_DIR/core-${phase}.prom"; then
+    echo "Warning: failed to capture Core metrics for ${phase}" >&2
+  fi
 }
 
 count_tokens() {
@@ -62,6 +80,9 @@ echo "External compose baseline: $RUN_ID"
 echo "VM:        $VM_HOST"
 echo "Remote:    $REMOTE_DIR"
 echo "Public URL: $PUBLIC_URL"
+if [ -n "$VIRTUAL_HOST" ]; then
+  echo "Virtual Host: $VIRTUAL_HOST"
+fi
 echo "Flow:      $FLOW"
 echo "Users:     $NUM_USERS"
 echo "Max VUs:   $MAX_VUS"
@@ -72,6 +93,10 @@ run_id=$RUN_ID
 vm_host=$VM_HOST
 remote_dir=$REMOTE_DIR
 public_url=$PUBLIC_URL
+virtual_host=$VIRTUAL_HOST
+reaction_mode=$REACTION_MODE
+k6_insecure_skip_tls_verify=$K6_INSECURE_SKIP_TLS_VERIFY
+k6_log_output=$K6_LOG_OUTPUT
 num_users=$NUM_USERS
 activity_id=$ACTIVITY_ID
 max_vus=$MAX_VUS
@@ -111,9 +136,17 @@ fi
 
 echo ""
 echo "== Step 3/4: run external k6 =="
+capture_actuator_metrics "before-k6"
 set +e
+if [ "$K6_INSECURE_SKIP_TLS_VERIFY" = "true" ]; then
+  K6_TLS_FLAG="--insecure-skip-tls-verify"
+else
+  K6_TLS_FLAG=""
+fi
 FLOW="$FLOW" \
 SCENARIO="$SCENARIO" \
+REACTION_MODE="$REACTION_MODE" \
+VIRTUAL_HOST="$VIRTUAL_HOST" \
 MAX_VUS="$MAX_VUS" \
 ARRIVAL_PRE_ALLOCATED_VUS="$ARRIVAL_PRE_ALLOCATED_VUS" \
 ARRIVAL_RATE_MULTIPLIER="$ARRIVAL_RATE_MULTIPLIER" \
@@ -127,7 +160,7 @@ PRODUCT_ID="$PRODUCT_ID" \
 FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
 USER_ID_START="$USER_ID_START" \
 USER_ID_END="$USER_ID_END" \
-  k6 run --summary-export "$SUMMARY_FILE" "$SCRIPT_DIR/k6-fcfs-load-test.js" \
+  k6 run --log-output "$K6_LOG_OUTPUT" $K6_TLS_FLAG --summary-export "$SUMMARY_FILE" "$SCRIPT_DIR/k6-fcfs-load-test.js" \
   2>&1 | tee "$CONSOLE_LOG"
 K6_STATUS=${PIPESTATUS[0]}
 set -e
@@ -147,16 +180,27 @@ MYSQL_PASSWORD="$(docker exec axon-mysql printenv MYSQL_PASSWORD)"
 MYSQL_DATABASE="$(docker exec axon-mysql printenv MYSQL_DATABASE)"
 
 mysql_count() {
-  docker exec -i -e MYSQL_PWD="$MYSQL_PASSWORD" axon-mysql \
+  docker exec -e MYSQL_PWD="$MYSQL_PASSWORD" axon-mysql \
     mysql -u"$MYSQL_USER" "$MYSQL_DATABASE" -N -s -e "$1"
 }
 
 DB_ENTRIES="$(mysql_count "SELECT COUNT(*) FROM campaign_activity_entries WHERE campaign_activity_id = ${ACTIVITY_ID};")"
 DB_PURCHASES="$(mysql_count "SELECT COUNT(*) FROM purchases WHERE campaign_activity_id = ${ACTIVITY_ID};")"
+ENTRY_CONVERGENCE_SECONDS="n/a"
+PURCHASE_CONVERGENCE_SECONDS="n/a"
 
 if [ "$FLOW" != "reservation" ]; then
-  for _ in $(seq 1 30); do
-    if [ "$DB_ENTRIES" -ge "$FCFS_LIMIT_COUNT" ] && [ "$DB_PURCHASES" -ge "$FCFS_LIMIT_COUNT" ]; then
+  for second in $(seq 0 30); do
+    if [ "$ENTRY_CONVERGENCE_SECONDS" = "n/a" ] && [ "$DB_ENTRIES" -ge "$FCFS_LIMIT_COUNT" ]; then
+      ENTRY_CONVERGENCE_SECONDS="$second"
+    fi
+    if [ "$PURCHASE_CONVERGENCE_SECONDS" = "n/a" ] && [ "$DB_PURCHASES" -ge "$FCFS_LIMIT_COUNT" ]; then
+      PURCHASE_CONVERGENCE_SECONDS="$second"
+    fi
+    if [ "$ENTRY_CONVERGENCE_SECONDS" != "n/a" ] && [ "$PURCHASE_CONVERGENCE_SECONDS" != "n/a" ]; then
+      break
+    fi
+    if [ "$second" -eq 30 ]; then
       break
     fi
     sleep 1
@@ -169,6 +213,8 @@ echo "Redis counter: $REDIS_COUNTER"
 echo "Redis users:   $REDIS_USERS"
 echo "DB entries:    $DB_ENTRIES"
 echo "DB purchases:  $DB_PURCHASES"
+echo "Entries convergence seconds:   $ENTRY_CONVERGENCE_SECONDS"
+echo "Purchases convergence seconds: $PURCHASE_CONVERGENCE_SECONDS"
 echo "Flow:          $FLOW"
 
 if [ "$REDIS_COUNTER" != "$FCFS_LIMIT_COUNT" ] || [ "$REDIS_USERS" != "$FCFS_LIMIT_COUNT" ]; then
@@ -190,6 +236,7 @@ ssh_vm "cd '$REMOTE_DIR' && ACTIVITY_ID='$ACTIVITY_ID' FCFS_LIMIT_COUNT='$FCFS_L
 DOMAIN_STATUS=${PIPESTATUS[0]}
 set -e
 ssh_vm "rm -f '$REMOTE_CHECK_PATH'" >/dev/null 2>&1 || true
+capture_actuator_metrics "after-domain-check"
 
 cat > "$RESULT_DIR/summary.md" <<EOF
 # External Compose Baseline Summary
@@ -198,6 +245,8 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - Flow: \`$FLOW\`
 - Scenario: \`$SCENARIO\`
 - Public URL: \`$PUBLIC_URL\`
+- Virtual Host: \`${VIRTUAL_HOST:-none}\`
+- Reaction mode: \`$REACTION_MODE\`
 - Users: \`$NUM_USERS\`
 - Max VUs: \`$MAX_VUS\`
 - Arrival pre-allocated VUs: \`$ARRIVAL_PRE_ALLOCATED_VUS\`
@@ -206,6 +255,7 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - FCFS limit count: \`$FCFS_LIMIT_COUNT\`
 - k6 status: \`$K6_STATUS\`
 - domain check status: \`$DOMAIN_STATUS\`
+- Entry/Core Prometheus snapshots: \`before-k6\`, \`after-domain-check\`
 
 ## Domain Check
 
