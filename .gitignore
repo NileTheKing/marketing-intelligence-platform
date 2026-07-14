@@ -32,3 +32,4 @@ out/
 .factorypath
 # Private career documents
 docs/private/
+.codex/
