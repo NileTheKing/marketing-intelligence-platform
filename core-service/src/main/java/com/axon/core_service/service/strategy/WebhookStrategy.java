@@ -43,13 +43,14 @@ public class WebhookStrategy implements BatchStrategy {
     }
 
     private WebhookRequest toRequest(CampaignActivityKafkaProducerDto message) {
-        Long ruleId = message.getCampaignActivityId();
-        Long templateId = message.getCouponId();
+        Long ruleId = message.getMarketingRuleId();
+        Long actionId = message.getMarketingActionId();
+        Long templateId = message.getActionReferenceId();
         Long userId = message.getUserId();
         Long productId = message.getProductId();
 
         return WebhookRequest.builder()
-                .idempotencyKey("webhook:%d:%d:%d:%d".formatted(ruleId, templateId, userId, productId))
+                .idempotencyKey("webhook:%d:%d:%d:%d:%d".formatted(ruleId, actionId, templateId, userId, productId))
                 .ruleId(ruleId)
                 .userId(userId)
                 .productId(productId)

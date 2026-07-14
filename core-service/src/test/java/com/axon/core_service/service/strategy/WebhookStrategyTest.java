@@ -46,9 +46,33 @@ class WebhookStrategyTest {
         verify(kafkaTemplate, never()).send(anyString(), any());
 
         WebhookRequest request = captor.getValue();
-        assertThat(request.getIdempotencyKey()).isEqualTo("webhook:10:99:1:100");
+        assertThat(request.getIdempotencyKey()).isEqualTo("webhook:10:5:99:1:100");
         assertThat(request.getRuleId()).isEqualTo(10L);
         assertThat(request.getTemplateId()).isEqualTo(99L);
+    }
+
+    @Test
+    @DisplayName("동일 웹훅 템플릿이라도 actionId가 다르면 idempotency key가 달라야 한다")
+    void processBatch_SameTemplateDifferentActionId_YieldsDifferentIdempotencyKey() {
+        WebhookStrategy strategy = new WebhookStrategy(webhookClient, kafkaTemplate, pipelineMetrics);
+        CampaignActivityKafkaProducerDto messageA = message();
+        CampaignActivityKafkaProducerDto messageB = CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(CampaignActivityType.WEBHOOK)
+                .marketingRuleId(10L)
+                .marketingActionId(6L)
+                .userId(1L)
+                .productId(100L)
+                .actionReferenceId(99L)
+                .timestamp(1234L)
+                .build();
+
+        strategy.processBatch(List.of(messageA, messageB));
+
+        ArgumentCaptor<WebhookRequest> captor = ArgumentCaptor.forClass(WebhookRequest.class);
+        verify(webhookClient, times(2)).send(captor.capture());
+
+        List<String> keys = captor.getAllValues().stream().map(WebhookRequest::getIdempotencyKey).toList();
+        assertThat(keys).containsExactlyInAnyOrder("webhook:10:5:99:1:100", "webhook:10:6:99:1:100");
     }
 
     @Test
@@ -68,10 +92,11 @@ class WebhookStrategyTest {
     private CampaignActivityKafkaProducerDto message() {
         return CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(CampaignActivityType.WEBHOOK)
-                .campaignActivityId(10L)
+                .marketingRuleId(10L)
+                .marketingActionId(5L)
                 .userId(1L)
                 .productId(100L)
-                .couponId(99L)
+                .actionReferenceId(99L)
                 .timestamp(1234L)
                 .build();
     }

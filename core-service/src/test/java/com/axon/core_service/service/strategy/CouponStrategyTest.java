@@ -65,6 +65,29 @@ class CouponStrategyTest {
         assertThat(saved.get(0).getCoupon().getId()).isEqualTo(10L);
     }
 
+    @Test
+    @DisplayName("actionReferenceId가 있으면 couponId보다 우선한다 (마케팅 룰 액션 메시지)")
+    void processBatch_PrefersActionReferenceIdOverCouponId() {
+        CouponStrategy strategy = new CouponStrategy(userCouponRepository, couponRepository);
+        Coupon coupon = coupon(20L);
+
+        when(couponRepository.findAllById(List.of(20L))).thenReturn(List.of(coupon));
+        when(userCouponRepository.findAllByUserIdInAndCouponIdIn(anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+
+        CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(CampaignActivityType.COUPON)
+                .userId(1L)
+                .actionReferenceId(20L)
+                .couponId(999L) // should be ignored in favor of actionReferenceId
+                .timestamp(1234L)
+                .build();
+
+        strategy.processBatch(List.of(message));
+
+        verify(userCouponRepository).findAllByUserIdInAndCouponIdIn(List.of(1L), List.of(20L));
+    }
+
     private CampaignActivityKafkaProducerDto message(Long userId, Long couponId) {
         return CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(CampaignActivityType.COUPON)

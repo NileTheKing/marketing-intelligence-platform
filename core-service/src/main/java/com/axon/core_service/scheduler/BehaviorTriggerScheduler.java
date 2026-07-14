@@ -1,7 +1,9 @@
 package com.axon.core_service.scheduler;
 
+import com.axon.core_service.domain.marketing.MarketingAction;
 import com.axon.core_service.domain.marketing.MarketingRule;
 import com.axon.core_service.domain.marketing.RewardType;
+import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.MarketingRuleRepository;
 import com.axon.core_service.service.BehaviorEventService;
 import com.axon.messaging.CampaignActivityType;
@@ -18,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -26,15 +29,14 @@ public class BehaviorTriggerScheduler {
 
     private final BehaviorEventService behaviorEventService;
     private final MarketingRuleRepository marketingRuleRepository;
+    private final MarketingActionRepository marketingActionRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-
-    private static final long COUPON_TTL_DAYS = 30;
 
     /**
      * 매 시간 0분에 실행.
      * 활성화된 MarketingRule을 DB에서 로드한 뒤, 규칙별로 행동 조건을 평가하고
-     * 임계값을 충족한 유저에게 보상 이벤트를 발행합니다.
+     * 임계값을 충족한 유저에게 각 룰의 활성 액션(coupon/webhook)을 독립적으로 발행합니다.
      */
     @Scheduled(cron = "0 0 * * * *")
     public void runBehaviorCouponTrigger() {
@@ -43,22 +45,24 @@ public class BehaviorTriggerScheduler {
         List<MarketingRule> activeRules = marketingRuleRepository.findByIsActiveTrue();
         log.info("Loaded {} active marketing rules", activeRules.size());
 
+        List<Long> ruleIds = activeRules.stream().map(MarketingRule::getId).toList();
+        Map<Long, List<MarketingAction>> actionsByRuleId = marketingActionRepository
+                .findByMarketingRuleIdInAndIsActiveTrue(ruleIds).stream()
+                .collect(Collectors.groupingBy(action -> action.getMarketingRule().getId()));
+
         for (MarketingRule rule : activeRules) {
-            if (!isSupportedRewardType(rule.getRewardType())) {
-                log.debug("Skipping rule '{}': rewardType={}", rule.getRuleName(), rule.getRewardType());
+            List<MarketingAction> actions = actionsByRuleId.get(rule.getId());
+            if (actions == null || actions.isEmpty()) {
+                log.debug("Skipping rule '{}': no active actions", rule.getRuleName());
                 continue;
             }
-            processRule(rule);
+            processRule(rule, actions);
         }
 
         log.info("========== Behavior Coupon Trigger Batch Completed ==========");
     }
 
-    private boolean isSupportedRewardType(RewardType rewardType) {
-        return rewardType == RewardType.COUPON || rewardType == RewardType.WEBHOOK;
-    }
-
-    private void processRule(MarketingRule rule) {
+    private void processRule(MarketingRule rule, List<MarketingAction> actions) {
         log.info("Processing rule: id={}, name='{}', behaviorType={}, threshold={}, lookbackDays={}",
                 rule.getId(), rule.getRuleName(), rule.getBehaviorType(),
                 rule.getThresholdCount(), rule.getLookbackDays());
@@ -75,17 +79,8 @@ public class BehaviorTriggerScheduler {
                 Long userId = entry.getKey();
 
                 for (Long productId : entry.getValue()) {
-                    String redisKey = triggerKey(rule, userId, productId);
-                    Boolean isAbsent = redisTemplate.opsForValue()
-                            .setIfAbsent(redisKey, "1", COUPON_TTL_DAYS, TimeUnit.DAYS);
-
-                    if (Boolean.TRUE.equals(isAbsent)) {
-                        log.info("Triggering reward: type={}, ruleId={}, userId={}, productId={}, referenceId={}",
-                                rule.getRewardType(), rule.getId(), userId, productId, rule.getRewardReferenceId());
-
-                        CampaignActivityKafkaProducerDto message = buildRewardMessage(rule, userId, productId);
-
-                        kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message);
+                    for (MarketingAction action : actions) {
+                        triggerAction(rule, action, userId, productId);
                     }
                 }
             }
@@ -94,28 +89,58 @@ public class BehaviorTriggerScheduler {
         }
     }
 
-    private String triggerKey(MarketingRule rule, Long userId, Long productId) {
-        String prefix = rule.getRewardType() == RewardType.WEBHOOK ? "webhook" : "coupon";
-        return String.format("%s:trigger:%d:%d:%d", prefix, rule.getId(), userId, productId);
-    }
+    private void triggerAction(MarketingRule rule, MarketingAction action, Long userId, Long productId) {
+        String redisKey = triggerKey(action, userId, productId);
+        Boolean isAbsent = redisTemplate.opsForValue()
+                .setIfAbsent(redisKey, "1", triggerDedupTtlDays(rule), TimeUnit.DAYS);
 
-    private CampaignActivityKafkaProducerDto buildRewardMessage(MarketingRule rule, Long userId, Long productId) {
-        CampaignActivityKafkaProducerDto.CampaignActivityKafkaProducerDtoBuilder builder =
-                CampaignActivityKafkaProducerDto.builder()
-                        .userId(userId)
-                        .productId(productId)
-                        .couponId(rule.getRewardReferenceId())
-                        .timestamp(System.currentTimeMillis());
-
-        if (rule.getRewardType() == RewardType.WEBHOOK) {
-            return builder
-                    .campaignActivityType(CampaignActivityType.WEBHOOK)
-                    .campaignActivityId(rule.getId())
-                    .build();
+        if (!Boolean.TRUE.equals(isAbsent)) {
+            return;
         }
 
-        return builder
-                .campaignActivityType(CampaignActivityType.COUPON)
+        log.info("Triggering action: type={}, ruleId={}, actionId={}, userId={}, productId={}, referenceId={}",
+                action.getActionType(), rule.getId(), action.getId(), userId, productId, action.getReferenceId());
+
+        CampaignActivityKafkaProducerDto message = buildRewardMessage(rule, action, userId, productId);
+
+        try {
+            kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("Kafka send failed, releasing dedup key: actionId={}, userId={}, productId={}",
+                                    action.getId(), userId, productId, ex);
+                            redisTemplate.delete(redisKey);
+                        }
+                    });
+        } catch (Exception ex) {
+            log.error("Kafka send threw synchronously, releasing dedup key: actionId={}, userId={}, productId={}",
+                    action.getId(), userId, productId, ex);
+            redisTemplate.delete(redisKey);
+        }
+    }
+
+    private String triggerKey(MarketingAction action, Long userId, Long productId) {
+        return String.format("marketing:action-trigger:%d:%d:%d", action.getId(), userId, productId);
+    }
+
+    private long triggerDedupTtlDays(MarketingRule rule) {
+        return rule.getDedupTtlDays() > 0 ? rule.getDedupTtlDays() : 30L;
+    }
+
+    private CampaignActivityKafkaProducerDto buildRewardMessage(MarketingRule rule, MarketingAction action,
+                                                                  Long userId, Long productId) {
+        CampaignActivityType type = action.getActionType() == RewardType.WEBHOOK
+                ? CampaignActivityType.WEBHOOK
+                : CampaignActivityType.COUPON;
+
+        return CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(type)
+                .userId(userId)
+                .productId(productId)
+                .marketingRuleId(rule.getId())
+                .marketingActionId(action.getId())
+                .actionReferenceId(action.getReferenceId())
+                .timestamp(System.currentTimeMillis())
                 .build();
     }
 }

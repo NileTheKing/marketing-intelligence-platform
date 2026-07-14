@@ -22,6 +22,9 @@ public class CampaignActivityKafkaProducerDto {
     private Long timestamp;
     private Long quantity;
     private BigDecimal price;
+    private Long marketingRuleId;
+    private Long marketingActionId;
+    private Long actionReferenceId;
     /**
      * Get the event time as an Instant.
      *

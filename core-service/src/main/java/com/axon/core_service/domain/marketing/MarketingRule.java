@@ -40,12 +40,8 @@ public class MarketingRule {
     @Column(nullable = false)
     private int lookbackDays; // e.g. 7 days
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private RewardType rewardType;
-
-    @Column(nullable = false)
-    private Long rewardReferenceId; // Coupon ID or Webhook Template ID
+    @Column(nullable = false, columnDefinition = "int default 30")
+    private int dedupTtlDays = 30; // how long the same rule/user/product trigger is suppressed
 
     @Column(nullable = false)
     private boolean isActive;
@@ -63,16 +59,14 @@ public class MarketingRule {
 
     @Builder
     public MarketingRule(String ruleName, String behaviorType, Long targetProductId,
-                         int thresholdCount, int lookbackDays, RewardType rewardType,
-                         Long rewardReferenceId, boolean isActive,
-                         Map<String, Object> propertyConditions) {
+                         int thresholdCount, int lookbackDays, Integer dedupTtlDays,
+                         boolean isActive, Map<String, Object> propertyConditions) {
         this.ruleName = ruleName;
         this.behaviorType = behaviorType;
         this.targetProductId = targetProductId;
         this.thresholdCount = thresholdCount;
         this.lookbackDays = lookbackDays;
-        this.rewardType = rewardType;
-        this.rewardReferenceId = rewardReferenceId;
+        this.dedupTtlDays = dedupTtlDays != null && dedupTtlDays > 0 ? dedupTtlDays : 30;
         this.isActive = isActive;
         this.propertyConditions = propertyConditions;
     }

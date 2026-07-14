@@ -43,9 +43,9 @@ public class CouponStrategy implements BatchStrategy {
     public void processBatch(List<CampaignActivityKafkaProducerDto> messages) {
         log.info("Processing Coupon batch size: {}", messages.size());
 
-        // 1. 관련된 Coupon ID 목록 추출 (couponId 필드 사용, 하위 호환성을 위해 productId 폴백)
+        // 1. 관련된 Coupon ID 목록 추출 (actionReferenceId 우선, couponId 필드, productId 폴백 순)
         List<Long> couponIds = messages.stream()
-                .map(msg -> msg.getCouponId() != null ? msg.getCouponId() : msg.getProductId())
+                .map(this::resolveCouponId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .collect(Collectors.toList());
@@ -75,7 +75,7 @@ public class CouponStrategy implements BatchStrategy {
         // 3. UserCoupon 엔티티 생성 (배치 단위 중복 체크 포함)
         List<UserCoupon> userCoupons = messages.stream()
                 .map(msg -> {
-                    Long couponId = msg.getCouponId() != null ? msg.getCouponId() : msg.getProductId();
+                    Long couponId = resolveCouponId(msg);
                     Long userId = msg.getUserId();
                     Coupon coupon = couponMap.get(couponId);
 
@@ -112,5 +112,12 @@ public class CouponStrategy implements BatchStrategy {
 
     private String couponKey(Long userId, Long couponId) {
         return userId + ":" + couponId;
+    }
+
+    private Long resolveCouponId(CampaignActivityKafkaProducerDto msg) {
+        if (msg.getActionReferenceId() != null) {
+            return msg.getActionReferenceId();
+        }
+        return msg.getCouponId() != null ? msg.getCouponId() : msg.getProductId();
     }
 }
