@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -36,7 +37,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(10));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 3, 100_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 3, BigDecimal.valueOf(100_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.VIP);
@@ -50,7 +51,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(30));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 3, 100_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 3, BigDecimal.valueOf(100_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.VIP);
@@ -64,7 +65,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(10));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 3, 99_999L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 3, BigDecimal.valueOf(99_999), NOW);
 
         // Then: VIP 탈락 후 LOYAL 조건으로 낙하
         assertThat(result).isEqualTo(RfmSegment.LOYAL);
@@ -82,7 +83,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(45));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 2, 50_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 2, BigDecimal.valueOf(50_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.LOYAL);
@@ -96,7 +97,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(60));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 2, 30_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 2, BigDecimal.valueOf(30_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.LOYAL);
@@ -114,7 +115,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(90));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 1, 20_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 1, BigDecimal.valueOf(20_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.AT_RISK);
@@ -128,7 +129,7 @@ class RfmSegmentationServiceTest {
     @DisplayName("summary 객체가 null이면 → DORMANT (신규 가입자, 구매 이력 없음)")
     void calculateSegment_nullSummary_returnsDormant() {
         // When
-        RfmSegment result = service.calculateSegment(null, 5, 200_000L, NOW);
+        RfmSegment result = service.calculateSegment(null, 5, BigDecimal.valueOf(200_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.DORMANT);
@@ -142,7 +143,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(null);
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 3, 100_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 3, BigDecimal.valueOf(100_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.DORMANT);
@@ -156,7 +157,7 @@ class RfmSegmentationServiceTest {
         when(summary.getLastPurchaseAt()).thenReturn(NOW.minusDays(5));
 
         // When
-        RfmSegment result = service.calculateSegment(summary, 0, 500_000L, NOW);
+        RfmSegment result = service.calculateSegment(summary, 0, BigDecimal.valueOf(500_000), NOW);
 
         // Then
         assertThat(result).isEqualTo(RfmSegment.DORMANT);

@@ -47,6 +47,10 @@ public class MarketingRule {
     @Column(nullable = false)
     private boolean isActive;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "audience_segment_id")
+    private AudienceSegment audienceSegment;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "json")
     private Map<String, Object> propertyConditions; // e.g. {"depth": 75} for SCROLL, {"durationSec": 30} for STAY
@@ -61,7 +65,8 @@ public class MarketingRule {
     @Builder
     public MarketingRule(String ruleName, String behaviorType, Long targetProductId,
                          int thresholdCount, int lookbackDays, Integer dedupTtlDays,
-                         boolean isActive, Map<String, Object> propertyConditions) {
+                         boolean isActive, AudienceSegment audienceSegment,
+                         Map<String, Object> propertyConditions) {
         this.ruleName = ruleName;
         this.behaviorType = behaviorType;
         this.targetProductId = targetProductId;
@@ -69,6 +74,7 @@ public class MarketingRule {
         this.lookbackDays = lookbackDays;
         this.dedupTtlDays = dedupTtlDays != null && dedupTtlDays > 0 ? dedupTtlDays : 30;
         this.isActive = isActive;
+        this.audienceSegment = audienceSegment;
         this.propertyConditions = propertyConditions;
     }
 

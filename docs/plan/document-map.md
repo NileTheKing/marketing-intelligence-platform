@@ -24,6 +24,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/oracle-compose-baseline-runbook.md` | active | current Oracle VM Compose FCFS baseline execution steps and artifact boundary |
 | `docs/plan/rest-api-route-clean-cutover-plan.md` | active (implemented) | current SSR/API route contract and 2026-07-14 clean-cutover record |
 | `docs/plan/marketing-rule-multi-action-handoff.md` | active (implemented) | implemented MarketingRule 1:N action expansion; records the bounded scope, acceptance tests, and required VM schema cutover |
+| `docs/plan/rfm-audience-segment-v1-plan.md` | active (implemented) | RFM repair and RFM-only AudienceSegment filter for MarketingRule; excludes generic segment DSL and membership pre-computation |
 
 ## Active / Current Implementation References
 

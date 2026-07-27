@@ -4,6 +4,7 @@ import com.axon.core_service.domain.user.RfmSegment;
 import com.axon.core_service.domain.user.UserSummary;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
@@ -23,14 +24,17 @@ public class RfmSegmentationService {
      * @param now 기준 시간
      * @return 판별된 RfmSegment
      */
-    public RfmSegment calculateSegment(UserSummary summary, int frequency, long monetary, LocalDateTime now) {
+    public RfmSegment calculateSegment(UserSummary summary, long frequency, BigDecimal monetary, LocalDateTime now) {
         if (summary == null || summary.getLastPurchaseAt() == null || frequency == 0) {
             return RfmSegment.DORMANT;
         }
 
+        BigDecimal totalRevenue = monetary != null ? monetary : BigDecimal.ZERO;
+
         long daysSinceLastPurchase = ChronoUnit.DAYS.between(summary.getLastPurchaseAt(), now);
 
-        if (daysSinceLastPurchase <= 30 && frequency >= 3 && monetary >= 100_000) {
+        if (daysSinceLastPurchase <= 30 && frequency >= 3
+                && totalRevenue.compareTo(BigDecimal.valueOf(100_000)) >= 0) {
             return RfmSegment.VIP;
         }
 

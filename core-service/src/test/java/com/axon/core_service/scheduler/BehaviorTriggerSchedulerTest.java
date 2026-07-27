@@ -1,16 +1,19 @@
 package com.axon.core_service.scheduler;
 
 import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.AudienceSegment;
 import com.axon.core_service.domain.marketing.MarketingRule;
 import com.axon.core_service.domain.marketing.RewardType;
+import com.axon.core_service.domain.user.RfmSegment;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.MarketingRuleRepository;
+import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.service.BehaviorEventService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -42,6 +45,9 @@ class BehaviorTriggerSchedulerTest {
 
     @Mock
     private MarketingActionRepository marketingActionRepository;
+
+    @Mock
+    private UserSummaryRepository userSummaryRepository;
 
     @Mock
     private RedisTemplate<String, String> redisTemplate;
@@ -82,6 +88,16 @@ class BehaviorTriggerSchedulerTest {
 
     private MarketingRule marketingRule(Long ruleId) {
         return marketingRule(ruleId, null, null);
+    }
+
+    private AudienceSegment audienceSegment(Long segmentId, RfmSegment rfmSegment, boolean isActive) {
+        AudienceSegment segment = AudienceSegment.builder()
+                .name("test-segment-" + segmentId)
+                .targetRfmSegment(rfmSegment)
+                .isActive(isActive)
+                .build();
+        setId(segment, segmentId);
+        return segment;
     }
 
     private MarketingAction marketingAction(Long actionId, MarketingRule rule, RewardType actionType,
@@ -156,6 +172,69 @@ class BehaviorTriggerSchedulerTest {
         scheduler.runBehaviorCouponTrigger();
 
         verify(kafkaTemplate, times(1)).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), any());
+    }
+
+    @Test
+    @DisplayName("RFM AudienceSegment가 있으면 행동 후보를 bulk 필터해 일치 유저에게만 발행한다")
+    void runBehaviorCouponTrigger_audienceSegment_filtersCandidatesInBulk() throws Exception {
+        Long ruleId = 11L, actionId = 110L, eligibleUserId = 1L, excludedUserId = 2L, productId = 100L;
+        AudienceSegment segment = audienceSegment(1L, RfmSegment.AT_RISK, true);
+        MarketingRule rule = MarketingRule.builder()
+                .ruleName("at-risk-rule")
+                .behaviorType("PAGE_VIEW")
+                .thresholdCount(3)
+                .lookbackDays(7)
+                .isActive(true)
+                .audienceSegment(segment)
+                .build();
+        setId(rule, ruleId);
+        MarketingAction action = marketingAction(actionId, rule, RewardType.COUPON, 999L, true);
+
+        when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
+        when(marketingActionRepository.findByMarketingRuleIdInAndIsActiveTrue(List.of(ruleId)))
+                .thenReturn(List.of(action));
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull(), isNull()))
+                .thenReturn(Map.of(eligibleUserId, List.of(productId), excludedUserId, List.of(productId)));
+        when(userSummaryRepository.findUserIdsByUserIdInAndRfmSegment(anyList(), eq(RfmSegment.AT_RISK)))
+                .thenReturn(List.of(eligibleUserId));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(30L), eq(TimeUnit.DAYS))).thenReturn(true);
+        stubSuccessfulSend();
+
+        scheduler.runBehaviorCouponTrigger();
+
+        verify(userSummaryRepository).findUserIdsByUserIdInAndRfmSegment(
+                argThat(ids -> ids.containsAll(List.of(eligibleUserId, excludedUserId)) && ids.size() == 2),
+                eq(RfmSegment.AT_RISK));
+        verify(kafkaTemplate, times(1)).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), any());
+    }
+
+    @Test
+    @DisplayName("비활성 AudienceSegment를 참조한 룰은 전체 발송으로 넓어지지 않고 건너뛴다")
+    void runBehaviorCouponTrigger_inactiveAudienceSegment_skipsRule() throws Exception {
+        Long ruleId = 12L;
+        AudienceSegment segment = audienceSegment(2L, RfmSegment.AT_RISK, false);
+        MarketingRule rule = MarketingRule.builder()
+                .ruleName("inactive-segment-rule")
+                .behaviorType("PAGE_VIEW")
+                .thresholdCount(3)
+                .lookbackDays(7)
+                .isActive(true)
+                .audienceSegment(segment)
+                .build();
+        setId(rule, ruleId);
+        MarketingAction action = marketingAction(120L, rule, RewardType.COUPON, 999L, true);
+
+        when(marketingRuleRepository.findByIsActiveTrue()).thenReturn(List.of(rule));
+        when(marketingActionRepository.findByMarketingRuleIdInAndIsActiveTrue(List.of(ruleId)))
+                .thenReturn(List.of(action));
+        when(behaviorEventService.getHighlyEngagedUsersForProduct(any(), any(), anyString(), anyInt(), isNull(), isNull()))
+                .thenReturn(Map.of(1L, List.of(100L)));
+
+        scheduler.runBehaviorCouponTrigger();
+
+        verify(userSummaryRepository, never()).findUserIdsByUserIdInAndRfmSegment(anyList(), any());
+        verify(kafkaTemplate, never()).send(anyString(), any());
     }
 
     @Test

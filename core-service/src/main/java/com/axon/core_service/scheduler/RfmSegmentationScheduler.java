@@ -2,8 +2,8 @@ package com.axon.core_service.scheduler;
 
 import com.axon.core_service.domain.user.RfmSegment;
 import com.axon.core_service.domain.user.UserSummary;
-import com.axon.core_service.domain.user.metric.UserMetric;
-import com.axon.core_service.repository.UserMetricRepository;
+import com.axon.core_service.domain.dto.user.UserRfmMetricsDto;
+import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.service.RfmSegmentationService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -23,7 +25,7 @@ import java.util.List;
 public class RfmSegmentationScheduler {
 
     private final UserSummaryRepository userSummaryRepository;
-    private final UserMetricRepository userMetricRepository;
+    private final PurchaseRepository purchaseRepository;
     private final RfmSegmentationService rfmSegmentationService;
 
     // 매일 새벽 4시 실행
@@ -42,15 +44,19 @@ public class RfmSegmentationScheduler {
                 break;
             }
 
+            Map<Long, UserRfmMetricsDto> metricsByUserId = purchaseRepository
+                    .findRfmMetricsByUserIdIn(page.getContent().stream().map(UserSummary::getUserId).toList())
+                    .stream()
+                    .collect(Collectors.toMap(UserRfmMetricsDto::userId, Function.identity()));
+
             for (UserSummary summary : page.getContent()) {
                 Long userId = summary.getUserId();
 
-                // 1. UserMetric (Analytics Store)에서 사전 집계된 파생 지표 조회 (O(1))
-                int frequency = getMetricValue(userId, "PURCHASE_COUNT");
-                long monetary = getMetricValue(userId, "TOTAL_REVENUE");
+                UserRfmMetricsDto metrics = metricsByUserId.get(userId);
+                long frequency = metrics != null ? metrics.purchaseCount() : 0;
 
-                // 2. 비즈니스 로직에 기반한 등급 판정
-                RfmSegment segment = rfmSegmentationService.calculateSegment(summary, frequency, monetary, now);
+                RfmSegment segment = rfmSegmentationService.calculateSegment(
+                        summary, frequency, metrics != null ? metrics.totalRevenue() : null, now);
 
                 // 3. Update Snapshot
                 if (summary.getRfmSegment() != segment) {
@@ -69,15 +75,5 @@ public class RfmSegmentationScheduler {
         }
 
         log.info("========== RFM Segmentation Batch Completed ==========");
-    }
-
-    private int getMetricValue(Long userId, String metricName) {
-        List<UserMetric> metrics = userMetricRepository.findByUserIdAndMetricName(userId, metricName);
-        if (metrics.isEmpty()) return 0;
-
-        // 기간(Window) 상관없이 누적된 지표 합산을 위해 sum 처리 (도메인 특성에 맞게 조정 가능)
-        return metrics.stream()
-                .mapToLong(UserMetric::getMetricValue)
-                .sum() > 0 ? (int) metrics.stream().mapToLong(UserMetric::getMetricValue).sum() : 0;
     }
 }

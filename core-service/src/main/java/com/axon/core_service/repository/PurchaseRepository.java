@@ -2,6 +2,7 @@ package com.axon.core_service.repository;
 
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
+import com.axon.core_service.domain.dto.user.UserRfmMetricsDto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -81,6 +82,11 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
                         @Param("userIds") List<Long> userIds,
                         @Param("startDate") LocalDateTime startDate,
                         @Param("endDate") LocalDateTime endDate);
+
+        @Query("SELECT new com.axon.core_service.domain.dto.user.UserRfmMetricsDto(" +
+                        "p.userId, COUNT(p), COALESCE(SUM(p.price * p.quantity), 0)) " +
+                        "FROM Purchase p WHERE p.userId IN :userIds GROUP BY p.userId")
+        List<UserRfmMetricsDto> findRfmMetricsByUserIdIn(@Param("userIds") List<Long> userIds);
 
         /**
          * 특정 Activity에서 재구매한 고객 수 조회

@@ -1,10 +1,12 @@
 package com.axon.core_service.scheduler;
 
 import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.AudienceSegment;
 import com.axon.core_service.domain.marketing.MarketingRule;
 import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.MarketingRuleRepository;
+import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.service.BehaviorEventService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -30,6 +33,7 @@ public class BehaviorTriggerScheduler {
     private final BehaviorEventService behaviorEventService;
     private final MarketingRuleRepository marketingRuleRepository;
     private final MarketingActionRepository marketingActionRepository;
+    private final UserSummaryRepository userSummaryRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final SchedulerExecutionLock schedulerExecutionLock;
@@ -80,7 +84,9 @@ public class BehaviorTriggerScheduler {
                     start, now, rule.getBehaviorType(), rule.getThresholdCount(),
                     rule.getTargetProductId(), rule.getPropertyConditions());
 
-            for (Map.Entry<Long, List<Long>> entry : highlyEngagedUsers.entrySet()) {
+            Map<Long, List<Long>> audienceQualifiedUsers = filterAudience(rule, highlyEngagedUsers);
+
+            for (Map.Entry<Long, List<Long>> entry : audienceQualifiedUsers.entrySet()) {
                 Long userId = entry.getKey();
 
                 for (Long productId : entry.getValue()) {
@@ -92,6 +98,26 @@ public class BehaviorTriggerScheduler {
         } catch (Exception e) {
             log.error("Error processing rule id={} name='{}': {}", rule.getId(), rule.getRuleName(), e.getMessage(), e);
         }
+    }
+
+    private Map<Long, List<Long>> filterAudience(MarketingRule rule, Map<Long, List<Long>> candidates) {
+        if (candidates.isEmpty()) {
+            return candidates;
+        }
+        AudienceSegment audienceSegment = rule.getAudienceSegment();
+        if (audienceSegment == null) {
+            return candidates;
+        }
+        if (!audienceSegment.isActive()) {
+            log.warn("Skipping rule id={}: audience segment id={} is inactive", rule.getId(), audienceSegment.getId());
+            return Map.of();
+        }
+
+        Set<Long> qualifiedUserIds = Set.copyOf(userSummaryRepository.findUserIdsByUserIdInAndRfmSegment(
+                List.copyOf(candidates.keySet()), audienceSegment.getTargetRfmSegment()));
+        return candidates.entrySet().stream()
+                .filter(entry -> qualifiedUserIds.contains(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private void triggerAction(MarketingRule rule, MarketingAction action, Long userId, Long productId) {
