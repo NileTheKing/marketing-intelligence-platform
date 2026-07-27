@@ -32,6 +32,7 @@ public class BehaviorTriggerScheduler {
     private final MarketingActionRepository marketingActionRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final SchedulerExecutionLock schedulerExecutionLock;
 
     /**
      * 매 시간 0분에 실행.
@@ -40,6 +41,10 @@ public class BehaviorTriggerScheduler {
      */
     @Scheduled(cron = "0 0 * * * *")
     public void runBehaviorCouponTrigger() {
+        schedulerExecutionLock.runIfAcquired("behavior-trigger", this::runBehaviorCouponTriggerLocked);
+    }
+
+    private void runBehaviorCouponTriggerLocked() {
         log.info("========== Behavior Coupon Trigger Batch Started ==========");
 
         List<MarketingRule> activeRules = marketingRuleRepository.findByIsActiveTrue();

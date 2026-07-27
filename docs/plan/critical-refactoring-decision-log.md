@@ -426,6 +426,8 @@ Verify:
 
 ### 7. Add scheduler single-runner protection and execution history
 
+Status: `partially implemented (2026-07-27)`
+
 Current issue:
 
 - Global schedulers are different from Kafka consumers.
@@ -434,7 +436,8 @@ Current issue:
 
 Target direction:
 
-- Add ShedLock, DB advisory lock, Redis lock, or another single-runner mechanism for global schedulers.
+- `BehaviorTriggerScheduler` now uses `SchedulerExecutionLock`, a Redisson lock wrapper. A non-owner instance logs a normal skip; the owner releases the lock in `finally`.
+- Extend the same single-runner policy to stock sync, cohort, RFM, and reconciliation schedulers after defining each job's lock scope and failure semantics.
 - Add execution history tables for behavior trigger and stock sync jobs.
 - Record started/succeeded/failed counts, duration, last error, and next retry decision.
 

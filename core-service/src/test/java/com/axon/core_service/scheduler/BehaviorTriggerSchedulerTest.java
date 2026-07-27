@@ -9,6 +9,7 @@ import com.axon.core_service.service.BehaviorEventService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,8 +52,19 @@ class BehaviorTriggerSchedulerTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private SchedulerExecutionLock schedulerExecutionLock;
+
     @InjectMocks
     private BehaviorTriggerScheduler scheduler;
+
+    @BeforeEach
+    void runScheduledJobInThisUnitTest() {
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return true;
+        }).when(schedulerExecutionLock).runIfAcquired(eq("behavior-trigger"), any(Runnable.class));
+    }
 
     private MarketingRule marketingRule(Long ruleId, Long targetProductId, Integer dedupTtlDays) {
         MarketingRule rule = MarketingRule.builder()

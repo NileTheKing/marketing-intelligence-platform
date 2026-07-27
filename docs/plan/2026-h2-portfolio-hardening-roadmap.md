@@ -93,7 +93,8 @@ Immediate cleanup scope:
    - Reason: resume/portfolio claims should be backed by real persistence behavior, not by assuming JPA `saveAll` is DB bulk insert.
 
 7. Global scheduler safety
-   - Add single-runner protection for behavior trigger and stock-sync style schedulers under multi-pod deployment.
+   - `BehaviorTriggerScheduler` has single-runner protection via a Redisson wrapper: one owner runs and other pods skip normally.
+   - Apply the same policy to stock-sync style schedulers after their lock scope and failure semantics are defined.
    - Add execution history for trigger/sync runs before adding AI summaries or operator recommendations.
    - Reason: Kafka consumer groups solve partition ownership, but they do not protect global scheduled jobs from running on every pod.
 
@@ -522,7 +523,7 @@ Multi-pod note:
 
 - Kafka consumer flush workers are local queue processors. Kafka consumer groups distribute partition ownership, so the same message is not normally processed by multiple pods in the same group.
 - Global scheduled jobs are different. `BehaviorTriggerScheduler`, stock sync, cohort batch, and segmentation batch read shared DB/ES state directly, so multi-pod deployment can run the same job more than once unless a scheduler lock or single-runner constraint is introduced.
-- If multi-pod operation becomes part of the claim, add ShedLock or an equivalent DB/Redis scheduler lock for state-mutating jobs.
+- `BehaviorTriggerScheduler` is protected by `SchedulerExecutionLock` (Redisson). Stock sync, cohort, and segmentation jobs remain follow-up work; do not claim general scheduler single-runner safety yet.
 
 ## Main Upgrade 3-A: MarketingRule Multi-Action Model
 
