@@ -13,6 +13,23 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
 
+  elasticsearch-init:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      - elasticsearch
+    networks:
+      - axon-network
+    volumes:
+      - ./infrastructure/elasticsearch/behavior-event-index-template.json:/template.json:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until curl -fsS http://elasticsearch:9200 >/dev/null; do sleep 2; done;
+        curl -fsS -X PUT http://elasticsearch:9200/_index_template/axon-behavior-event-v1
+        -H 'Content-Type: application/json' --data-binary @/template.json
+    restart: "no"
+
   kibana:
     image: docker.elastic.co/kibana/kibana:8.15.0
     container_name: axon-kibana
@@ -31,8 +48,10 @@ services:
       dockerfile: Dockerfile
     container_name: kafka-connect
     depends_on:
-      - broker
-      - elasticsearch
+      broker:
+        condition: service_started
+      elasticsearch-init:
+        condition: service_completed_successfully
     ports:
       - "8083:8083"
     networks:

@@ -1,5 +1,6 @@
 package com.axon.core_service.domain.marketing;
 
+import com.axon.messaging.behavior.BehaviorEventProperty;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -69,5 +70,11 @@ public class MarketingRule {
         this.dedupTtlDays = dedupTtlDays != null && dedupTtlDays > 0 ? dedupTtlDays : 30;
         this.isActive = isActive;
         this.propertyConditions = propertyConditions;
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void validatePropertyConditions() {
+        BehaviorEventProperty.validateRuleConditions(propertyConditions);
     }
 }

@@ -3,7 +3,9 @@ package com.axon.entry_service.controller;
 import com.axon.entry_service.domain.behavior.UserBehaviorEvent;
 import com.axon.entry_service.dto.BehaviorDiagnosticRequest;
 import com.axon.entry_service.dto.BehaviorEventRequest;
+import com.axon.entry_service.service.exception.BehaviorEventValidationException;
 import com.axon.entry_service.service.behavior.BehaviorEventPublisher;
+import com.axon.messaging.behavior.BehaviorEventProperty;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.Instant;
@@ -50,6 +52,7 @@ public class BehaviorEventController {
         Map<String, Object> enrichedProperties = new HashMap<>(
                 request.getProperties() != null ? request.getProperties() : Map.of());
         enrichWithCampaignId(enrichedProperties);
+        BehaviorEventProperty.NormalizedProperties normalized = normalize(enrichedProperties);
 
         UserBehaviorEvent event = UserBehaviorEvent.builder()
                 .eventId(request.getEventId())
@@ -61,7 +64,8 @@ public class BehaviorEventController {
                 .pageUrl(request.getPageUrl())
                 .referrer(request.getReferrer())
                 .userAgent(extractUserAgent(servletRequest))
-                .properties(enrichedProperties)
+                .properties(normalized.properties())
+                .attributes(normalized.attributes())
                 .build();
 
         publisher.publish(event);
@@ -82,6 +86,7 @@ public class BehaviorEventController {
             properties.put("triggerType", request.getTriggerType());
         }
 
+        BehaviorEventProperty.NormalizedProperties normalized = normalize(properties);
         UserBehaviorEvent event = UserBehaviorEvent.builder()
                 .eventName("SDK Diagnostic")
                 .triggerType("SDK_DIAGNOSTIC")
@@ -89,11 +94,20 @@ public class BehaviorEventController {
                 .sessionId(request.getSessionId())
                 .pageUrl(request.getPageUrl())
                 .userAgent(extractUserAgent(servletRequest))
-                .properties(properties)
+                .properties(normalized.properties())
+                .attributes(normalized.attributes())
                 .build();
 
         publisher.publish(event);
         return ResponseEntity.accepted().build();
+    }
+
+    private BehaviorEventProperty.NormalizedProperties normalize(Map<String, Object> properties) {
+        try {
+            return BehaviorEventProperty.normalize(properties);
+        } catch (IllegalArgumentException exception) {
+            throw new BehaviorEventValidationException(exception.getMessage(), exception);
+        }
     }
 
     private void enrichWithCampaignId(Map<String, Object> properties) {

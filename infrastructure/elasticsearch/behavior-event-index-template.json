@@ -1,0 +1,33 @@
+{
+  "index_patterns": ["axon.event.behavior"],
+  "template": {
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "eventId": { "type": "long" },
+        "eventName": { "type": "keyword" },
+        "triggerType": { "type": "keyword" },
+        "occurredAt": { "type": "date" },
+        "userId": { "type": "long" },
+        "sessionId": { "type": "keyword" },
+        "pageUrl": { "type": "keyword", "ignore_above": 2048 },
+        "referrer": { "type": "keyword", "ignore_above": 2048 },
+        "userAgent": { "type": "keyword", "ignore_above": 1024 },
+        "properties": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "activityId": { "type": "long" },
+            "campaignId": { "type": "long" },
+            "productId": { "type": "long" },
+            "depth": { "type": "long" },
+            "durationSec": { "type": "long" },
+            "source": { "type": "keyword" },
+            "order": { "type": "long" }
+          }
+        },
+        "attributes": { "type": "flattened" }
+      }
+    }
+  }
+}

@@ -146,3 +146,4 @@ Prefer specific names:
 - Scale calculation must be formula-based and auditable.
 - Kafka consumer local flush workers and global scheduled jobs must be discussed separately. Consumer groups handle Kafka partition ownership; global schedulers still need a lock or single-runner constraint under multi-pod deployment.
 - Virtual threads are not a substitute for responsibility separation. Use them selectively for blocking external I/O workers, not as a blanket fix for Kafka listener or scheduler design.
+| `docs/plan/behavior-event-schema-v1.md` | active (implemented, ES cutover pending) | Behavior-event property contract, Entry normalization, MarketingRule condition boundary, and ES strict/flattened mapping |

@@ -58,6 +58,9 @@ public class KafkaBehaviorEventPublisher implements BehaviorEventPublisher {
         Map<String, Object> props = event.getProperties().isEmpty()
                 ? null
                 : event.getProperties();
+        Map<String, Object> attributes = event.getAttributes().isEmpty()
+                ? null
+                : event.getAttributes();
 
         Instant occurredAt = event.getOccurredAt();
         return UserBehaviorEventMessage.builder()
@@ -71,6 +74,7 @@ public class KafkaBehaviorEventPublisher implements BehaviorEventPublisher {
                 .referrer(event.getReferrer())
                 .userAgent(event.getUserAgent())
                 .properties(props)
+                .attributes(attributes)
                 .build();
     }
 }

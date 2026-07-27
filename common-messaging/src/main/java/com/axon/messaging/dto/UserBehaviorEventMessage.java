@@ -25,4 +25,5 @@ public class UserBehaviorEventMessage {
     private String referrer;
     private String userAgent;
     private Map<String, Object> properties;
+    private Map<String, Object> attributes;
 }

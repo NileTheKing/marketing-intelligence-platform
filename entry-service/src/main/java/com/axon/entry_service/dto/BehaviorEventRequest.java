@@ -32,5 +32,6 @@ public class BehaviorEventRequest {
     @Size(max = 2048)
     private String referrer;
 
+    @Size(max = 20)
     private Map<String, Object> properties;
 }

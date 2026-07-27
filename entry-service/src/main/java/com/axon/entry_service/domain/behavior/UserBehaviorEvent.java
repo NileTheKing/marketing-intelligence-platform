@@ -20,6 +20,7 @@ public class UserBehaviorEvent {
     private final String referrer;
     private final String userAgent;
     private final Map<String, Object> properties;
+    private final Map<String, Object> attributes;
 
     /**
      * Creates a UserBehaviorEvent instance, normalizing optional fields to ensure non-null and immutable state.
@@ -38,7 +39,8 @@ public class UserBehaviorEvent {
                               String pageUrl,
                               String referrer,
                               String userAgent,
-                              Map<String, Object> properties) {
+                              Map<String, Object> properties,
+                              Map<String, Object> attributes) {
         this.eventId = eventId;
         this.eventName = eventName;
         this.triggerType = triggerType;
@@ -51,5 +53,8 @@ public class UserBehaviorEvent {
         this.properties = properties == null || properties.isEmpty()
                 ? Collections.emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(properties));
+        this.attributes = attributes == null || attributes.isEmpty()
+                ? Collections.emptyMap()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
     }
 }

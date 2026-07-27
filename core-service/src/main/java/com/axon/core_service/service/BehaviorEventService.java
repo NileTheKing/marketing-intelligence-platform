@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.json.JsonData;
+import com.axon.messaging.behavior.BehaviorEventProperty;
 import com.axon.core_service.domain.dashboard.CampaignFunnelDefinition;
 import com.axon.core_service.domain.dashboard.FunnelStep;
 import com.axon.messaging.CampaignActivityType;
@@ -271,6 +272,7 @@ public class BehaviorEventService {
         filters.add(buildProductIdFilter(targetProductId));
         filters.add(buildTimeRangeFilter(start, end));
         if (propertyConditions != null && !propertyConditions.isEmpty()) {
+            BehaviorEventProperty.validateRuleConditions(propertyConditions);
             propertyConditions.forEach((key, value) -> filters.add(buildPropertyMinFilter(key, value)));
         }
 
