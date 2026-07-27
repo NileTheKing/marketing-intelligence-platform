@@ -431,7 +431,7 @@ Implementation note:
 - The failure table should be the source for status, retry count, failure stage, and AI summary.
 - Kafka DLT remains the transport-level isolation path. The DB audit row is the operational recovery view.
 
-## Main Upgrade 3: MarketingRule Execution History
+## Main Upgrade 3: MarketingRule Execution History and Holdout Measurement
 
 ### Problem
 
@@ -461,6 +461,55 @@ marketing_rule_execution
 - failure_reason
 - started_at
 - finished_at
+```
+
+### Campaign Effect Measurement Extension
+
+Execution history alone answers "did the automation run?" It does not answer whether the
+action was associated with a later purchase. For CRM-oriented use cases, extend the action
+execution record with a small, deterministic experiment boundary:
+
+```text
+Behavior condition / AudienceSegment
+-> eligible users
+-> deterministic assignment by hash(userId + experimentId)
+   -> treatment: dispatch MarketingAction
+   -> control: record eligibility only, do not dispatch
+-> Purchase source of truth
+-> group-level conversion / GMV comparison
+```
+
+Minimal action-level history:
+
+```text
+marketing_action_execution
+- id
+- rule_id
+- action_id
+- experiment_id (nullable when no experiment is configured)
+- user_id
+- product_id
+- group: TREATMENT | CONTROL
+- status: ELIGIBLE | DISPATCHED | SUCCEEDED | FAILED
+- dispatched_at
+- completed_at
+- failure_reason
+```
+
+Boundary:
+
+- This is a measurement-ready structure, not a claim that a coupon caused a conversion.
+- Purchase remains the MySQL source of truth; Elasticsearch remains the behavior targeting/read model.
+- Redis dedup continues to prevent duplicate action dispatch. The execution row is the durable audit and result-join boundary.
+- The first UI is a small admin result card/table. The LLM may later call the same read-only aggregation service; it must not calculate a separate result.
+- Statistical significance, generic experiment management, and multi-tenant isolation are out of scope for the first version.
+
+Portfolio message:
+
+```text
+I connected behavior-based targeting, coupon/webhook execution, and purchase-led outcome aggregation.
+I preserved a deterministic control group so campaign effectiveness can be compared without treating
+delivery attempts as business outcomes.
 ```
 
 ### Portfolio Message
