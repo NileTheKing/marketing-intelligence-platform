@@ -36,6 +36,9 @@ public class Product {
     @Column(name = "discount_rate")
     private Integer discountRate;
 
+    @Column(name = "campaign_only", nullable = false)
+    private boolean campaignOnly = false;
+
     // @Version
     /**
      * Creates a Product with the given name, stock, price and category.
@@ -51,12 +54,18 @@ public class Product {
 
     public Product(String productName, Long stock, java.math.BigDecimal price, String category, String brand,
             Integer discountRate) {
+        this(productName, stock, price, category, brand, discountRate, false);
+    }
+
+    public Product(String productName, Long stock, java.math.BigDecimal price, String category, String brand,
+            Integer discountRate, boolean campaignOnly) {
         this.productName = productName;
         this.stock = stock;
         this.price = price;
         this.category = category;
         this.brand = brand;
         this.discountRate = discountRate;
+        this.campaignOnly = campaignOnly;
     }
 
     /**
@@ -71,5 +80,12 @@ public class Product {
             throw new IllegalStateException("재고가 부족합니다.");
         }
         this.stock -= quantity;
+    }
+
+    public void increaseStock(long quantity) {
+        if (quantity < 0) {
+            throw new IllegalArgumentException("quantity must not be negative");
+        }
+        this.stock += quantity;
     }
 }

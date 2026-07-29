@@ -43,7 +43,7 @@ public class StoreViewService {
     private final CouponService couponService;
 
     public MainShopViewData getMainShopViewData(String category) {
-        List<ProductDisplayDto> allProducts = productRepository.findAll().stream()
+        List<ProductDisplayDto> allProducts = productRepository.findAllByCampaignOnlyFalse().stream()
                 .map(this::convertToProductDto)
                 .collect(Collectors.toList());
 
@@ -72,13 +72,13 @@ public class StoreViewService {
     }
 
     public ProductDisplayDto getProductDisplay(Long productId) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndCampaignOnlyFalse(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
         return convertToProductDto(product);
     }
 
     public CheckoutViewData getCheckoutViewData(Long userId, Long productId) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndCampaignOnlyFalse(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
 
         List<ApplicableCouponDto> coupons = List.of();
@@ -137,6 +137,8 @@ public class StoreViewService {
 
     public void recordPaymentSuccess(Long userId, Long productId, Long couponId, BigDecimal finalPrice) {
         if (userId != null && productId != null && finalPrice != null) {
+            productRepository.findByIdAndCampaignOnlyFalse(productId)
+                    .orElseThrow(() -> new IllegalArgumentException("Campaign-only products cannot use shop checkout"));
             Purchase purchase = Purchase.builder()
                     .userId(userId)
                     .productId(productId)

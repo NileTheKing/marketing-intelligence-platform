@@ -12,6 +12,15 @@ document.addEventListener('DOMContentLoaded', function () {
     async function fetchCohortData() {
         try {
             const response = await fetch(`/api/v1/dashboard/cohort/activity/${activityId}`);
+
+            if (response.status === 202) {
+                showPendingMessage();
+                return;
+            }
+            if (!response.ok) {
+                throw new Error(`Cohort API request failed: ${response.status}`);
+            }
+
             const data = await response.json();
 
             updateCohortInfo(data);
@@ -309,6 +318,23 @@ document.addEventListener('DOMContentLoaded', function () {
                     <i class="fa-solid fa-exclamation-triangle text-red-600 text-4xl mb-4"></i>
                     <h3 class="text-xl font-semibold text-red-900 mb-2">데이터를 불러올 수 없습니다</h3>
                     <p class="text-red-700">Activity ID: ${activityId}에 대한 코호트 데이터가 없거나 오류가 발생했습니다.</p>
+                    <a href="/admin/dashboard/${activityId}"
+                       class="mt-4 inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        실시간 대시보드로 돌아가기
+                    </a>
+                </div>
+            `;
+        }
+    }
+
+    function showPendingMessage() {
+        const main = document.querySelector('main');
+        if (main) {
+            main.innerHTML = `
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-8 text-center">
+                    <i class="fa-solid fa-clock text-blue-600 text-4xl mb-4"></i>
+                    <h3 class="text-xl font-semibold text-blue-900 mb-2">월간 코호트 집계 대기 중</h3>
+                    <p class="text-blue-700">Activity ID: ${activityId}의 LTV 코호트 결과는 월간 배치 완료 후 조회할 수 있습니다.</p>
                     <a href="/admin/dashboard/${activityId}"
                        class="mt-4 inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                         실시간 대시보드로 돌아가기

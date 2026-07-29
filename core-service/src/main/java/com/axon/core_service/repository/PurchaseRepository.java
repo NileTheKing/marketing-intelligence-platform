@@ -2,6 +2,7 @@ package com.axon.core_service.repository;
 
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
+import com.axon.core_service.domain.purchase.PurchaseStatus;
 import com.axon.core_service.domain.dto.user.UserRfmMetricsDto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -24,8 +25,12 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
         // 캠페인별 구매 내역 조회
         List<Purchase> findByCampaignActivityId(Long campaignActivityId);
 
-        // 캠페인별 구매 성공 건수 조회 (Index 활용)
+        // 캠페인별 영속 Purchase 건수 (Redis FCFS 대사용; 취소/환불 이력 포함)
         long countByCampaignActivityId(Long campaignActivityId);
+
+        long countByCampaignActivityIdAndStatus(Long campaignActivityId, PurchaseStatus status);
+
+        java.util.Optional<Purchase> findFirstByUserIdAndStatusOrderByPurchaseAtDesc(Long userId, PurchaseStatus status);
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // Cohort Analysis Queries
@@ -36,6 +41,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT p FROM Purchase p " +
                         "WHERE p.campaignActivityId = :activityId " +
+                        "AND p.status = 'CONFIRMED' " +
                         "AND p.purchaseAt >= :startDate " +
                         "AND p.purchaseAt < :endDate " +
                         "ORDER BY p.purchaseAt ASC")
@@ -50,11 +56,13 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT p FROM Purchase p " +
                         "WHERE p.campaignActivityId = :activityId " +
+                        "AND p.status = 'CONFIRMED' " +
                         "AND p.purchaseAt >= :startDate " +
                         "AND p.purchaseAt < :endDate " +
                         "AND NOT EXISTS (" +
                         "    SELECT 1 FROM Purchase prev " +
                         "    WHERE prev.userId = p.userId " +
+                        "    AND prev.status = 'CONFIRMED' " +
                         "    AND prev.purchaseAt < p.purchaseAt" +
                         ")")
         List<Purchase> findFirstPurchasesByActivityAndPeriod(
@@ -67,6 +75,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT p FROM Purchase p " +
                         "WHERE p.userId IN :userIds " +
+                        "AND p.status = 'CONFIRMED' " +
                         "ORDER BY p.userId, p.purchaseAt ASC")
         List<Purchase> findByUserIdIn(@Param("userIds") List<Long> userIds);
 
@@ -75,6 +84,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT p FROM Purchase p " +
                         "WHERE p.userId IN :userIds " +
+                        "AND p.status = 'CONFIRMED' " +
                         "AND p.purchaseAt >= :startDate " +
                         "AND p.purchaseAt < :endDate " +
                         "ORDER BY p.purchaseAt ASC")
@@ -85,7 +95,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
 
         @Query("SELECT new com.axon.core_service.domain.dto.user.UserRfmMetricsDto(" +
                         "p.userId, COUNT(p), COALESCE(SUM(p.price * p.quantity), 0)) " +
-                        "FROM Purchase p WHERE p.userId IN :userIds GROUP BY p.userId")
+                        "FROM Purchase p WHERE p.userId IN :userIds AND p.status = 'CONFIRMED' GROUP BY p.userId")
         List<UserRfmMetricsDto> findRfmMetricsByUserIdIn(@Param("userIds") List<Long> userIds);
 
         /**
@@ -93,6 +103,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT COUNT(DISTINCT p.userId) FROM Purchase p " +
                         "WHERE p.campaignActivityId = :activityId " +
+                        "AND p.status = 'CONFIRMED' " +
                         "AND p.userId IN :cohortUserIds " +
                         "GROUP BY p.userId " +
                         "HAVING COUNT(p.id) > 1")
@@ -103,7 +114,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
         /**
          * 특정 유저가 구매(참여)한 모든 CampaignActivity ID 조회
          */
-        @Query("SELECT p.campaignActivityId FROM Purchase p WHERE p.userId = :userId AND p.campaignActivityId IS NOT NULL")
+        @Query("SELECT p.campaignActivityId FROM Purchase p WHERE p.userId = :userId AND p.status = 'CONFIRMED' AND p.campaignActivityId IS NOT NULL")
         List<Long> findPurchasedCampaignActivityIdsByUserId(@Param("userId") Long userId);
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -116,6 +127,7 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
          */
         @Query("SELECT p FROM Purchase p " +
                "WHERE p.purchaseType = 'CAMPAIGNACTIVITY' " +
+               "AND p.status = 'CONFIRMED' " +
                "AND p.purchaseAt >= :startDate AND p.purchaseAt < :endDate " +
                "AND p.campaignActivityId IS NOT NULL " +
                "AND NOT EXISTS (" +
@@ -124,6 +136,27 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
                "    AND c.userId = p.userId" +
                ")")
         List<Purchase> findGhostPurchases(
+                @Param("startDate") LocalDateTime startDate,
+                @Param("endDate") LocalDateTime endDate);
+
+        @Query("SELECT new com.axon.core_service.domain.dto.dashboard.PurchaseAggregate(" +
+                "COUNT(p), COALESCE(SUM(p.price * p.quantity), 0)) " +
+                "FROM Purchase p WHERE p.campaignActivityId = :activityId " +
+                "AND p.status = 'CONFIRMED' " +
+                "AND p.purchaseAt >= :startDate AND p.purchaseAt < :endDate")
+        com.axon.core_service.domain.dto.dashboard.PurchaseAggregate findConfirmedAggregateByActivityIdAndPeriod(
+                @Param("activityId") Long activityId,
+                @Param("startDate") LocalDateTime startDate,
+                @Param("endDate") LocalDateTime endDate);
+
+        @Query("SELECT new com.axon.core_service.domain.dto.dashboard.PurchaseAggregateByActivity(" +
+                "p.campaignActivityId, COUNT(p), COALESCE(SUM(p.price * p.quantity), 0)) " +
+                "FROM Purchase p WHERE p.campaignActivityId IN :activityIds " +
+                "AND p.status = 'CONFIRMED' " +
+                "AND p.purchaseAt >= :startDate AND p.purchaseAt < :endDate " +
+                "GROUP BY p.campaignActivityId")
+        List<com.axon.core_service.domain.dto.dashboard.PurchaseAggregateByActivity> findConfirmedAggregatesByActivityIdsAndPeriod(
+                @Param("activityIds") List<Long> activityIds,
                 @Param("startDate") LocalDateTime startDate,
                 @Param("endDate") LocalDateTime endDate);
 }

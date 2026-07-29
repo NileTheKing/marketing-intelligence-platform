@@ -5,6 +5,7 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import com.axon.messaging.CampaignActivityType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -44,4 +45,10 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
      * @return list of campaigns that already ended with the given status
      */
     List<CampaignActivity> findByEndDateBeforeAndStatus(LocalDateTime endTime, CampaignActivityStatus status);
+
+    boolean existsByProduct_IdAndStatusAndActivityType(Long productId,
+            CampaignActivityStatus status, CampaignActivityType activityType);
+
+    boolean existsByProduct_IdAndStatusAndActivityTypeAndIdNot(Long productId,
+            CampaignActivityStatus status, CampaignActivityType activityType, Long id);
 }

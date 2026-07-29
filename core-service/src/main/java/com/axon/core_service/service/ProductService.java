@@ -45,10 +45,16 @@ public class ProductService {
 
     @Transactional
     public void syncCampaignStock(Long productId, Long delta) {
-        if (delta <= 0) return;
+        if (delta == 0) return;
 
         Product product = productRepository.findByIdWithPessimisticLock(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+
+        if (delta < 0) {
+            product.increaseStock(-delta);
+            log.info("Campaign stock restored: productId={}, delta={}", productId, -delta);
+            return;
+        }
 
         long actualToDecrease = delta;
         if (product.getStock() < delta) {

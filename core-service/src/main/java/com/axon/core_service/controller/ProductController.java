@@ -22,7 +22,7 @@ public class ProductController {
 
     @GetMapping("/search")
     public ResponseEntity<?> searchProducts(@RequestParam("keyword") String keyword) {
-        List<Product> products = productRepository.findByProductNameContaining(keyword);
+        List<Product> products = productRepository.findByProductNameContainingAndCampaignOnlyFalse(keyword);
 
         List<Map<String, Object>> result = products.stream()
                 .map(p -> {

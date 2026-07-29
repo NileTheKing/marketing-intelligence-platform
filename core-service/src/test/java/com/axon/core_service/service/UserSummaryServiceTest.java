@@ -8,6 +8,9 @@ import static org.mockito.Mockito.when;
 
 import com.axon.core_service.domain.user.User;
 import com.axon.core_service.repository.UserRepository;
+import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.domain.purchase.Purchase;
+import com.axon.core_service.domain.purchase.PurchaseStatus;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +25,9 @@ class UserSummaryServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private PurchaseRepository purchaseRepository;
 
     @InjectMocks
     private UserSummaryService userSummaryService;
@@ -68,5 +74,23 @@ class UserSummaryServiceTest {
         assertThatThrownBy(() -> userSummaryService.recordLogin(3L, Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("User not found: 3");
+    }
+
+    @Test
+    @DisplayName("구매 요약 재구성은 가장 최근 CONFIRMED 구매 시각만 반영한다")
+    void rebuildPurchaseSummaryUsesLatestConfirmedPurchase() {
+        User user = mock(User.class);
+        com.axon.core_service.domain.user.UserSummary summary = mock(com.axon.core_service.domain.user.UserSummary.class);
+        Purchase purchase = mock(Purchase.class);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(user.getUserSummary()).thenReturn(summary);
+        when(purchaseRepository.findFirstByUserIdAndStatusOrderByPurchaseAtDesc(1L, PurchaseStatus.CONFIRMED))
+                .thenReturn(Optional.of(purchase));
+        when(purchase.getPurchaseAt()).thenReturn(java.time.LocalDateTime.of(2026, 7, 28, 10, 0));
+
+        userSummaryService.rebuildPurchaseSummary(1L);
+
+        verify(summary).updateLastPurchaseAt(eq(java.time.LocalDateTime.of(2026, 7, 28, 1, 0)
+                .toInstant(java.time.ZoneOffset.UTC)));
     }
 }

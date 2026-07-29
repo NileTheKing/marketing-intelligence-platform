@@ -6,6 +6,8 @@ import com.axon.core_service.domain.dashboard.FunnelStep;
 import com.axon.core_service.domain.dto.dashboard.DashboardResponse;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.domain.dto.dashboard.PurchaseAggregate;
 import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
 import org.junit.jupiter.api.DisplayName;
@@ -35,11 +37,13 @@ class DashboardServiceTest {
         BehaviorEventService behaviorEventService = mock(BehaviorEventService.class);
         CampaignRepository campaignRepository = mock(CampaignRepository.class);
         CampaignActivityRepository campaignActivityRepository = mock(CampaignActivityRepository.class);
+        PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
         DashboardService dashboardService = new DashboardService(
                 realtimeMetricsService,
                 behaviorEventService,
                 campaignRepository,
                 campaignActivityRepository,
+                purchaseRepository,
                 new DashboardMetricCalculator());
 
         Long activityId = 1L;
@@ -60,8 +64,8 @@ class DashboardServiceTest {
                 eq(FunnelStep.ENGAGE), any(), any())).thenReturn(40L);
         when(behaviorEventService.getFunnelStepCount(eq(activityId), eq(CampaignActivityType.FIRST_COME_FIRST_SERVE),
                 eq(FunnelStep.QUALIFY), any(), any())).thenReturn(12L);
-        when(behaviorEventService.getFunnelStepCount(eq(activityId), eq(CampaignActivityType.FIRST_COME_FIRST_SERVE),
-                eq(FunnelStep.PURCHASE), any(), any())).thenReturn(10L);
+        when(purchaseRepository.findConfirmedAggregateByActivityIdAndPeriod(eq(activityId), any(), any()))
+                .thenReturn(new PurchaseAggregate(10L, BigDecimal.valueOf(100_000)));
 
         DashboardResponse response = dashboardService.getDashboardByActivity(
                 activityId,
@@ -75,6 +79,8 @@ class DashboardServiceTest {
         assertThat(response.funnel())
                 .extracting("count")
                 .containsExactly(100L, 40L, 12L, 10L);
+        verify(behaviorEventService, never()).getFunnelStepCount(eq(activityId),
+                eq(CampaignActivityType.FIRST_COME_FIRST_SERVE), eq(FunnelStep.PURCHASE), any(), any());
     }
 
     @Test
@@ -84,11 +90,13 @@ class DashboardServiceTest {
         BehaviorEventService behaviorEventService = mock(BehaviorEventService.class);
         CampaignRepository campaignRepository = mock(CampaignRepository.class);
         CampaignActivityRepository campaignActivityRepository = mock(CampaignActivityRepository.class);
+        PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
         DashboardService dashboardService = new DashboardService(
                 realtimeMetricsService,
                 behaviorEventService,
                 campaignRepository,
                 campaignActivityRepository,
+                purchaseRepository,
                 new DashboardMetricCalculator());
 
         Long activityId = 2L;
@@ -104,6 +112,9 @@ class DashboardServiceTest {
         when(realtimeMetricsService.getParticipantCount(activityId)).thenReturn(0L);
         when(realtimeMetricsService.getRemainingStock(0L, 100L)).thenReturn(100L);
         for (FunnelStep step : FunnelStep.values()) {
+            if (step == FunnelStep.PURCHASE) {
+                continue;
+            }
             when(behaviorEventService.getFunnelStepCount(eq(activityId), eq(CampaignActivityType.COUPON),
                     eq(step), any(), any())).thenReturn(0L);
         }

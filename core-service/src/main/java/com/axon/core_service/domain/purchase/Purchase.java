@@ -15,6 +15,7 @@ import java.util.Objects;
 @Table(name = "purchases",
     indexes = {
         @Index(name = "idx_purchase_activity_lookup", columnList = "campaign_activity_id, purchase_type, purchase_at"),
+        @Index(name = "idx_purchase_activity_status_period", columnList = "campaign_activity_id, status, purchase_at"),
         @Index(name = "idx_purchase_user_history", columnList = "user_id, purchase_at")
     },
     uniqueConstraints = {
@@ -53,6 +54,16 @@ public class Purchase {
     @Column(name = "purchase_at", nullable = false)
     private LocalDateTime purchaseAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private PurchaseStatus status = PurchaseStatus.CONFIRMED;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @Builder
     public Purchase(Long userId, Long productId, Long campaignActivityId,
                      PurchaseType purchaseType, BigDecimal price,
@@ -75,5 +86,36 @@ public class Purchase {
         } else {
             this.campaignActivityId = campaignActivityId;
         }
+    }
+
+    public boolean cancel(String reason, Instant occurredAt) {
+        if (status == PurchaseStatus.CANCELLED || status == PurchaseStatus.REFUNDED) {
+            return false;
+        }
+        if (status != PurchaseStatus.CONFIRMED) {
+            throw new IllegalStateException("Only confirmed purchases can be cancelled");
+        }
+        status = PurchaseStatus.CANCELLED;
+        cancelledAt = toLocalDateTime(occurredAt);
+        cancellationReason = reason;
+        return true;
+    }
+
+    public boolean refund(String reason, Instant occurredAt) {
+        if (status == PurchaseStatus.REFUNDED) {
+            return false;
+        }
+        if (status != PurchaseStatus.CONFIRMED) {
+            throw new IllegalStateException("Only confirmed purchases can be refunded");
+        }
+        status = PurchaseStatus.REFUNDED;
+        cancelledAt = toLocalDateTime(occurredAt);
+        cancellationReason = reason;
+        return true;
+    }
+
+    private LocalDateTime toLocalDateTime(Instant occurredAt) {
+        Instant effectiveAt = occurredAt != null ? occurredAt : Instant.now();
+        return LocalDateTime.ofInstant(effectiveAt, ZoneId.of("Asia/Seoul"));
     }
 }

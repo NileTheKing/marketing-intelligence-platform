@@ -7,6 +7,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.dashboard.*;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class DashboardService {
     private final BehaviorEventService behaviorEventService;
     private final CampaignRepository campaignRepository;
     private final CampaignActivityRepository campaignActivityRepository;
+    private final PurchaseRepository purchaseRepository;
     private final DashboardMetricCalculator metricCalculator;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -79,14 +81,14 @@ public class DashboardService {
         Long visits = getStepCount(activityId, activityType, FunnelStep.VISIT, start, end);
         Long engages = getStepCount(activityId, activityType, FunnelStep.ENGAGE, start, end);
         Long qualifies = getStepCount(activityId, activityType, FunnelStep.QUALIFY, start, end);
-        Long purchases = getStepCount(activityId, activityType, FunnelStep.PURCHASE, start, end);
+        PurchaseAggregate confirmedPurchases = confirmedPurchases(activityId, start, end);
+        Long purchases = confirmedPurchases.purchaseCount();
 
-        java.math.BigDecimal price = activity != null ? activity.getPrice() : java.math.BigDecimal.ZERO;
         java.math.BigDecimal budget = activity != null && activity.getBudget() != null
                 ? activity.getBudget()
                 : java.math.BigDecimal.ZERO;
 
-        java.math.BigDecimal gmv = metricCalculator.gmv(price, purchases);
+        java.math.BigDecimal gmv = confirmedPurchases.gmv();
         java.math.BigDecimal aov = metricCalculator.averageOrderValue(gmv, purchases);
 
         double conversionRate = metricCalculator.percentage(purchases, visits);
@@ -119,7 +121,10 @@ public class DashboardService {
                 .map(CampaignActivity::getActivityType)
                 .orElse(null);
         return funnelSteps.stream()
-                .map(step -> new FunnelStepData(step, getStepCount(activityId, activityType, step, start, end)))
+                .map(step -> new FunnelStepData(step,
+                        step == FunnelStep.PURCHASE
+                                ? confirmedPurchases(activityId, start, end).purchaseCount()
+                                : getStepCount(activityId, activityType, step, start, end)))
                 .toList();
     }
 
@@ -161,6 +166,11 @@ public class DashboardService {
             log.error("Failed to get count for step: {} in activity: {}", step, activityId, e);
             return 0L;
         }
+    }
+
+    private PurchaseAggregate confirmedPurchases(Long activityId, LocalDateTime start, LocalDateTime end) {
+        PurchaseAggregate aggregate = purchaseRepository.findConfirmedAggregateByActivityIdAndPeriod(activityId, start, end);
+        return aggregate != null ? aggregate : PurchaseAggregate.empty();
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -224,10 +234,14 @@ public class DashboardService {
         java.math.BigDecimal totalGMV = java.math.BigDecimal.ZERO;
 
         List<ActivityComparisonData> comparisonTable = new ArrayList<>();
-        List<Long> activityIds = new ArrayList<>(); // This was used for heatmap, now moved to getHourlyHeatmap
+        List<Long> activityIds = activities.stream().map(CampaignActivity::getId).toList();
+        Map<Long, PurchaseAggregate> confirmedPurchaseByActivity = purchaseRepository
+                .findConfirmedAggregatesByActivityIdsAndPeriod(activityIds, start, end).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        PurchaseAggregateByActivity::activityId,
+                        aggregate -> new PurchaseAggregate(aggregate.purchaseCount(), aggregate.gmv())));
 
         for (CampaignActivity activity : activities) {
-            activityIds.add(activity.getId());
             Map<String, Long> activityStats = stats.getOrDefault(activity.getId(), Collections.emptyMap());
 
             Long visits = CampaignFunnelDefinition.countForStep(
@@ -236,10 +250,10 @@ public class DashboardService {
                     activityStats, activity.getActivityType(), FunnelStep.ENGAGE);
             Long qualifies = CampaignFunnelDefinition.countForStep(
                     activityStats, activity.getActivityType(), FunnelStep.QUALIFY);
-            Long purchases = CampaignFunnelDefinition.countForStep(
-                    activityStats, activity.getActivityType(), FunnelStep.PURCHASE);
-
-            java.math.BigDecimal gmv = calculateGMV(activity.getId(), purchases);
+            PurchaseAggregate confirmedPurchases = confirmedPurchaseByActivity
+                    .getOrDefault(activity.getId(), PurchaseAggregate.empty());
+            Long purchases = confirmedPurchases.purchaseCount();
+            java.math.BigDecimal gmv = confirmedPurchases.gmv();
 
             // Calculate Conversion Rate (Visit -> Purchase)
             double conversionRate = metricCalculator.percentage(purchases, visits);
@@ -312,14 +326,6 @@ public class DashboardService {
         }
     }
 
-    public java.math.BigDecimal calculateGMV(Long activityId, Long purchaseCount) {
-        com.axon.core_service.domain.campaignactivity.CampaignActivity activity = campaignActivityRepository
-                .findById(activityId)
-                .orElseThrow(() -> new IllegalArgumentException("Activity not found: " + activityId));
-
-        return metricCalculator.gmv(activity.getPrice(), purchaseCount);
-    }
-
     public double calculateROAS(java.math.BigDecimal gmv, java.math.BigDecimal budget) {
         return metricCalculator.roas(gmv, budget);
     }
@@ -356,18 +362,12 @@ public class DashboardService {
             Map<String, Long> stats = allStats.getOrDefault(campaignId, Collections.emptyMap());
 
             Long visits = stats.getOrDefault("PAGE_VIEW", 0L);
-            Long purchases = stats.getOrDefault("PURCHASE", 0L);
-
-            // Simplified GMV calculation: Purchases * Avg Price (First activity price)
-            // Note: For precise global GMV, we should aggregate per activity, but for speed
-            // we approximate here
-            java.math.BigDecimal avgPrice = java.math.BigDecimal.valueOf(10000);
-            if (!campaign.getCampaignActivities().isEmpty()) {
-                java.math.BigDecimal firstPrice = campaign.getCampaignActivities().get(0).getPrice();
-                if (firstPrice != null)
-                    avgPrice = firstPrice;
-            }
-            java.math.BigDecimal campaignGmv = avgPrice.multiply(java.math.BigDecimal.valueOf(purchases));
+            List<Long> activityIds = campaign.getCampaignActivities().stream().map(CampaignActivity::getId).toList();
+            PurchaseAggregate campaignPurchases = activityIds.isEmpty()
+                    ? PurchaseAggregate.empty()
+                    : sumAggregates(purchaseRepository.findConfirmedAggregatesByActivityIdsAndPeriod(activityIds, start, end));
+            Long purchases = campaignPurchases.purchaseCount();
+            java.math.BigDecimal campaignGmv = campaignPurchases.gmv();
 
             java.math.BigDecimal budget = campaign.getBudget() != null ? campaign.getBudget()
                     : java.math.BigDecimal.ZERO;
@@ -425,5 +425,15 @@ public class DashboardService {
 
     private String formatCurrency(java.math.BigDecimal amount) {
         return java.text.NumberFormat.getCurrencyInstance(java.util.Locale.KOREA).format(amount);
+    }
+
+    private PurchaseAggregate sumAggregates(List<PurchaseAggregateByActivity> aggregates) {
+        long count = 0;
+        java.math.BigDecimal gmv = java.math.BigDecimal.ZERO;
+        for (PurchaseAggregateByActivity aggregate : aggregates) {
+            count += aggregate.purchaseCount();
+            gmv = gmv.add(aggregate.gmv());
+        }
+        return new PurchaseAggregate(count, gmv);
     }
 }

@@ -55,6 +55,8 @@ public class CampaignActivityService {
             }
         }
 
+        validateFcfsProductPolicy(request.getActivityType(), request.getStatus(), product, null);
+
         CampaignActivity campaignActivity = CampaignActivity.builder()
                 .campaign(campaign)
                 .name(request.getName())
@@ -91,6 +93,11 @@ public class CampaignActivityService {
     public CampaignActivityResponse updateCampaignActivity(Long campaignActivityId, CampaignActivityRequest request) {
         CampaignActivity campaignActivity = findCampaignActivity(campaignActivityId);
 
+        Product requestedProduct = request.getActivityType() == com.axon.messaging.CampaignActivityType.COUPON
+                ? null
+                : request.getProductId() != null ? findProduct(request.getProductId()) : campaignActivity.getProduct();
+        validateFcfsProductPolicy(request.getActivityType(), request.getStatus(), requestedProduct, campaignActivityId);
+
         // Update Basic Info
         campaignActivity.updateInfo(request.getName(), request.getLimitCount());
 
@@ -123,11 +130,7 @@ public class CampaignActivityService {
             }
             campaignActivity.updateCouponInfo(newCoupon);
         } else {
-            Product newProduct = null;
-            if (request.getProductId() != null) {
-                newProduct = findProduct(request.getProductId());
-            }
-            campaignActivity.updateProductInfo(newProduct, request.getPrice(), request.getQuantity());
+            campaignActivity.updateProductInfo(requestedProduct, request.getPrice(), request.getQuantity());
         }
 
         // Update Image URL
@@ -158,6 +161,7 @@ public class CampaignActivityService {
             CampaignActivityStatus status) {
         CampaignActivity campaignActivity = findCampaignActivity(campaignActivityId);
         validateStatusTransition(campaignActivity.getStatus(), status);
+        validateFcfsProductPolicy(campaignActivity.getActivityType(), status, campaignActivity.getProduct(), campaignActivityId);
         campaignActivity.changeStatus(status);
 
         // Invalidate Cache
@@ -301,6 +305,28 @@ public class CampaignActivityService {
             return;
         }
         throw new IllegalStateException("invalid status transition: " + current + " -> " + next);
+    }
+
+    private void validateFcfsProductPolicy(com.axon.messaging.CampaignActivityType activityType,
+            CampaignActivityStatus status, Product product, Long currentActivityId) {
+        if (activityType != com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE
+                || status != CampaignActivityStatus.ACTIVE) {
+            return;
+        }
+        if (product == null || !product.isCampaignOnly()) {
+            throw new IllegalStateException("An ACTIVE FCFS activity requires a campaign-only product");
+        }
+
+        boolean activeProductAlreadyUsed = currentActivityId == null
+                ? campaignActivityRepository.existsByProduct_IdAndStatusAndActivityType(
+                        product.getId(), CampaignActivityStatus.ACTIVE,
+                        com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                : campaignActivityRepository.existsByProduct_IdAndStatusAndActivityTypeAndIdNot(
+                        product.getId(), CampaignActivityStatus.ACTIVE,
+                        com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, currentActivityId);
+        if (activeProductAlreadyUsed) {
+            throw new IllegalStateException("A campaign-only product can belong to only one ACTIVE FCFS activity");
+        }
     }
 
     private void evictMetaCache(Long campaignActivityId) {

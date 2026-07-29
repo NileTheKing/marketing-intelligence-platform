@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.axon.core_service.repository.UserSummaryRepository;
+import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.domain.purchase.PurchaseStatus;
 import com.axon.core_service.service.purchase.PurchaseHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ public class UserSummaryService {
 
     private final UserRepository userRepository;
     private final UserSummaryRepository userSummaryRepository;
+    private final PurchaseRepository purchaseRepository;
     /**
      * Updates the user's purchase activity by recording a purchase that occurred at the given instant.
      *
@@ -63,6 +66,18 @@ public class UserSummaryService {
 
         // 3. Dirty Checking으로 자동 UPDATE
         log.info("Updated purchase time for {} users", users.size());
+    }
+
+    @Transactional
+    public void rebuildPurchaseSummary(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+
+        purchaseRepository.findFirstByUserIdAndStatusOrderByPurchaseAtDesc(userId, PurchaseStatus.CONFIRMED)
+                .ifPresentOrElse(
+                        purchase -> user.getUserSummary().updateLastPurchaseAt(
+                                purchase.getPurchaseAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()),
+                        () -> user.getUserSummary().updateLastPurchaseAt(null));
     }
     /**
         * Records a login event for the specified user at the given timestamp, updating the user's activity summary.

@@ -85,23 +85,17 @@ public class DashboardController {
      *
      * 특정 Activity에서 획득한 고객들의 LTV, CAC, 재구매율 분석
      *
-     * 배치 데이터 우선 조회 방식:
-     * 1. 배치 테이블에 데이터가 있으면 즉시 반환 (0.1초)
-     * 2. 없으면 실시간 계산 (Fallback, 느림)
+     * 월간 배치 결과만 조회한다. 배치 결과가 없으면 실시간 계산하지 않고
+     * 202 Accepted를 반환한다.
      *
      * @param activityId Activity ID
-     * @param startDate  Cohort 시작일 (optional, 기본값: Activity 시작일)
-     * @param endDate    Cohort 종료일 (optional, 기본값: 현재)
      * @return Cohort 분석 결과
      */
     @GetMapping("/cohort/activity/{activityId}")
     public ResponseEntity<CohortAnalysisResponse> getCohortAnalysisByActivity(
-            @PathVariable Long activityId,
-            @RequestParam(required = false) LocalDateTime startDate,
-            @RequestParam(required = false) LocalDateTime endDate) {
+            @PathVariable Long activityId) {
 
-        log.info("Cohort analysis request - activityId: {}, startDate: {}, endDate: {}",
-                activityId, startDate, endDate);
+        log.info("Cohort batch analysis request - activityId: {}", activityId);
 
         // 1. 배치 데이터가 있는지 확인
         if (ltvBatchRepository.existsByCampaignActivityId(activityId)) {
@@ -110,13 +104,8 @@ public class DashboardController {
             return ResponseEntity.ok(response);
         }
 
-        // 2. 배치 데이터 없으면 실시간 계산 (Fallback)
-        log.warn("No batch data found for activity {}, calculating in real-time (slow)", activityId);
-        CohortAnalysisResponse response = cohortAnalysisService.analyzeCohortByActivity(
-                activityId,
-                startDate,
-                endDate);
-        return ResponseEntity.ok(response);
+        log.info("No cohort batch data found for activity {}; batch aggregation is pending", activityId);
+        return ResponseEntity.accepted().build();
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

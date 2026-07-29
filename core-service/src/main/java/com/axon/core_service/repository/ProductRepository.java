@@ -33,5 +33,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByProductNameContaining(String productName);
 
+    List<Product> findByProductNameContainingAndCampaignOnlyFalse(String productName);
+
+    List<Product> findAllByCampaignOnlyFalse();
+
+    Optional<Product> findByIdAndCampaignOnlyFalse(Long id);
+
     List<Product> findByCategory(String category);
 }
