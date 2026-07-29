@@ -1,0 +1,20 @@
+CREATE TABLE reconciliation_issues (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    issue_type VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    fingerprint VARCHAR(180) NOT NULL,
+    campaign_activity_id BIGINT NULL,
+    purchase_id BIGINT NULL,
+    user_id BIGINT NULL,
+    expected_value BIGINT NULL,
+    observed_value BIGINT NULL,
+    evidence TEXT NOT NULL,
+    first_detected_at DATETIME NOT NULL,
+    last_detected_at DATETIME NOT NULL,
+    acknowledged_at DATETIME NULL,
+    resolved_at DATETIME NULL,
+    resolution_note VARCHAR(500) NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_reconciliation_issue_fingerprint UNIQUE (fingerprint),
+    INDEX idx_reconciliation_issue_status_detected (status, last_detected_at)
+);

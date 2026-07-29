@@ -131,4 +131,24 @@ public class CampaignStockSyncTest extends AbstractIntegrationTest {
         Product productAfter3rd = productRepository.findById(productId).orElseThrow();
         assertThat(productAfter3rd.getStock()).isEqualTo(85L);
     }
+
+    @Test
+    @DisplayName("취소된 구매는 CONFIRMED 집계에서 빠져 다음 동기화에서 재고가 복구되어야 함")
+    void cancelledPurchaseRestoresDerivedCampaignStock() {
+        Long purchaseId = transactionTemplate.execute(status -> purchaseRepository.save(new Purchase(
+                1L, productId, activityId, PurchaseType.CAMPAIGNACTIVITY,
+                BigDecimal.valueOf(1000), 1, Instant.now())).getId());
+
+        syncService.syncOngoingCampaignStocks();
+        assertThat(productRepository.findById(productId).orElseThrow().getStock()).isEqualTo(99L);
+
+        transactionTemplate.executeWithoutResult(status -> purchaseRepository.findById(purchaseId)
+                .orElseThrow()
+                .cancel("customer request", Instant.now()));
+
+        syncService.syncOngoingCampaignStocks();
+
+        assertThat(productRepository.findById(productId).orElseThrow().getStock()).isEqualTo(100L);
+        assertThat(activityRepository.findById(activityId).orElseThrow().getSyncedCount()).isZero();
+    }
 }

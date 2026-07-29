@@ -3,6 +3,7 @@ package com.axon.core_service.scheduler;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,16 +21,23 @@ public class ReconciliationScheduler {
 
     private final PurchaseRepository purchaseRepository;
     private final CorePipelineMetrics pipelineMetrics;
+    private final ReconciliationIssueService reconciliationIssueService;
+    private final SchedulerExecutionLock schedulerExecutionLock;
 
     /**
      * [Ghost Data 탐지 대사 배치]
      * 매일 새벽 3시에 전일자 데이터를 대상으로 대사(Reconciliation)를 수행합니다.
      * 참여 기록(CampaignActivityEntry)은 없는데 결제 기록(Purchase)만 존재하는
-     * 데이터 불일치 건(Ghost)을 찾아 Slack 또는 모니터링 툴(Sentry/Datadog)로 알림을 보냅니다.
+     * 데이터 불일치 건(Ghost)을 찾아 운영 이력으로 남깁니다.
      */
     @Scheduled(cron = "0 0 3 * * ?")
-    @Transactional(readOnly = true)
+    @Transactional
     public void detectGhostPurchases() {
+        schedulerExecutionLock.runIfAcquired("reconciliation",
+                () -> pipelineMetrics.recordReconciliationScan(this::detectGhostPurchasesInTransaction));
+    }
+
+    private void detectGhostPurchasesInTransaction() {
         // 대사 타겟 기간: 어제 자정(00:00:00) ~ 오늘 자정(00:00:00)
         LocalDate yesterday = LocalDate.now().minusDays(1);
         LocalDateTime startDate = yesterday.atStartOfDay();
@@ -57,6 +65,7 @@ public class ReconciliationScheduler {
         log.error("🚨 [GHOST DETECTED] 데이터 정합성 오류 발생! 참여 기록 없이 결제된 고아 데이터 {}건 발견!", ghostPurchases.size());
         
         for (Purchase ghost : ghostPurchases) {
+            reconciliationIssueService.detectGhostPurchase(ghost);
             log.error("  👉 [Ghost Detail] Purchase ID: {}, User ID: {}, Activity ID: {}, PurchasedAt: {}",
                     ghost.getId(), ghost.getUserId(), ghost.getCampaignActivityId(), ghost.getPurchaseAt());
             

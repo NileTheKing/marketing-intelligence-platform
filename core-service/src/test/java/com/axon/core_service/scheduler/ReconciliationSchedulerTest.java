@@ -4,6 +4,7 @@ import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.observability.CorePipelineMetrics;
+import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +30,12 @@ class ReconciliationSchedulerTest {
     @Mock
     private CorePipelineMetrics pipelineMetrics;
 
+    @Mock
+    private ReconciliationIssueService reconciliationIssueService;
+
+    @Mock
+    private SchedulerExecutionLock schedulerExecutionLock;
+
     @InjectMocks
     private ReconciliationScheduler reconciliationScheduler;
 
@@ -38,6 +45,7 @@ class ReconciliationSchedulerTest {
         // Given
         when(purchaseRepository.findGhostPurchases(any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(Collections.emptyList());
+        runSchedulerTask();
 
         // When
         reconciliationScheduler.detectGhostPurchases();
@@ -64,6 +72,7 @@ class ReconciliationSchedulerTest {
 
         when(purchaseRepository.findGhostPurchases(any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of(ghostPurchase));
+        runSchedulerTask();
 
         // When
         reconciliationScheduler.detectGhostPurchases();
@@ -72,6 +81,18 @@ class ReconciliationSchedulerTest {
         verify(purchaseRepository, times(1))
                 .findGhostPurchases(any(LocalDateTime.class), any(LocalDateTime.class));
         verify(pipelineMetrics).recordReconciliationResult(1);
+        verify(reconciliationIssueService).detectGhostPurchase(ghostPurchase);
         // 로깅 로직 수행 중 NPE 등 크러시가 발생하지 않는지 검증합니다.
+    }
+
+    private void runSchedulerTask() {
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return true;
+        }).when(schedulerExecutionLock).runIfAcquired(any(), any());
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(pipelineMetrics).recordReconciliationScan(any());
     }
 }

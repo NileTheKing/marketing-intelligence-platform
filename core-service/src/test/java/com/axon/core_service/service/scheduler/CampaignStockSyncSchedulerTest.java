@@ -5,6 +5,8 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.ProductService;
+import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
+import com.axon.core_service.domain.purchase.PurchaseStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +39,9 @@ class CampaignStockSyncSchedulerTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private ReconciliationIssueService reconciliationIssueService;
+
     @InjectMocks
     private CampaignStockSyncService syncService;
 
@@ -59,6 +64,7 @@ class CampaignStockSyncSchedulerTest {
         
         // 하지만 실제 DB 결제 로그는 10개뿐임 (진실의 원천)
         when(purchaseRepository.countByCampaignActivityId(campaignId)).thenReturn(10L);
+        when(purchaseRepository.countByCampaignActivityIdAndStatus(campaignId, PurchaseStatus.CONFIRMED)).thenReturn(10L);
 
         // When
         syncService.syncCampaignStockManually(campaignId);
@@ -93,6 +99,7 @@ class CampaignStockSyncSchedulerTest {
         
         // 실제 DB 결제 로그는 5개 존재
         when(purchaseRepository.countByCampaignActivityId(campaignId)).thenReturn(5L);
+        when(purchaseRepository.countByCampaignActivityIdAndStatus(campaignId, PurchaseStatus.CONFIRMED)).thenReturn(5L);
 
         // When
         syncService.syncCampaignStockManually(campaignId);
