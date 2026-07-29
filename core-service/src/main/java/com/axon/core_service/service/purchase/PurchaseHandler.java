@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -32,7 +31,6 @@ public class PurchaseHandler {
     private final UserSummaryService userSummaryService;
     private final PurchaseService purchaseService;
     private final ApplicationEventPublisher eventPublisher;
-    private final TransactionTemplate transactionTemplate;
     private final DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
     private final CorePipelineMetrics pipelineMetrics;
 
@@ -80,18 +78,13 @@ public class PurchaseHandler {
         }
     }
 
-    /**
-     * 버퍼의 Purchase 이벤트를 배치 처리
-     *
-     * TransactionTemplate 사용으로 전체 배치를 하나의 트랜잭션으로 처리
-     * → 원자성 보장: 하나라도 실패하면 전체 ROLLBACK
-     */
+    /** 버퍼의 Purchase 이벤트를 배치 처리한다. */
     public synchronized void flushBatch() {
         if (purchaseBuffer.isEmpty()) {
             return;
         }
 
-        // 1. 버퍼에서 Purchase 추출 (최대 50개)
+        // 1. 버퍼에서 Purchase 추출 (최대 20개)
         List<PurchaseInfoDto> purchases = drainBuffer();
 
         if (purchases.isEmpty()) {
@@ -103,100 +96,81 @@ public class PurchaseHandler {
     }
 
     private void processBatch(List<PurchaseInfoDto> purchases) {
-        boolean needRetry = false;
-        try {
-            // 2-1. Product별 재고 감소량 집계
-            Map<Long, Integer> stockDecreases = purchases.stream()
-                    .collect(Collectors.groupingBy(
-                            PurchaseInfoDto::productId,
-                            Collectors.summingInt(PurchaseInfoDto::quantity)
-                    ));
-
-            // 2-2. Bulk 재고 감소 (1회 SQL)
-            if (!stockDecreases.isEmpty()) {
-                // 선착순(FCFS)의 경우 실시간 재고 감소는 스킵하고, 캠페인 종료 후 스케줄러가 일괄 차감
-                 log.info("Skipped stock decrease for {} products (Performance Optimization for FCFS)", stockDecreases.size());
-            }
-
-            // 2-3. User별 구매 통계 집계
-            Map<Long, PurchaseSummary> userSummaries = purchases.stream()
-                    .collect(Collectors.groupingBy(
-                            PurchaseInfoDto::userId,
-                            Collectors.collectingAndThen(
-                                    Collectors.toList(),
-                                    list -> new PurchaseSummary(
-                                            list.size(),
-                                            list.stream()
-                                                    .map(p -> p.price().multiply(BigDecimal.valueOf(p.quantity())))
-                                                    .reduce(BigDecimal.ZERO, BigDecimal::add),
-                                            list.getFirst().occurredAt()
-                                    )
-                            )
-                    ));
-
-            // 2-4. Bulk 유저 요약 업데이트 (1회 SQL)
-            if (!userSummaries.isEmpty()) {
-                userSummaryService.recordPurchaseBatch(userSummaries);
-            }
-
-            // 2-5. Purchase bulk insert (REQUIRES_NEW Transaction in Service)
-            purchaseService.createPurchaseBatch(purchases);
-            log.info("Created {} purchase records", purchases.size());
-
-            // 3. CampaignActivityApproved 이벤트 발행
-            List<CampaignActivityApprovedEvent> events = purchases.stream()
-                    .filter(p -> p.campaignActivityId() != null)
-                    .map(p -> new CampaignActivityApprovedEvent(
-                            p.campaignId(),
-                            p.campaignActivityId(),
-                            p.userId(),
-                            p.productId(),
-                            p.occurredAt()
-                    ))
-                    .toList();
-
-            if (!events.isEmpty()) {
-                events.forEach(eventPublisher::publishEvent);
-                log.info("Published {} campaign approval events", events.size());
-            }
-
-        } catch (org.springframework.dao.DataIntegrityViolationException | org.springframework.transaction.UnexpectedRollbackException e) {
-            log.warn("Batch failed due to transaction rollback (likely duplicate). Marking for individual retry... Error: {}", e.getMessage());
-            needRetry = true;
-        } catch (Exception e) {
-            log.error("Error processing purchase batch. Falling back to individual retry for {} purchases", purchases.size(), e);
-            needRetry = true;
+        List<PurchaseInfoDto> persistedPurchases = persistPurchases(purchases);
+        if (persistedPurchases.isEmpty()) {
+            return;
         }
 
-        if (needRetry) {
-            retryIndividually(purchases);
+        updateUserSummaries(persistedPurchases);
+        publishApprovedEvents(persistedPurchases);
+    }
+
+    private List<PurchaseInfoDto> persistPurchases(List<PurchaseInfoDto> purchases) {
+        try {
+            purchaseService.createPurchaseBatch(purchases);
+            log.info("Created {} purchase records", purchases.size());
+            return purchases;
+        } catch (org.springframework.dao.DataIntegrityViolationException | org.springframework.transaction.UnexpectedRollbackException e) {
+            log.warn("Batch failed due to transaction rollback (likely duplicate). Marking for individual retry... Error: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Error processing purchase batch. Falling back to individual retry for {} purchases", purchases.size(), e);
+        }
+
+        return retryIndividually(purchases);
+    }
+
+    private void updateUserSummaries(List<PurchaseInfoDto> purchases) {
+        Map<Long, PurchaseSummary> userSummaries = purchases.stream()
+                .collect(Collectors.groupingBy(
+                        PurchaseInfoDto::userId,
+                        Collectors.collectingAndThen(
+                                Collectors.toList(),
+                                list -> new PurchaseSummary(
+                                        list.size(),
+                                        list.stream()
+                                                .map(p -> p.price().multiply(BigDecimal.valueOf(p.quantity())))
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add),
+                                        list.getFirst().occurredAt()
+                                )
+                        )
+                ));
+
+        try {
+            userSummaryService.recordPurchaseBatch(userSummaries);
+        } catch (Exception e) {
+            // Purchase is the durable fact; do not replay it when its projection update fails.
+            log.error("Purchase records persisted but UserSummary projection update failed for {} users", userSummaries.size(), e);
         }
     }
 
-    private void retryIndividually(List<PurchaseInfoDto> purchases) {
+    private void publishApprovedEvents(List<PurchaseInfoDto> purchases) {
+        List<CampaignActivityApprovedEvent> events = purchases.stream()
+                .filter(p -> p.campaignActivityId() != null)
+                .map(p -> new CampaignActivityApprovedEvent(
+                        p.campaignId(),
+                        p.campaignActivityId(),
+                        p.userId(),
+                        p.productId(),
+                        p.occurredAt()
+                ))
+                .toList();
+
+        events.forEach(eventPublisher::publishEvent);
+        log.info("Published {} campaign approval events", events.size());
+    }
+
+    private List<PurchaseInfoDto> retryIndividually(List<PurchaseInfoDto> purchases) {
         pipelineMetrics.recordPurchaseIndividualRetry(purchases.size());
+        List<PurchaseInfoDto> persistedPurchases = new ArrayList<>();
         for (PurchaseInfoDto purchase : purchases) {
             try {
-                // 1. 구매 저장 (REQUIRES_NEW Transaction in Service)
                 purchaseService.createPurchaseBatch(List.of(purchase));
-
-
-                // 2. 이벤트 발행
-                if (purchase.campaignActivityId() != null) {
-                    eventPublisher.publishEvent(new CampaignActivityApprovedEvent(
-                            purchase.campaignId(),
-                            purchase.campaignActivityId(),
-                            purchase.userId(),
-                            purchase.productId(),
-                            purchase.occurredAt()
-                    ));
-                }
+                persistedPurchases.add(purchase);
             } catch (Exception e) {
                 deadLetterHandler.handle(purchase, e);
-                // 개별 실패는 격리 처리하고 다음 건 진행
             }
-
         }
+        return persistedPurchases;
     }
 
     /**

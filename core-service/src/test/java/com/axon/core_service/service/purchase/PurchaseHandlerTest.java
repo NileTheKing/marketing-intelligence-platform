@@ -2,6 +2,7 @@ package com.axon.core_service.service.purchase;
 
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.domain.purchase.PurchaseType;
+import com.axon.core_service.event.CampaignActivityApprovedEvent;
 import com.axon.core_service.service.ProductService;
 import com.axon.core_service.service.UserSummaryService;
 import com.axon.core_service.observability.CorePipelineMetrics;
@@ -14,10 +15,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,9 +40,6 @@ class PurchaseHandlerTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
-
-    @Mock
-    private TransactionTemplate transactionTemplate;
 
     @Mock
     private DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
@@ -114,8 +112,8 @@ class PurchaseHandlerTest {
     }
 
     @Test
-    @DisplayName("배치 처리 중 일반 예외가 발생해도 개별 재시도로 폴백해야 한다")
-    void flushBatch_WhenGenericExceptionOccurs_FallsBackToIndividualRetry() {
+    @DisplayName("Purchase batch 저장이 실패하면 개별 재시도로 폴백해야 한다")
+    void flushBatch_WhenPurchaseBatchFails_FallsBackToIndividualRetry() {
         PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
                 1L,
                 1L,
@@ -127,16 +125,47 @@ class PurchaseHandlerTest {
                 1,
                 Instant.now()
         );
+        PurchaseInfoDto secondPurchaseInfo = new PurchaseInfoDto(
+                1L,
+                1L,
+                2L,
+                1L,
+                Instant.now(),
+                PurchaseType.CAMPAIGNACTIVITY,
+                BigDecimal.valueOf(5000),
+                1,
+                Instant.now()
+        );
 
         purchaseHandler.handle(purchaseInfo);
-        doThrow(new RuntimeException("boom"))
+        purchaseHandler.handle(secondPurchaseInfo);
+        doThrow(new RuntimeException("batch failure"))
+                .doNothing()
+                .when(purchaseService).createPurchaseBatch(any());
+
+        purchaseHandler.flushBatch();
+
+        verify(purchaseService).createPurchaseBatch(argThat(purchases -> purchases.size() == 2));
+        verify(purchaseService, times(2)).createPurchaseBatch(argThat(purchases -> purchases.size() == 1));
+        verify(deadLetterHandler, never()).handle(any(), any());
+    }
+
+    @Test
+    @DisplayName("UserSummary 갱신 실패는 이미 저장된 Purchase를 재시도하지 않아야 한다")
+    void flushBatch_WhenUserSummaryUpdateFails_DoesNotReplayPurchase() {
+        PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
+                1L, 1L, 1L, 1L, Instant.now(), PurchaseType.CAMPAIGNACTIVITY,
+                BigDecimal.valueOf(5000), 1, Instant.now());
+
+        purchaseHandler.handle(purchaseInfo);
+        doThrow(new RuntimeException("summary failure"))
                 .when(userSummaryService).recordPurchaseBatch(anyMap());
 
         purchaseHandler.flushBatch();
 
-        verify(purchaseService).createPurchaseBatch(argThat(purchases ->
-                purchases.size() == 1 && purchases.get(0).userId().equals(purchaseInfo.userId())));
+        verify(purchaseService, times(1)).createPurchaseBatch(List.of(purchaseInfo));
         verify(deadLetterHandler, never()).handle(any(), any());
+        verify(eventPublisher).publishEvent(any(CampaignActivityApprovedEvent.class));
     }
 
     @Test
