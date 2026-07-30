@@ -584,3 +584,49 @@ Remeasure an individual intervention only when it will be a portfolio headline.
 After a passing final run, update T27 with the three-run median and link the
 result directory. Move this section to a dated completed record or mark it
 implemented; retain the 2026-07-15 boundary devlog as history.
+
+## 2026-07-30 Core Kafka-Native Backlog A/B
+
+Status: completed
+
+This comparison answers a Core durability-boundary question. It is not a
+headline ingress performance benchmark.
+
+Fixed conditions:
+
+- External Mac payment path
+- 1,000 users / 1,000 VUs / FCFS 800
+- Entry/Core/Axon nginx CPU: `1.5/1.2/0.5`
+- Host nginx: `worker_connections 4096`,
+  `worker_rlimit_nofile 16384`, no upstream `keepalive 256`, no host listen
+  backlog override
+- Axon nginx container: `worker_connections 2048`,
+  `listen 80 backlog=4096`; this uncommitted VM setting was held constant and
+  was not independently validated by this A/B
+
+| Result | Before `49ca09f` | After `d5f396b` |
+|---|---:|---:|
+| Measured FCFS success/errors | `800/0`, `800/0` | `800/0`, `800/0` |
+| DB Entry/Purchase | `800/800`, `800/800` | `800/800`, `800/800` |
+| DB convergence | `0s`, `0s` | `0s`, `0s` |
+| Hikari active scrape peak | `3` | `2` |
+| Hikari pending/timeout | `0/0` | `0/0` |
+| Reservation p95 | `3129ms`, `2723ms` | `4125ms`, `2547ms` |
+| HTTP p95 | `1637ms`, `1701ms` | `1884ms`, `1904ms` |
+
+The latency samples overlap and do not support a speedup claim. The accepted
+result is that the same 800-result workload converged without application
+queues or DB-pool pressure.
+
+Crash injection:
+
+- Core stopped: Kafka group lag `800`, DB `0/0`.
+- Abrupt kill after partial work: DB `360/360`, committed offset progress
+  `340`; 20 durable records remained uncommitted.
+- Restart: Entry/Purchase `800/800`, distinct users `800/800`, group lag `0`.
+
+Evidence:
+
+- `artifacts/load-test/20260730-152209-queue-before-main49ca-controlled`
+- `artifacts/load-test/20260730-153943-queue-after-d5f396b-controlled`
+- `artifacts/load-test/20260730-queue-crash-injection-d5f396b/result.md`

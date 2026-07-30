@@ -18,7 +18,8 @@ Do not delete old documents just because they are outdated. Mark their current r
 |---|---|---|
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
-| `docs/plan/session-handoff-2026-07-29.md` | active | accepted next Core queue/offset A/B investigation, verified session state, deployment requirements, and dirty-worktree boundary |
+| `docs/plan/session-handoff-2026-07-30.md` | active | completed Core queue/offset A/B, crash recovery evidence, current VM/branch state, and remaining decision boundary |
+| `docs/plan/session-handoff-2026-07-29.md` | superseded | replaced by the 2026-07-30 Core queue/offset A/B handoff |
 | `docs/plan/domain-refactoring-map.md` | active | DDD-style structure map, ubiquitous language draft, bounded context candidates, and small Fowler-style refactoring units |
 | `docs/plan/spike-traffic-observability-plan.md` | active | Oracle VM Docker Compose based spike bottleneck analysis |
 | `docs/plan/otel-jaeger-apm-plan.md` | active | current OpenTelemetry/Jaeger APM setup and FCFS trace diagnosis plan |

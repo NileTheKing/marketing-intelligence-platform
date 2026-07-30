@@ -1,6 +1,8 @@
 # Session Handoff - 2026-07-29
 
-Status: active
+Status: superseded
+
+Superseded by `docs/plan/session-handoff-2026-07-30.md`.
 
 ## Start Here
 
