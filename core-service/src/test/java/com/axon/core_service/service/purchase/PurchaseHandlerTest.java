@@ -3,6 +3,7 @@ package com.axon.core_service.service.purchase;
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.event.CampaignActivityApprovedEvent;
+import com.axon.core_service.event.PurchaseBatchRequestedEvent;
 import com.axon.core_service.service.ProductService;
 import com.axon.core_service.service.UserSummaryService;
 import com.axon.core_service.observability.CorePipelineMetrics;
@@ -14,14 +15,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.*;
@@ -85,8 +83,8 @@ class PurchaseHandlerTest {
     }
 
     @Test
-    @DisplayName("선착순 구매(CAMPAIGNACTIVITY) 이벤트는 버퍼에 쌓여야 한다")
-    void handle_CampaignPurchase_Buffered() {
+    @DisplayName("선착순 구매 이벤트는 listener 반환 전에 저장되어야 한다")
+    void handle_CampaignPurchase_PersistedBeforeReturn() {
         // 1. Given: CAMPAIGNACTIVITY 타입의 PurchaseInfoDto 생성
         PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
                 1L,
@@ -101,19 +99,16 @@ class PurchaseHandlerTest {
         );
         // 2. When: purchaseHandler.handle() 호출
         purchaseHandler.handle(purchaseInfo);
-        // 3. Then: Mock 객체들의 행위 검증 (never) 및 버퍼 상태 확인
-        // - 서비스 메서드들이 호출되지 않았는지 확인 (never)
+        // 3. Then: campaign purchase durable path completes synchronously
         verify(productService, never()).decreaseStock(anyLong(), anyInt());
-        verify(userSummaryService, never()).recordPurchase(anyLong(), any(Instant.class));
-        verify(purchaseService, never()).createPurchase(any(PurchaseInfoDto.class));
-        // - purchaseBuffer에 데이터가 들어갔는지 확인 (ReflectionTestUtils 사용 가능)
-        ConcurrentLinkedQueue<?> purchaseBuffer = (ConcurrentLinkedQueue<?>) ReflectionTestUtils.getField(purchaseHandler, "purchaseBuffer");
-        assertThat(purchaseBuffer).isNotEmpty();
+        verify(purchaseService).createPurchaseBatch(List.of(purchaseInfo));
+        verify(userSummaryService).recordPurchaseBatch(anyMap());
+        verify(eventPublisher).publishEvent(any(CampaignActivityApprovedEvent.class));
     }
 
     @Test
     @DisplayName("Purchase batch 저장이 실패하면 개별 재시도로 폴백해야 한다")
-    void flushBatch_WhenPurchaseBatchFails_FallsBackToIndividualRetry() {
+    void handleBatch_WhenPurchaseBatchFails_FallsBackToIndividualRetry() {
         PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
                 1L,
                 1L,
@@ -137,13 +132,12 @@ class PurchaseHandlerTest {
                 Instant.now()
         );
 
-        purchaseHandler.handle(purchaseInfo);
-        purchaseHandler.handle(secondPurchaseInfo);
         doThrow(new RuntimeException("batch failure"))
                 .doNothing()
                 .when(purchaseService).createPurchaseBatch(any());
 
-        purchaseHandler.flushBatch();
+        purchaseHandler.handleBatch(new PurchaseBatchRequestedEvent(
+                List.of(purchaseInfo, secondPurchaseInfo)));
 
         verify(purchaseService).createPurchaseBatch(argThat(purchases -> purchases.size() == 2));
         verify(purchaseService, times(2)).createPurchaseBatch(argThat(purchases -> purchases.size() == 1));
@@ -152,16 +146,15 @@ class PurchaseHandlerTest {
 
     @Test
     @DisplayName("UserSummary 갱신 실패는 이미 저장된 Purchase를 재시도하지 않아야 한다")
-    void flushBatch_WhenUserSummaryUpdateFails_DoesNotReplayPurchase() {
+    void handleBatch_WhenUserSummaryUpdateFails_DoesNotReplayPurchase() {
         PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
                 1L, 1L, 1L, 1L, Instant.now(), PurchaseType.CAMPAIGNACTIVITY,
                 BigDecimal.valueOf(5000), 1, Instant.now());
 
-        purchaseHandler.handle(purchaseInfo);
         doThrow(new RuntimeException("summary failure"))
                 .when(userSummaryService).recordPurchaseBatch(anyMap());
 
-        purchaseHandler.flushBatch();
+        purchaseHandler.handleBatch(new PurchaseBatchRequestedEvent(List.of(purchaseInfo)));
 
         verify(purchaseService, times(1)).createPurchaseBatch(List.of(purchaseInfo));
         verify(deadLetterHandler, never()).handle(any(), any());
@@ -170,7 +163,7 @@ class PurchaseHandlerTest {
 
     @Test
     @DisplayName("개별 재시도까지 실패하면 DeadLetterHandler로 격리해야 한다")
-    void flushBatch_WhenIndividualRetryFails_SendsToDeadLetterHandler() {
+    void handleBatch_WhenIndividualRetryFails_SendsToDeadLetterHandler() {
         PurchaseInfoDto purchaseInfo = new PurchaseInfoDto(
                 1L,
                 1L,
@@ -183,12 +176,11 @@ class PurchaseHandlerTest {
                 Instant.now()
         );
 
-        purchaseHandler.handle(purchaseInfo);
         doThrow(new RuntimeException("batch failure"))
                 .doThrow(new RuntimeException("single failure"))
                 .when(purchaseService).createPurchaseBatch(any());
 
-        purchaseHandler.flushBatch();
+        purchaseHandler.handleBatch(new PurchaseBatchRequestedEvent(List.of(purchaseInfo)));
 
         verify(deadLetterHandler).handle(eq(purchaseInfo), any(RuntimeException.class));
     }

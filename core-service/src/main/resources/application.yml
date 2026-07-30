@@ -38,11 +38,16 @@ spring:
         enable.idempotence: true
     consumer:
       group-id: axon-group
+      enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       isolation-level: read_committed
       properties:
+        max.poll.records: 20
         spring.json.trusted.packages: "*"
+    listener:
+      type: batch
+      ack-mode: batch
   task:
     scheduling:
       pool:

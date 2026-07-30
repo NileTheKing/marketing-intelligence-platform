@@ -2,14 +2,13 @@ package com.axon.core_service.service.purchase;
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.event.CampaignActivityApprovedEvent;
+import com.axon.core_service.event.PurchaseBatchRequestedEvent;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.ProductService;
 import com.axon.core_service.service.UserSummaryService;
-import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -19,14 +18,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class PurchaseHandler {
-    private static final int batchSize = 20;
     private final ProductService productService;
     private final UserSummaryService userSummaryService;
     private final PurchaseService purchaseService;
@@ -34,25 +31,24 @@ public class PurchaseHandler {
     private final DeadLetterHandler<PurchaseInfoDto> deadLetterHandler;
     private final CorePipelineMetrics pipelineMetrics;
 
-    // Purchase 이벤트 버퍼
-    private final ConcurrentLinkedQueue<PurchaseInfoDto> purchaseBuffer = new ConcurrentLinkedQueue<>();
-
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handle(PurchaseInfoDto info) {
         if (info.purchaseType() == PurchaseType.SHOP) {
             log.debug("[Purchase] Processing SHOP purchase immediately: userId={}, productId={}", info.userId(), info.productId());
             processImmediate(info);
         } else {
-            purchaseBuffer.offer(info);
-            log.debug("[Purchase] Event buffered. Buffer size: {}", purchaseBuffer.size());
-
-            // 수신 스레드는 메모리에 넣고 즉시 반환 - DB 처리는 스케줄러가 전담
+            pipelineMetrics.recordPurchaseFlush(1, () -> processBatch(List.of(info)));
         }
     }
 
-    /**
-     * 일반 쇼핑몰 구매(SHOP) 등 즉시 처리가 필요한 경우 호출
-     */
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    public void handleBatch(PurchaseBatchRequestedEvent event) {
+        if (event.purchases().isEmpty()) {
+            return;
+        }
+        pipelineMetrics.recordPurchaseFlush(event.purchases().size(), () -> processBatch(event.purchases()));
+    }
+
     private void processImmediate(PurchaseInfoDto info) {
         // 1. 실시간 재고 감소 (단건 처리)
         productService.decreaseStock(info.productId(), info.quantity());
@@ -64,35 +60,6 @@ public class PurchaseHandler {
         purchaseService.createPurchase(info);
 
         log.info("Successfully processed immediate purchase for user {}", info.userId());
-    }
-
-    /**
-     * 100ms마다 자동으로 버퍼 플러시
-     */
-    @Scheduled(fixedDelay = 100)
-    public void scheduledFlush() {
-
-        // 단일 처리가 아닌, 큐가 빌 때까지 50개씩 계속 퍼나르도록 while 루프 적용 (책임의 완벽한 분리)
-        while (!purchaseBuffer.isEmpty()) {
-            flushBatch();
-        }
-    }
-
-    /** 버퍼의 Purchase 이벤트를 배치 처리한다. */
-    public synchronized void flushBatch() {
-        if (purchaseBuffer.isEmpty()) {
-            return;
-        }
-
-        // 1. 버퍼에서 Purchase 추출 (최대 20개)
-        List<PurchaseInfoDto> purchases = drainBuffer();
-
-        if (purchases.isEmpty()) {
-            return;
-        }
-
-        log.info("Processing Purchase batch: {} purchases", purchases.size());
-        pipelineMetrics.recordPurchaseFlush(purchases.size(), () -> processBatch(purchases));
     }
 
     private void processBatch(List<PurchaseInfoDto> purchases) {
@@ -171,36 +138,6 @@ public class PurchaseHandler {
             }
         }
         return persistedPurchases;
-    }
-
-    /**
-     * 버퍼에서 Purchase 추출
-     */
-    private List<PurchaseInfoDto> drainBuffer() {
-        List<PurchaseInfoDto> drained = new ArrayList<>(batchSize);
-
-        for (int i = 0; i < batchSize; i++) {
-            PurchaseInfoDto purchase = purchaseBuffer.poll();
-            if (purchase == null) {
-                break;
-            }
-            drained.add(purchase);
-        }
-
-        return drained;
-    }
-
-    public int bufferedPurchaseCount() {
-        return purchaseBuffer.size();
-    }
-
-    /**
-     * 서비스 종료 시 남은 Purchase 처리
-     */
-    @PreDestroy
-    public void onShutdown() {
-        log.info("Shutting down PurchaseHandler, flushing remaining purchases...");
-        flushBatch();
     }
 
     /**

@@ -6,6 +6,7 @@ import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntry;
 import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntryStatus;
 import com.axon.core_service.domain.dto.purchase.PurchaseInfoDto;
 import com.axon.core_service.domain.purchase.PurchaseType;
+import com.axon.core_service.event.PurchaseBatchRequestedEvent;
 import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import java.time.Instant;
@@ -181,8 +182,10 @@ public class CampaignActivityEntryService {
                     .map(purchaseEventsByKey::get)
                     .filter(java.util.Objects::nonNull)
                     .toList();
-            savedPurchaseEvents.forEach(eventPublisher::publishEvent);
-            log.info("[Purchase Event] Published {} events", savedPurchaseEvents.size());
+            if (!savedPurchaseEvents.isEmpty()) {
+                eventPublisher.publishEvent(new PurchaseBatchRequestedEvent(savedPurchaseEvents));
+                log.info("[Purchase Event] Published batch of {} events", savedPurchaseEvents.size());
+            }
         }
     }
 
