@@ -431,3 +431,156 @@ Measurement flow:
 4. Run final measurement again with `compose.app.yml + compose.resources.yml`, without OTel.
 
 OTel/Jaeger evidence can explain where time was spent. The headline performance number should come from the OTel-off baseline/final pair.
+
+## 2026-07-15 Follow-up: Stable-Network Final Measurement (Pending)
+
+**Status: pending.** This section is the next execution checklist after the
+2026-07-15 external generator network investigation. It is intentionally
+separate from the historical 600-VU records above.
+
+### Final Scenario
+
+```text
+flow:          payment
+shape:         waiting_burst
+users:         3000
+max VUs:       3000
+FCFS limit:    800
+VM profile:    Entry/Core/Axon nginx = 1.5 / 1.2 / 0.5 CPU
+path:          Mac external direct origin -> host nginx -> axon-nginx -> Entry/Core
+protocol:      3 full warm-ups, then 3 measured runs
+```
+
+The 2026-07-13 `3000 users / 3000 VUs / FCFS 800` successes are a provisional
+historical reference, not the final current-code result. The current-code run
+must be repeated from a stable home wired/Wi-Fi connection before T27 uses a
+final p95 or RPS.
+
+### Before Running
+
+1. Record the generator network's unloaded and loaded latency/jitter using the
+   same method for the entire measurement session. Do not use a café/shared
+   Wi-Fi session with multi-second loaded latency as final evidence.
+2. On the VM, record the source revision and resource profile, then rebuild and
+   recreate the services once. Do not change code, CPU quotas, nginx settings,
+   or network between the warm-up and measured runs.
+
+```bash
+cd ~/apps/axon
+git rev-parse HEAD
+grep -E '^(ENTRY_CPUS|CORE_CPUS|NGINX_CPUS)=' .env
+docker compose -f compose.app.yml -f compose.resources.yml \
+  build entry-service core-service
+docker compose -f compose.app.yml -f compose.resources.yml \
+  up -d --force-recreate entry-service core-service axon-nginx
+```
+
+3. Confirm Entry/Core health and retain the output with the result directory.
+
+### Final Command
+
+Run from the stable Mac network. `K6_EVENT_OUTPUT=true` is required once so the
+artifact includes reservation ingress/completion peak data; do not print or
+inspect per-request console logs unless the run fails.
+
+```bash
+cd /Users/yangnail/dev/projects/skusw/axon
+
+RUN_ID="$(date '+%Y%m%d-%H%M%S')-home-final-payment-3000vu-800"
+RESULT_ROOT="$PWD/artifacts/load-test/$RUN_ID"
+mkdir -p "$RESULT_ROOT"
+
+# Save the observed unloaded/loaded network values in this directory.
+# Use the same network-quality tool/session for all three measured runs.
+
+K6_EVENT_OUTPUT=true \
+RUN_ID="$RUN_ID" \
+RESULT_ROOT="$RESULT_ROOT" \
+./scripts/load-test/run-external-warmed-payment.sh 1
+```
+
+### Acceptance Gate
+
+Accept a final measurement only if **all three measured runs** meet every
+condition below. Warm-up results are setup data and are never used as headline
+numbers.
+
+- `fcfs_success_count = 800`, `fcfs_error_count = 0`
+- Redis counter/users = `800/800`
+- DB entries/purchases = `800/800`; convergence seconds retained
+- Host nginx reservation records = `3000`, status `200=800`, `410=2200`
+- Axon nginx reservation completion records = `3000`, status `200=800`,
+  `410=2200`
+- No host nginx `worker_connections`, upstream timeout/connect/reset signal
+- Same Git SHA, VM CPU profile, host nginx configuration, and generator
+  network session across the three measured runs
+
+Use the median of the three measured runs for each final p95/RPS value. Keep
+the metrics separate:
+
+- client E2E `reservation_duration` p95
+- k6 `http_req_duration` p95
+- host nginx request/upstream timing p95
+- Axon nginx reservation completion peak RPS
+- reservation ingress peak RPS (from the k6 event artifact)
+
+### Home Measurement Checkpoints (Pending)
+
+Default runtime conditions:
+
+- VM: Entry `1.5 CPU`, Core `1.2 CPU`, Axon nginx `0.5 CPU`
+- Axon nginx container: `worker_connections 2048`, `multi_accept` off
+- External path only, host nginx: `worker_connections 4096`,
+  `worker_rlimit_nofile 16384`; upstream keepalive is off (the `256` trial was
+  reverted after Tomcat `400` responses)
+
+For each row: fix the Git SHA and every condition other than the listed
+comparison variable; run 3 warm-ups and 3 measured runs.
+
+Historical change order: Entry CPU/cache/publish diagnosis and executor work
+(2026-07-06 to 08) -> host nginx connection-limit fix (2026-07-10 05:07 UTC)
+-> Axon nginx CPU follow-up (2026-07-13). The host nginx decision below is a
+completed prerequisite, not a new A/B row.
+
+| Checkpoint | Compare | Scenario / path |
+|---|---|---|
+| Entry CPU | `ENTRY_CPUS=0.6` vs `1.5` | reservation, 3000 users / 600 VUs / FCFS 600, Axon nginx path |
+| Campaign meta preload | `PRELOAD_CAMPAIGN_META=false` vs `true` | reservation, 3000 users / 600 VUs / FCFS 600, Axon nginx path |
+| Backend event executor | pre-executor Git checkpoint vs current | reservation, 3000 users / 600 VUs / FCFS 600, Axon nginx path |
+| Axon nginx CPU | `NGINX_CPUS=0.1` vs `0.5` | payment, 2000 users / 2000 VUs / FCFS 500, Axon nginx path |
+| Final event-open result | current code/config | payment, 3000 users / 3000 VUs / FCFS 800, Mac external direct origin |
+
+Completed nginx decisions, retained as diagnosis history rather than new A/B tests:
+
+| Layer | Decision | Evidence / disposition |
+|---|---|---|
+| Host nginx | `worker_connections 768 -> 4096`, `worker_rlimit_nofile 16384` | Error log recorded `768 worker_connections are not enough while connecting to upstream`. Keep the fixed limit; do not deliberately recreate the failing live configuration. |
+| Axon nginx | `worker_connections 8192 + multi_accept` trial | Rejected: it increased burst pressure on Entry. Current tracked configuration remains `worker_connections 2048`. |
+| Axon nginx | CPU quota `0.1 -> 0.5` | Reproducible A/B checkpoint above. |
+| Host nginx -> Axon nginx | upstream `keepalive 256` | Rejected: this environment produced Tomcat `400 Bad Request` responses. Keep upstream keepalive off. |
+
+### How to Use These Results
+
+Do not present rows with different VU counts, FCFS limits, or request paths as
+one before/after result. Use two separate claims:
+
+1. **Cumulative improvement benchmark:** reproduce one fixed internal scenario
+   (`reservation`, 3000 users / 600 VUs / FCFS 600) at a pre-improvement
+   checkpoint and at the current checkpoint. This is the only result allowed
+   to state cumulative p95, error-rate, or throughput improvement.
+2. **Event-open capacity validation:** current code under `payment`, 3000
+   users / 3000 VUs / FCFS 800. Report it as a final all-success capacity
+   result, not as a percentage comparison with the first benchmark.
+
+The individual rows above explain *why* the cumulative benchmark changed.
+They are per-change evidence only and must retain their own scenario labels.
+
+For the T27 diagnosis narrative, do not remeasure every historical experiment.
+Use a number only when that intervention has a same-condition repeated A/B
+result. Otherwise retain the direct evidence (for example, the host nginx
+connection-saturation error), the decision, and its current configuration.
+Remeasure an individual intervention only when it will be a portfolio headline.
+
+After a passing final run, update T27 with the three-run median and link the
+result directory. Move this section to a dated completed record or mark it
+implemented; retain the 2026-07-15 boundary devlog as history.

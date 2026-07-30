@@ -27,11 +27,17 @@ The public route runs through a host nginx (nginx 1.18, systemd), separate from 
 
 This is a genuine capacity fault of the public route (host nginx connection saturation → 5xx and non-convergence), fixed by raising `worker_connections`/`worker_rlimit_nofile`. It is **not** a measurement artifact.
 
+The host nginx error log preserved the direct evidence: `768 worker_connections are not enough while connecting to upstream`. Warm-up can increase upstream residence time and make this limit easier to reach, but it cannot explain that explicit capacity alert. There is no controlled pre/post p95 A/B for this host change, so treat it as a defect remediation rather than a standalone latency-improvement claim.
+
 Scope note: the host-nginx tuning (05:07 UTC) predates **all** runs in the matrix below (08:11 UTC onward), so the collapses in this matrix were not caused by host nginx. The host-nginx saturation belongs to the earlier `3000/600` failure history. The clean external results below therefore *depend on* that pre-existing host-nginx fix as a precondition.
 
 ### Axis B — measurement contamination (four confounds)
 
 With host nginx already tuned, the remaining apparent "collapses" traced to measurement confounds, not a server wall. Once controlled, the single VM serves 3000-VU / 800 at 800/800, 0 error, DB 800/800, 0 orphan.
+
+### Follow-up — axon-nginx proxy CPU (2026-07-13)
+
+This is separate from the host nginx connection defect. In sequential internal payment runs (`MAX_VUS=2000`, `FCFS=500`), the axon-nginx path at `NGINX_CPUS=0.1` recorded reservation p95 `7.41s` and HTTP p95 `6.07s`; Entry direct was `1.60s` / `1.44s`; after `NGINX_CPUS=0.5`, the nginx path recorded `3.38s` / `2.64s`. Redis, entries, and purchases were `500/500` in all three runs. This is a proxy-resource signal, not a controlled standalone p95 claim: each run was sequential N=1 and may include warm-up variance. The VM `.env` keeps `NGINX_CPUS=0.5`.
 
 | # | Confound | Symptom | Control |
 |---|---|---|---|

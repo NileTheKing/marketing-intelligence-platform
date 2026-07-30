@@ -25,6 +25,8 @@ otel-agent/
 bin/
 *.class
 out/
+__pycache__/
+*.py[cod]
 .settings/
 .project
 .classpath

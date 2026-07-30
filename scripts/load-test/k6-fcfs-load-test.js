@@ -37,6 +37,7 @@ const FCFS_LIMIT_COUNT = parseInt(__ENV.FCFS_LIMIT_COUNT || '200');
 const USE_PRODUCTION_API = __ENV.USE_PRODUCTION_API === 'true';
 const USE_TOKEN_FILE = __ENV.USE_TOKEN_FILE !== 'false'; // 기본값: true
 const FLOW = __ENV.FLOW || 'full'; // behavior | reservation | payment | full
+const REQUEST_TIMEOUT = __ENV.REQUEST_TIMEOUT || '10s';
 const VIRTUAL_HOST = __ENV.VIRTUAL_HOST || '';
 const DEBUG_ERRORS = __ENV.DEBUG_ERRORS === 'true';
 
@@ -108,6 +109,9 @@ const fcfsSoldOutCount = new Counter('fcfs_sold_out_count');
 const fcfsConflictCount = new Counter('fcfs_conflict_count');
 const fcfsErrorCount = new Counter('fcfs_error_count');
 const fcfsRetryCount = new Counter('fcfs_retry_count');  // 재결제 시나리오
+// JSON output에서 예약 요청의 초당 ingress/completion peak를 집계한다.
+const reservationAttemptStarted = new Counter('reservation_attempt_started');
+const reservationAttemptCompleted = new Counter('reservation_attempt_completed');
 
 const behaviorEventSuccessRate = new Rate('behavior_event_success_rate');
 const behaviorEventCount = new Counter('behavior_event_count');
@@ -613,15 +617,17 @@ function reserveWithJWT(data, userId) {
     quantity: 1 // 수량 명시
   });
 
+  reservationAttemptStarted.add(1);
   const res = http.post(
     `${data.entryServiceUrl}/api/v1/entries`,
     payload,
     {
       headers: requestHeaders(token),
       tags: { name: 'fcfs_reservation_jwt' },
-      timeout: '10s',
+      timeout: REQUEST_TIMEOUT,
     }
   );
+  reservationAttemptCompleted.add(1);
 
   handleReservationResponse(res, userId);
 
@@ -677,7 +683,7 @@ function confirmPayment(data, userId, reservationToken) {
     {
       headers: requestHeaders(token),
       tags: { name: 'payment_prepare' },
-      timeout: '10s',
+      timeout: REQUEST_TIMEOUT,
     }
   );
 
@@ -715,7 +721,7 @@ function confirmPayment(data, userId, reservationToken) {
     {
       headers: requestHeaders(token),
       tags: { name: 'payment_confirm' },
-      timeout: '10s',
+      timeout: REQUEST_TIMEOUT,
     }
   );
 

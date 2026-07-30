@@ -1032,3 +1032,74 @@ Interpretation:
 - FCFS 1000 also completed without an observed Core persistence or consistency failure at the same 600-VU concurrency cap.
 - The 800 and 1000 runs changed successful transaction volume while holding the VU cap fixed; they do not yet establish a higher-concurrency Entry/payment boundary.
 - Before changing Core code, either raise FCFS success volume again with the same cap to test sustained drain capacity, or separately raise `MAX_VUS` when the next question is end-to-end concurrency capacity.
+
+## 2026-07-15 External 3000-VU Boundary Follow-up
+
+This follow-up closes the diagnostic loop from application APM to the public
+ingress boundary. It does **not** replace the 2026-07-10 successful 600-VU
+Core-pipeline records above; it answers a different question: why the current
+external `MAX_VUS=3000` payment measurement is highly variable.
+
+The Jaeger, Micrometer, and executor evidence documented above narrowed the
+application-side candidates. The new observation needed for this follow-up was
+host nginx interval logging, because Entry/Core instrumentation cannot see a
+request that never arrives.
+
+### Host nginx interval evidence
+
+The external path was direct origin (`https://134.185.100.15` with the Axon
+virtual host), so Cloudflare was bypassed:
+
+```text
+Mac k6 -> network/TCP -> VM host nginx -> axon-nginx -> Entry -> Core
+```
+
+For measured `payment / waiting_burst / 3000 users / 3000 VUs / FCFS 800`
+runs, the difference between 3000 attempted reservations and host nginx
+access-log records matched k6 `fcfs_error_count` (within interval boundaries).
+Those failed requests did not reach host nginx user-space access logging.
+Requests that did arrive completed through host/Axon nginx as business `200` or
+`410`; captured host error signals (`worker_connections`, upstream timeout,
+connect failure, reset) were zero.
+
+Host-to-Axon upstream-connect p95 still varied from `0.000s` to `1.493s` across
+similar runs. That remains a latency-variance signal, but is not evidence that
+host nginx caused the missing requests.
+
+### Added observability and configuration
+
+`run-external-compose-baseline.sh` now persists per-run:
+
+- host nginx access/error log slices,
+- host reservation status counts,
+- host request-time and host-to-Axon upstream connect/response p95,
+- host nginx connection/upstream error counts,
+- existing Axon nginx completion summary and Entry/Core Prometheus snapshots.
+
+The VM host nginx Axon vhost temporarily tested an upstream keep-alive pool for
+`127.0.0.1:28080` (`keepalive 256`, HTTP/1.1, cleared `Connection` header).
+`nginx -t` and a local proxy smoke test passed, but later requests produced
+Tomcat `400 Bad Request` responses in this environment, so the trial was
+reverted. The current configuration keeps upstream keep-alive off; this is not
+a portfolio performance-improvement claim.
+
+### Load-generator network boundary
+
+The Mac network used during these runs measured approximately `38ms` unloaded
+latency and `1.2s` latency under a speed-test load (about `46Mbps` down /
+`39Mbps` up). This is strong evidence of client-network queueing/bufferbloat
+and is consistent with failures occurring before host nginx access logging.
+It is not proof that Wi-Fi is the only cause; Mac k6 connection handling and
+VM kernel TCP admission remain secondary candidates.
+
+### Measurement rule
+
+Do not use the 2026-07-15 external artifacts as final T27/portfolio latency or
+RPS evidence. Re-run on stable home wired/Wi-Fi or an independent generator
+with the fixed `1.5/1.2/0.5` Entry/Core/Axon-nginx profile, 3 full warm-ups,
+and 3 measured runs. Accept a final value only when every measured run has
+FCFS `800`, k6 error `0`, Redis `800`, DB entries/purchases `800`, and the
+host/Axon ingress summaries are retained alongside it.
+
+Detailed artifacts and run IDs are recorded in
+`docs/devlog/dev-log-2026-07-15-external-load-generator-boundary.md`.

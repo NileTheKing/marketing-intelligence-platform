@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Fixed-protocol external payment measurement.
-# Three full-size warm-up runs are never used as results. The following three
-# runs are the measurement set; each run resets test data but keeps JVM state.
+# Full-size warm-ups precondition JVM and connection state, but their FCFS/DB
+# outcomes are not acceptance criteria. Each measured run prepares fresh data.
 
 set -uo pipefail
 
@@ -22,7 +22,7 @@ K6_INSECURE_SKIP_TLS_VERIFY="${K6_INSECURE_SKIP_TLS_VERIFY:-true}"
 REACTION_MODE="${REACTION_MODE:-deterministic}"
 EXPECTED_ENTRY_CPUS="${EXPECTED_ENTRY_CPUS:-1.5}"
 EXPECTED_CORE_CPUS="${EXPECTED_CORE_CPUS:-1.2}"
-EXPECTED_NGINX_CPUS="${EXPECTED_NGINX_CPUS:-0.1}"
+EXPECTED_NGINX_CPUS="${EXPECTED_NGINX_CPUS:-0.5}"
 VM_HOST="${VM_HOST:-ubuntu@134.185.100.15}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/oci_arm_key}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/apps/axon}"
@@ -59,6 +59,13 @@ require_profile() {
   fi
 }
 
+require_services_healthy() {
+  if ! ssh -i "$SSH_KEY" "$VM_HOST" "curl -fsS http://127.0.0.1:8081/actuator/health >/dev/null && curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null"; then
+    echo "Entry/Core health check failed after warm-up." >&2
+    exit 1
+  fi
+}
+
 metric() {
   local summary="$1"
   local name="$2"
@@ -84,6 +91,16 @@ domain_status() {
   sed -n 's/^- domain check status: `\([0-9]*\)`/\1/p' "$1/summary.md" | tail -n 1
 }
 
+peak_rate() {
+  local peak_file="$1/reservation-request-peak.md"
+  local label="$2"
+  if [ ! -f "$peak_file" ]; then
+    echo "n/a"
+    return
+  fi
+  sed -n "s/^- ${label}: \`\([^ ]*\) req\/s\`.*/\1/p" "$peak_file" | tail -n 1
+}
+
 append_result() {
   local phase="$1"
   local status="$2"
@@ -91,11 +108,13 @@ append_result() {
   local summary="$run_dir/k6-summary.json"
   local domain="$run_dir/domain-check.log"
 
-  local success errors reservation_p95 http_p95 entries purchases
+  local success errors reservation_p95 http_p95 entries purchases ingress_peak completion_peak
   success="$(metric "$summary" fcfs_success_count count)"
   errors="$(metric "$summary" fcfs_error_count count)"
   reservation_p95="$(metric "$summary" reservation_duration 'p(95)')"
   http_p95="$(metric "$summary" http_req_duration 'p(95)')"
+  ingress_peak="$(peak_rate "$run_dir" 'Peak ingress')"
+  completion_peak="$(peak_rate "$run_dir" 'Peak completion')"
   if [ -f "$domain" ]; then
     entries="$(sed -n 's/^DB entries: *//p' "$domain" | tail -n 1)"
     purchases="$(sed -n 's/^DB purchases: *//p' "$domain" | tail -n 1)"
@@ -104,38 +123,47 @@ append_result() {
     purchases="n/a"
   fi
 
-  printf '|%s|%s|%s|%s|%s|%s|%s|%s|\n' \
+  printf '|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|\n' \
     "$phase" "$status" "$(domain_status "$run_dir")" "$success" "$errors" \
-    "$reservation_p95" "$http_p95" "${entries:-n/a}/${purchases:-n/a}" >> "$TABLE_FILE"
+    "$reservation_p95" "$http_p95" "$ingress_peak" "$completion_peak" \
+    "${entries:-n/a}/${purchases:-n/a}" >> "$TABLE_FILE"
 }
 
 run_phase() {
   local phase="$1"
   local run_dir="$RESULT_ROOT/$phase"
+  local request_timeout="${WARMUP_REQUEST_TIMEOUT:-10s}"
   local status
+
+  if [[ "$phase" == measured-* ]]; then
+    request_timeout="${MEASURED_REQUEST_TIMEOUT:-10s}"
+  fi
 
   mkdir -p "$run_dir"
   echo "== $phase =="
-  set +e
-  RUN_ID="$RUN_ID-$phase" \
-  RESULT_DIR="$run_dir" \
-  NUM_USERS="$NUM_USERS" \
-  FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
-  MAX_VUS="$MAX_VUS" \
-  SCENARIO=waiting_burst \
-  FLOW=payment \
-  PRELOAD_CAMPAIGN_META=true \
-  REACTION_MODE="$REACTION_MODE" \
-  PUBLIC_URL="$PUBLIC_URL" \
-  VIRTUAL_HOST="$VIRTUAL_HOST" \
-  K6_INSECURE_SKIP_TLS_VERIFY="$K6_INSECURE_SKIP_TLS_VERIFY" \
-  VM_HOST="$VM_HOST" \
-  SSH_KEY="$SSH_KEY" \
-  REMOTE_DIR="$REMOTE_DIR" \
-    "$SCRIPT_DIR/run-external-compose-baseline.sh" "$NUM_USERS" "$ACTIVITY_ID" \
-    > "$run_dir/wrapper.log" 2>&1
-  status=$?
-  set -e
+  if RUN_ID="$RUN_ID-$phase" \
+    RESULT_DIR="$run_dir" \
+    NUM_USERS="$NUM_USERS" \
+    FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
+    MAX_VUS="$MAX_VUS" \
+    SCENARIO=waiting_burst \
+    FLOW=payment \
+    PRELOAD_CAMPAIGN_META=true \
+    REQUEST_TIMEOUT="$request_timeout" \
+    REACTION_MODE="$REACTION_MODE" \
+    PUBLIC_URL="$PUBLIC_URL" \
+    VIRTUAL_HOST="$VIRTUAL_HOST" \
+    K6_INSECURE_SKIP_TLS_VERIFY="$K6_INSECURE_SKIP_TLS_VERIFY" \
+    K6_EVENT_OUTPUT="${K6_EVENT_OUTPUT:-false}" \
+    VM_HOST="$VM_HOST" \
+    SSH_KEY="$SSH_KEY" \
+    REMOTE_DIR="$REMOTE_DIR" \
+      "$SCRIPT_DIR/run-external-compose-baseline.sh" "$NUM_USERS" "$ACTIVITY_ID" \
+      > "$run_dir/wrapper.log" 2>&1; then
+    status=0
+  else
+    status=$?
+  fi
 
   printf '%s\n' "$status" > "$run_dir/status.txt"
   append_result "$phase" "$status" "$run_dir"
@@ -149,10 +177,10 @@ cat > "$TABLE_FILE" <<EOF
 - Path: $PUBLIC_URL (Host: $VIRTUAL_HOST)
 - Reaction mode: $REACTION_MODE
 - Resource profile: entry/core/nginx = $EXPECTED_ENTRY_CPUS/$EXPECTED_CORE_CPUS/$EXPECTED_NGINX_CPUS
-- Protocol: $WARMUP_RUNS full warm-ups, then $MEASURED_RUNS measured runs
+- Protocol: $WARMUP_RUNS full warm-ups (preconditioning only), then $MEASURED_RUNS measured runs
 
-| phase | wrapper status | domain status | FCFS success | FCFS errors | reservation p95 ms | HTTP p95 ms | entries/purchases |
-|---|---:|---:|---:|---:|---:|---:|---|
+| phase | wrapper status | domain status | FCFS success | FCFS errors | reservation p95 ms | HTTP p95 ms | ingress peak req/s | completion peak req/s | entries/purchases |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 EOF
 
 require_profile
@@ -161,11 +189,10 @@ for index in $(seq 1 "$WARMUP_RUNS"); do
   run_phase "warmup-$index" || true
 done
 
-if [ "$(domain_status "$RESULT_ROOT/warmup-$WARMUP_RUNS")" != "0" ]; then
-  echo "Final warm-up did not converge. Measurement runs were not started." >&2
-  cat "$TABLE_FILE"
-  exit 1
-fi
+# Warm-ups may consume FCFS inventory or expose transient overload. Their role
+# is to precondition JVM/connection state; only resource profile and service
+# readiness gate the fresh measured run below.
+require_services_healthy
 
 overall_status=0
 for index in $(seq 1 "$MEASURED_RUNS"); do

@@ -33,6 +33,7 @@ VIRTUAL_HOST="${VIRTUAL_HOST:-}"
 REACTION_MODE="${REACTION_MODE:-random}"
 K6_INSECURE_SKIP_TLS_VERIFY="${K6_INSECURE_SKIP_TLS_VERIFY:-false}"
 K6_LOG_OUTPUT="${K6_LOG_OUTPUT:-none}"
+K6_EVENT_OUTPUT="${K6_EVENT_OUTPUT:-false}"
 
 RUN_ID="${RUN_ID:-$(date '+%Y%m%d-%H%M%S')-external-compose-baseline}"
 RESULT_DIR="${RESULT_DIR:-$PROJECT_ROOT/artifacts/load-test/$RUN_ID}"
@@ -40,6 +41,13 @@ TOKEN_FILE="$SCRIPT_DIR/jwt-tokens.json"
 REMOTE_TOKEN_FILE="$REMOTE_DIR/scripts/load-test/jwt-tokens.json"
 SUMMARY_FILE="$RESULT_DIR/k6-summary.json"
 CONSOLE_LOG="$RESULT_DIR/k6-console.log"
+EVENT_LOG="$RESULT_DIR/k6-events.json"
+PEAK_SUMMARY="$RESULT_DIR/reservation-request-peak.md"
+NGINX_ACCESS_LOG="$RESULT_DIR/axon-nginx-access.log"
+NGINX_PEAK_SUMMARY="$RESULT_DIR/axon-nginx-reservation-peak.md"
+HOST_NGINX_ACCESS_LOG="$RESULT_DIR/host-nginx-access.log"
+HOST_NGINX_ERROR_LOG="$RESULT_DIR/host-nginx-error.log"
+HOST_NGINX_SUMMARY="$RESULT_DIR/host-nginx-reservation-summary.md"
 DOMAIN_CHECK_LOG="$RESULT_DIR/domain-check.log"
 REMOTE_CHECK_SCRIPT="$RESULT_DIR/domain-check-remote.sh"
 REMOTE_CHECK_PATH="/tmp/axon-domain-check-$RUN_ID.sh"
@@ -76,6 +84,32 @@ print(len(data))
 PY
 }
 
+capture_runtime_metadata() {
+  local remote_git_sha remote_git_dirty_count
+  local entry_image_id core_image_id nginx_image_id
+  local entry_cpus core_cpus nginx_cpus
+
+  remote_git_sha="$(ssh_vm "cd '$REMOTE_DIR' && git rev-parse HEAD" 2>/dev/null || echo unavailable)"
+  remote_git_dirty_count="$(ssh_vm "cd '$REMOTE_DIR' && git status --porcelain | wc -l" 2>/dev/null | tr -d ' ' || echo unavailable)"
+  entry_image_id="$(ssh_vm "docker inspect --format='{{.Image}}' axon-entry" 2>/dev/null || echo unavailable)"
+  core_image_id="$(ssh_vm "docker inspect --format='{{.Image}}' axon-core" 2>/dev/null || echo unavailable)"
+  nginx_image_id="$(ssh_vm "docker inspect --format='{{.Image}}' axon-nginx" 2>/dev/null || echo unavailable)"
+  entry_cpus="$(ssh_vm "cd '$REMOTE_DIR' && grep '^ENTRY_CPUS=' .env | tail -n 1 | cut -d= -f2-" 2>/dev/null || echo unavailable)"
+  core_cpus="$(ssh_vm "cd '$REMOTE_DIR' && grep '^CORE_CPUS=' .env | tail -n 1 | cut -d= -f2-" 2>/dev/null || echo unavailable)"
+  nginx_cpus="$(ssh_vm "cd '$REMOTE_DIR' && grep '^NGINX_CPUS=' .env | tail -n 1 | cut -d= -f2-" 2>/dev/null || echo unavailable)"
+
+  cat >> "$RESULT_DIR/run-meta.txt" <<EOF
+remote_git_sha=$remote_git_sha
+remote_git_dirty_count=$remote_git_dirty_count
+entry_image_id=$entry_image_id
+core_image_id=$core_image_id
+nginx_image_id=$nginx_image_id
+entry_cpus=$entry_cpus
+core_cpus=$core_cpus
+nginx_cpus=$nginx_cpus
+EOF
+}
+
 echo "External compose baseline: $RUN_ID"
 echo "VM:        $VM_HOST"
 echo "Remote:    $REMOTE_DIR"
@@ -97,6 +131,7 @@ virtual_host=$VIRTUAL_HOST
 reaction_mode=$REACTION_MODE
 k6_insecure_skip_tls_verify=$K6_INSECURE_SKIP_TLS_VERIFY
 k6_log_output=$K6_LOG_OUTPUT
+k6_event_output=$K6_EVENT_OUTPUT
 num_users=$NUM_USERS
 activity_id=$ACTIVITY_ID
 max_vus=$MAX_VUS
@@ -115,6 +150,7 @@ EOF
 echo ""
 echo "== Step 1/4: prepare VM seed and JWT tokens =="
 ssh_vm "cd '$REMOTE_DIR' && PRELOAD_CAMPAIGN_META='$PRELOAD_CAMPAIGN_META' FCFS_LIMIT_COUNT='$FCFS_LIMIT_COUNT' PRODUCT_ID='$PRODUCT_ID' ./scripts/load-test/prepare-load-test-compose.sh '$NUM_USERS' '$ACTIVITY_ID'"
+capture_runtime_metadata
 
 REMOTE_TOKEN_COUNT="$(ssh_vm "cd '$REMOTE_DIR' && python3 -c 'import json; j=json.load(open(\"scripts/load-test/jwt-tokens.json\")); print(len(j))'")"
 echo "Remote JWT tokens: $REMOTE_TOKEN_COUNT / $NUM_USERS"
@@ -137,33 +173,61 @@ fi
 echo ""
 echo "== Step 3/4: run external k6 =="
 capture_actuator_metrics "before-k6"
+K6_STARTED_AT="$(ssh_vm "date -u +%Y-%m-%dT%H:%M:%SZ")"
 set +e
 if [ "$K6_INSECURE_SKIP_TLS_VERIFY" = "true" ]; then
   K6_TLS_FLAG="--insecure-skip-tls-verify"
 else
   K6_TLS_FLAG=""
 fi
-FLOW="$FLOW" \
-SCENARIO="$SCENARIO" \
-REACTION_MODE="$REACTION_MODE" \
-VIRTUAL_HOST="$VIRTUAL_HOST" \
-MAX_VUS="$MAX_VUS" \
-ARRIVAL_PRE_ALLOCATED_VUS="$ARRIVAL_PRE_ALLOCATED_VUS" \
-ARRIVAL_RATE_MULTIPLIER="$ARRIVAL_RATE_MULTIPLIER" \
-USE_PRODUCTION_API=true \
-USE_TOKEN_FILE=true \
-TOKEN_FILE_PATH="$TOKEN_FILE" \
-ENTRY_SERVICE_URL="$PUBLIC_URL" \
-CORE_SERVICE_URL="$PUBLIC_URL" \
-ACTIVITY_ID="$ACTIVITY_ID" \
-PRODUCT_ID="$PRODUCT_ID" \
-FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
-USER_ID_START="$USER_ID_START" \
-USER_ID_END="$USER_ID_END" \
-  k6 run --log-output "$K6_LOG_OUTPUT" $K6_TLS_FLAG --summary-export "$SUMMARY_FILE" "$SCRIPT_DIR/k6-fcfs-load-test.js" \
-  2>&1 | tee "$CONSOLE_LOG"
+run_k6() {
+  FLOW="$FLOW" \
+  SCENARIO="$SCENARIO" \
+  REACTION_MODE="$REACTION_MODE" \
+  VIRTUAL_HOST="$VIRTUAL_HOST" \
+  MAX_VUS="$MAX_VUS" \
+  ARRIVAL_PRE_ALLOCATED_VUS="$ARRIVAL_PRE_ALLOCATED_VUS" \
+  ARRIVAL_RATE_MULTIPLIER="$ARRIVAL_RATE_MULTIPLIER" \
+  USE_PRODUCTION_API=true \
+  USE_TOKEN_FILE=true \
+  TOKEN_FILE_PATH="$TOKEN_FILE" \
+  ENTRY_SERVICE_URL="$PUBLIC_URL" \
+  CORE_SERVICE_URL="$PUBLIC_URL" \
+  ACTIVITY_ID="$ACTIVITY_ID" \
+  PRODUCT_ID="$PRODUCT_ID" \
+  FCFS_LIMIT_COUNT="$FCFS_LIMIT_COUNT" \
+  USER_ID_START="$USER_ID_START" \
+  USER_ID_END="$USER_ID_END" \
+    k6 run --log-output "$K6_LOG_OUTPUT" $K6_TLS_FLAG "$@" --summary-export "$SUMMARY_FILE" "$SCRIPT_DIR/k6-fcfs-load-test.js"
+}
+
+if [ "$K6_EVENT_OUTPUT" = "true" ]; then
+  run_k6 --out "json=$EVENT_LOG" 2>&1 | tee "$CONSOLE_LOG"
+else
+  run_k6 2>&1 | tee "$CONSOLE_LOG"
+fi
 K6_STATUS=${PIPESTATUS[0]}
 set -e
+
+if [ "$K6_EVENT_OUTPUT" = "true" ] && [ -f "$EVENT_LOG" ]; then
+  python3 "$SCRIPT_DIR/summarize-k6-request-peaks.py" "$EVENT_LOG" "$PEAK_SUMMARY"
+fi
+K6_FINISHED_AT="$(ssh_vm "date -u +%Y-%m-%dT%H:%M:%SZ")"
+ssh_vm "docker logs --since '$K6_STARTED_AT' --until '$K6_FINISHED_AT' axon-nginx 2>&1" > "$NGINX_ACCESS_LOG" || true
+python3 "$SCRIPT_DIR/summarize-nginx-reservation-peak.py" "$NGINX_ACCESS_LOG" "$NGINX_PEAK_SUMMARY"
+
+# Host nginx is outside the Compose stack. Persist only this run's interval so
+# its ingress status and upstream timings can be compared with axon-nginx.
+HOST_LOG_START="${K6_STARTED_AT%Z}"
+HOST_LOG_END="${K6_FINISHED_AT%Z}"
+ssh_vm "sudo awk -v start='$HOST_LOG_START' -v end='$HOST_LOG_END' 'substr(\$1, 1, 19) >= start && substr(\$1, 1, 19) <= end { print }' /var/log/nginx/axon_timing.log" \
+  > "$HOST_NGINX_ACCESS_LOG" || true
+HOST_ERROR_START="$(ssh_vm "date -u -d '$K6_STARTED_AT' '+%Y/%m/%d %H:%M:%S'")"
+HOST_ERROR_END="$(ssh_vm "date -u -d '$K6_FINISHED_AT' '+%Y/%m/%d %H:%M:%S'")"
+ssh_vm "sudo awk -v start='$HOST_ERROR_START' -v end='$HOST_ERROR_END' 'substr(\$0, 1, 19) >= start && substr(\$0, 1, 19) <= end { print }' /var/log/nginx/error.log" \
+  > "$HOST_NGINX_ERROR_LOG" || true
+python3 "$SCRIPT_DIR/summarize-host-nginx-reservation.py" \
+  "$HOST_NGINX_ACCESS_LOG" "$HOST_NGINX_ERROR_LOG" "$HOST_NGINX_SUMMARY"
 
 echo ""
 echo "== Step 4/4: verify VM Redis/MySQL results =="
@@ -256,6 +320,9 @@ cat > "$RESULT_DIR/summary.md" <<EOF
 - k6 status: \`$K6_STATUS\`
 - domain check status: \`$DOMAIN_STATUS\`
 - Entry/Core Prometheus snapshots: \`before-k6\`, \`after-domain-check\`
+- Reservation request peak: \`$( [ -f "$PEAK_SUMMARY" ] && echo "reservation-request-peak.md" || echo "not captured" )\`
+- axon-nginx reservation completion peak: \`axon-nginx-reservation-peak.md\`
+- host nginx reservation ingress: \`host-nginx-reservation-summary.md\`
 
 ## Domain Check
 
@@ -268,6 +335,29 @@ $(cat "$DOMAIN_CHECK_LOG")
 \`\`\`text
 $(tail -80 "$CONSOLE_LOG")
 \`\`\`
+EOF
+
+if [ -f "$PEAK_SUMMARY" ]; then
+  cat >> "$RESULT_DIR/summary.md" <<EOF
+
+## Reservation Request Peak
+
+$(cat "$PEAK_SUMMARY")
+EOF
+fi
+
+cat >> "$RESULT_DIR/summary.md" <<EOF
+
+## axon-nginx Reservation Completion Peak
+
+$(cat "$NGINX_PEAK_SUMMARY")
+EOF
+
+cat >> "$RESULT_DIR/summary.md" <<EOF
+
+## Host nginx Reservation Ingress
+
+$(cat "$HOST_NGINX_SUMMARY")
 EOF
 
 if [ -f "$SUMMARY_FILE" ]; then
