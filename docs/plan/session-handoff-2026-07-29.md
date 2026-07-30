@@ -1,6 +1,6 @@
 # Session Handoff - 2026-07-29
 
-Status: `active handoff`
+Status: active
 
 ## Start Here
 
@@ -72,8 +72,15 @@ not commit it incidentally with a new feature.
 
 ## Next Work
 
-No new implementation scope was accepted at handoff time. Start by asking the
-user to choose the next bounded task rather than inferring one from old plans.
+Accepted next bounded investigation:
+
+- Compare two Core consumption/persistence boundaries:
+  1. bounded internal queue + Kafka pause/resume + offset/durable handoff after persistence
+  2. remove internal command/purchase queues, finish durable DB processing before listener return, and use Kafka lag as the backlog
+- Test the queue-removal path first because the latest FCFS 800/1,000 metrics showed no sustained Core backlog.
+- Before implementation, record the effective Spring Kafka acknowledgment/commit mode and design a failure-injection test for the interval between delivery and DB commit.
+- Do not implement a bounded in-memory queue alone: branch 1 is valid only when offset advancement follows durable processing or a durable inbox handoff.
+- Re-run the same payment load scenarios and compare throughput, lag, DB-pool usage, DB convergence, loss, and duplicates.
 
 Potential topics discussed but not accepted for immediate implementation:
 

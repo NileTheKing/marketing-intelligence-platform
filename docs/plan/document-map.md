@@ -18,6 +18,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 |---|---|---|
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
+| `docs/plan/session-handoff-2026-07-29.md` | active | accepted next Core queue/offset A/B investigation, verified session state, deployment requirements, and dirty-worktree boundary |
 | `docs/plan/domain-refactoring-map.md` | active | DDD-style structure map, ubiquitous language draft, bounded context candidates, and small Fowler-style refactoring units |
 | `docs/plan/spike-traffic-observability-plan.md` | active | Oracle VM Docker Compose based spike bottleneck analysis |
 | `docs/plan/otel-jaeger-apm-plan.md` | active | current OpenTelemetry/Jaeger APM setup and FCFS trace diagnosis plan |
@@ -25,6 +26,10 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/rest-api-route-clean-cutover-plan.md` | active (implemented) | current SSR/API route contract and 2026-07-14 clean-cutover record |
 | `docs/plan/marketing-rule-multi-action-handoff.md` | active (implemented) | implemented MarketingRule 1:N action expansion; records the bounded scope, acceptance tests, and required VM schema cutover |
 | `docs/plan/rfm-audience-segment-v1-plan.md` | active (implemented) | RFM repair and RFM-only AudienceSegment filter for MarketingRule; excludes generic segment DSL and membership pre-computation |
+| `docs/plan/behavior-event-schema-v1.md` | active (implemented, ES cutover pending) | Behavior-event property contract, Entry normalization, MarketingRule condition boundary, and ES strict/flattened mapping |
+| `docs/plan/purchase-cancellation-and-campaign-product-v1-plan.md` | active (implemented) | campaign-only product policy, post-payment cancellation state, and MySQL commercial projection correction |
+| `docs/plan/reconciliation-issue-v1-plan.md` | active (implemented) | durable FCFS reconciliation issue history and operator review flow; no automatic repair |
+| `docs/portfolio-evidence-writing.md` | active | T-file evidence-writing protocol and portfolio claim boundaries |
 
 ## Active / Current Implementation References
 
@@ -69,6 +74,7 @@ These are still useful, but code must win if there is a conflict.
 | `docs/code-improvements.md` | reference | code cleanup notes |
 | `docs/Filter_System_Architecture.md` | reference | filter system design context; verify current usage before reuse |
 | `docs/devlog/dev-log-2025-11-18-dashboard-architecture.md` | reference | dashboard architecture development log |
+| `docs/devlog/dev-log-2026-07-15-external-load-generator-boundary.md` | reference | external 3000-VU/800 measurement boundary, host-nginx observability, and stable-network retest criteria |
 | `docs/llm-insights-feature-plan.md` | reference | LLM feature planning context; T8 is newer for portfolio facts |
 | `docs/plan/js-sdk-enhancement-plan.md` | reference | JS SDK extension ideas; T3 is newer for implemented facts |
 | `docs/plan/redis-fast-validation-plan.md` | reference | Redis fast validation plan; verify against current entry-service implementation |
@@ -147,4 +153,3 @@ Prefer specific names:
 - Scale calculation must be formula-based and auditable.
 - Kafka consumer local flush workers and global scheduled jobs must be discussed separately. Consumer groups handle Kafka partition ownership; global schedulers still need a lock or single-runner constraint under multi-pod deployment.
 - Virtual threads are not a substitute for responsibility separation. Use them selectively for blocking external I/O workers, not as a blanket fix for Kafka listener or scheduler design.
-| `docs/plan/behavior-event-schema-v1.md` | active (implemented, ES cutover pending) | Behavior-event property contract, Entry normalization, MarketingRule condition boundary, and ES strict/flattened mapping |

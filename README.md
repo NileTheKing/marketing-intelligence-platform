@@ -1,7 +1,7 @@
-<h1 align="center">Axon: 이벤트 기반 캠페인/트래픽 처리 백엔드 플랫폼</h1>
+<h1 align="center">Axon: 이벤트 기반 커머스·마케팅 연동 백엔드</h1>
 <p align="center">
-  <b>스파이크 트래픽, 비동기 정합성, 행동 데이터 분석을 다루는 MSA 기반 백엔드 프로젝트</b><br>
-  Redis 원자 처리, Kafka 이벤트 파이프라인, MySQL 정합성 보정, 운영 대시보드를 중심으로 설계했습니다.
+  <b>선착순 거래 요청을 즉시 판정하고, 거래·행동 이벤트를 분석·마케팅 액션으로 연결하는 Entry/Core 분리 커머스 백엔드</b><br>
+  Redis Lua로 유입 권한을 확정하고, Kafka 이벤트를 MySQL 거래 원장과 Elasticsearch 행동 로그로 분기해 대시보드·조건 기반 마케팅 액션에 활용합니다.
 </p>
 
 <p align="center">
@@ -15,18 +15,18 @@
 ---
 
 ## 프로젝트 개요
-Axon은 선착순 참여, 결제 확정, 행동 이벤트 수집, 실시간 대시보드처럼 짧은 시간에 몰리는 이벤트 흐름을 안정적으로 처리하기 위한 백엔드 플랫폼입니다.
+Axon은 선착순 이벤트로 발생한 거래·행동 데이터를 안정적으로 처리하고, 이를 분석과 조건 기반 마케팅 액션으로 연결하는 커머스 백엔드입니다.
 
-Entry 서비스는 사용자 요청을 빠르게 수용하고 Redis 기반 원자 연산으로 선착순 결과를 즉시 판정합니다. Core 서비스는 Kafka를 통해 전달된 후속 이벤트를 처리하고, MySQL/Elasticsearch에 분석 가능한 형태로 저장합니다. 이를 통해 요청 수신부와 비즈니스 처리부를 분리하고, 트래픽 집중·비동기 처리·데이터 정합성 문제를 함께 다룹니다.
+Entry 서비스는 Redis Lua로 중복 참여와 한정 수량을 한 번에 판정해 사용자에게 즉시 결과를 반환합니다. 승인·행동 이벤트는 Kafka로 전달하고, Core 서비스가 거래 원장(MySQL), 행동 분석(Elasticsearch), 쿠폰·Webhook 같은 후속 액션으로 처리합니다. 이 경계로 유입 hot path를 후속 저장·분석 작업과 분리합니다.
 
 ---
 
 ## 비즈니스 시나리오 및 성과
-> 대표 성능 검증은 KT Cloud K2P 기반 Kubernetes 환경에서 수행했습니다. "3,000명의 접속자가 2초 만에 200개의 한정 상품에 응모하며 대량의 행동 로그를 생성하는 상황"을 가정했습니다.
+> 아래 K2P 검증값은 과거 Kubernetes 환경에서 기록한 참고 결과입니다. 현재 코드의 재현·병목 분석은 Oracle VM + Docker Compose 환경에서 별도로 수행합니다.
 
 | 측정 항목 | 결과 수치 | 비고 |
 | :--- | :---: | :--- |
-| **최대 가용량** | **2,900 RPS / 3,000 VU** | 스파이크 구간 피크 처리량 실측 |
+| **부하 시나리오** | **3,000 VU / FCFS 200건** | 동시 유입·한정 수량 상황 검증 |
 | **응답 품질** | **Avg 1.2s / p95 3.99s** | 스파이크 부하 상황의 지연 시간 관리 |
 | **통합 로그 처리량** | **20,000+ EPS** | 인프라/미들웨어/애플리케이션 로그 통합 적재 |
 | **선착순 정합성** | **오버부킹 0건** | 10,655건 응모 중 정확히 200건만 당첨 |
@@ -36,7 +36,7 @@ Entry 서비스는 사용자 요청을 빠르게 수용하고 Redis 기반 원�
 <details>
 <summary><b>부하 테스트 데이터 상세 해석</b></summary>
 
-- **꼬리 지연 시간(Tail Latency) 관리**: 3,000명의 동시 접속자가 몰리는 상황에서도 p95 지연 시간을 3.99s 이내로 유지하며 테스트를 완료했습니다.
+- **꼬리 지연 시간(Tail Latency) 관리**: 당시 3,000 VU 시나리오에서 p95 지연 시간 3.99s를 기록했습니다. 현재 코드 기준 비교 수치는 재현 환경에서 별도 관리합니다.
 - **복합 워크로드 수용**: 전체 트래픽의 93%를 차지하는 행동 로그 수집(62%)과 선착순 응모(31%)가 혼재된 상황에서, 나머지 7%의 결제 및 인증 트래픽까지 함께 처리했습니다.
 - **의도된 비즈니스 응답**: k6 결과상의 `http_req_failed(30.4%)`는 시스템 오류가 아닌, 품절(410) 및 중복 참여 차단(409)이라는 설계된 비즈니스 로직의 정상 작동 결과입니다.
 - **캡처 해석 기준**: 아래 k6 캡처는 당시 일반 HTTP threshold(`p95<1s`, `http_req_failed<5%`)가 남아 있던 실행 결과라 threshold 실패 표시가 포함되어 있습니다. 이후 선착순 테스트 목적에 맞게 성공 기준을 `정확히 200명 성공`, `알 수 없는 예약 에러 0건`, `행동 이벤트 성공률 100%`, `예약 p95 5s 이하`로 재정의했습니다.
@@ -47,7 +47,7 @@ Entry 서비스는 사용자 요청을 빠르게 수용하고 Redis 기반 원�
 ## 시스템 아키텍처
 
 ### 서비스 논리 구조
-요청 수집(Entry)과 비즈니스 처리(Core) 서비스를 분리하여 부하 집중을 완화하고, Kafka를 통해 데이터 처리 속도를 조절하는 **배압 조절(Backpressure)** 구조를 채택했습니다.
+요청 수집(Entry)과 비즈니스 처리(Core)를 분리하고, Kafka로 승인·행동 이벤트를 후속 저장·분석·마케팅 처리와 분리했습니다. Kafka는 hot path와 후속 처리를 분리하는 전달 경계이며, 현재 애플리케이션 큐에 명시적 backpressure 제어를 구현한 것은 아닙니다.
 
 ```mermaid
 graph TB
@@ -107,7 +107,7 @@ graph TB
 - **대표 검증 환경**: KT Cloud K2P(Kubernetes to Production) 기반. Core/Entry 서비스 분리 배포, Kafka/Redis/MySQL/Elasticsearch, Prometheus/Grafana, Fluent Bit/Kibana 구성을 통해 3,000 VU 스파이크 시나리오를 검증했습니다.
 - **현재 재현 환경**: Oracle Cloud A1 Flex VM + Docker Compose. Core/Entry/MySQL/Redis/Kafka를 단일 VM에서 실행하고, k6 baseline과 OpenTelemetry/Jaeger 기반 병목 분석을 위한 경량 실행 경로로 사용합니다.
 - **Network & Security**: K2P 환경에서는 Public IP를 특정 워커 노드에 1:1 매핑(Static NAT)하고, 방화벽 설정으로 필요한 포트만 허용했습니다.
-- **배포 자동화**: K2P용 GitHub Actions/Kubernetes 매니페스트는 `Legacy Manual` 경로로 보존하고, 현재 VM 배포는 `compose.app.yml` 기반 GitHub Actions workflow로 운영합니다.
+- **배포 경로**: K2P용 GitHub Actions/Kubernetes 매니페스트는 `Legacy Manual` 경로로 보존합니다. 현재 VM Compose 배포와 baseline 실행은 GitHub Actions 수동 workflow(`workflow_dispatch`)로 재현합니다.
 
 ---
 
@@ -156,7 +156,7 @@ graph TB
   <br><em>코호트 및 LTV 분석 - 유입 고객의 재구매율 및 장기 가치 추적</em>
 </p>
 
-- **코호트 및 LTV 분석**: 마케팅 유입 시점(Cohort)을 기준으로 생애 가치(LTV)와 획득 비용(CAC)을 장기 추적하는 의사결정 지표 제공.
+- **코호트 및 LTV 분석**: 마케팅 유입 시점(Cohort)을 기준으로 생애 가치(LTV)와 획득 비용(CAC)을 월간 배치로 집계해 조회하는 의사결정 지표 제공.
 - **RFM 세그먼테이션 스케줄러**: 최근성(Recency), 구매 빈도(Frequency), 누적 금액(Monetary) 데이터를 기반으로 매일 유저 등급(VIP, 이탈 우려 등)을 재분류하는 자동화 파이프라인.
 
 #### AI 리포팅 에이전트 (Gemini 2.5 Flash-lite)
@@ -164,7 +164,7 @@ graph TB
   <img src="./docs/assets/recordings/dashboard_llm.gif" width="800" />
 </p>
 
-- **데이터 기반 리포팅**: 실시간 지표(RAG)와 분석 도구(Tool Calling)를 결합하여 "LTV/CAC 기반 예산 재분배 전략" 등 구체적인 리포트 생성.
+- **데이터 기반 리포팅**: 현재 대시보드 지표(RAG)와 분석 도구(Function Calling)를 결합해 리포트를 생성. 코호트 도구는 실시간 DB 집계 없이 월간 배치 결과만 조회.
 - **토큰 사용량 관리**: 필요한 데이터만 선택 호출하는 구조를 통해 데이터 전수 주입 방식 대비 **토큰 소모량 80% 절감** 및 DB 조회 부하 경감.
 
 #### 실시간 지표 스트리밍
@@ -182,7 +182,7 @@ graph TB
 </p>
 
 - **코드 수정 없는 추적**: 자체 개발한 JS SDK를 통해 관리자 화면에서 클릭, 페이지 뷰 등 수집 조건을 동적으로 등록 및 제어.
-- **행동 기반 쿠폰 트리거 (Behavior Trigger)**: "특정 상품 5회 이상 열람" 등 유저의 고관여 행동 패턴을 집계하고, 조건 달성 시 Kafka 이벤트로 쿠폰 발급 흐름을 연결하는 마케팅 자동화 루프 구현.
+- **행동 기반 마케팅 트리거 (Behavior Trigger)**: "특정 상품 5회 이상 열람" 등 유저의 고관여 행동 패턴을 집계하고, 조건 달성 시 Kafka 이벤트로 쿠폰 발급 또는 Webhook 알림을 연결하는 마케팅 자동화 루프 구현.
 - **캠페인 생명주기 관리**: 마케팅 활동의 상태, 한정 수량, 예산 등을 실시간으로 관리하는 통합 운영 콘솔.
 
 #### 스파이크 트래픽 수용성 검증
@@ -190,7 +190,7 @@ graph TB
   <img src="./docs/assets/recordings/k6_spike.gif" width="850" />
 </p>
 
-- **스파이크 트래픽 시나리오 수행**: K2P 환경에서 3,000 VU(Peak 2,900 RPS) 부하 상황을 재현하고, 5XX 서버 에러 없이 선착순/행동 이벤트 흐름을 처리했습니다.
+- **스파이크 트래픽 시나리오 수행**: K2P 환경에서 3,000 VU 동시 유입과 FCFS 200건 시나리오를 재현하고, 5XX 서버 에러 없이 선착순/행동 이벤트 흐름을 처리했습니다.
 - **결과 해석 주의**: 캡처의 `http_req_failed`와 threshold 실패 표시는 품절(410)·중복(409)을 HTTP 실패로 집계한 결과입니다. 선착순 도메인 기준에서는 성공 200건, sold out, 중복 차단, 서버 오류를 분리해 해석합니다.
 
 <table>
@@ -207,7 +207,7 @@ graph TB
 ---
 
 ## 기술 스택
-- **Application**: Java 21, Spring Boot 3.x, Virtual Threads
+- **Application**: Java 21, Spring Boot 3.x, Virtual Threads (Entry-service)
 - **Messaging**: Apache Kafka (KRaft), Redis
 - **Storage**: MySQL 8, Elasticsearch 8
 - **Infrastructure**: Kubernetes (K2P), Docker Compose, Nginx / Nginx Ingress

@@ -1,5 +1,7 @@
 # 2026 H2 Portfolio Hardening Roadmap
 
+Status: active
+
 ## Purpose
 
 This roadmap defines the next Axon improvements for backend portfolio depth.
@@ -82,9 +84,11 @@ Immediate cleanup scope:
 
 5. Core event idempotency and backpressure cleanup
    - Add DB-level uniqueness for `CampaignActivityEntry(campaign_activity_id, user_id)` if it remains the participation idempotency boundary.
-   - Add internal command queue depth and flush duration metrics before changing queue behavior.
-   - Move from unbounded queue semantics toward bounded queue plus Kafka pause/resume when sustained overload is reproduced.
-   - Reason: current listener/flush split is useful, but production-grade backpressure and idempotency need explicit storage and metrics boundaries.
+   - Use the existing queue-depth, flush-duration, lag, and DB-convergence metrics to compare two paths instead of assuming a bounded queue is the answer.
+   - Path A: bounded internal queue plus Kafka pause/resume and an offset/durable-handoff boundary tied to successful persistence.
+   - Path B: remove the internal command/purchase queues, complete durable processing before listener return, and use Kafka lag as the backlog.
+   - Test Path B first because FCFS 800/1,000 measurements showed no sustained Core backlog; keep Path A if listener-owned persistence cannot meet throughput or DB-pool constraints.
+   - Verify failure between delivery and DB commit, restart/rebalance recovery, duplicate idempotency, consumer lag, DB convergence, and loss/duplicate counts under the same load scenario.
 
 6. Purchase/UserSummary hot-path cleanup
    - Treat `Purchase` as the source-of-truth append path.

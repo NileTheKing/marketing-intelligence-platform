@@ -323,24 +323,44 @@ Remaining verification:
 - Kafka duplicate-message test proves duplicate entry messages do not create duplicate rows.
 - Concurrent insert race test covers two transactions attempting the same `(activityId, userId)`.
 
-### 2. Replace unbounded Core command buffer with measurable backpressure
+### 2. Compare internal bounded backpressure with Kafka-native backlog
 
 Current issue:
 
-- `CampaignActivityCommandBuffer` uses an unbounded in-memory queue.
-- This separates listener and flush work, but it does not provide production-grade backpressure.
+- `CampaignActivityCommandBuffer` and `PurchaseHandler` use unbounded in-memory queues.
+- The Kafka listener returns after enqueue, while scheduled workers perform durable DB work later.
 - Under sustained overload, backlog can move from Kafka to application heap.
+- More importantly, bounding the queue alone does not close the interval between listener return/offset advancement and later DB persistence. The actual Spring Kafka acknowledgment behavior and this failure window must be verified with a restart/failure test.
+- Current FCFS 800/1,000 measurements showed command queue max 143, purchase queue max 20, observed consumer lag 0, and immediate DB convergence. There is no measured sustained Core backlog that currently justifies adding another application-level backpressure layer.
 
-Target direction:
+Experiment branches:
 
-- Introduce a bounded queue or a queue policy with explicit limits.
-- Add queue depth and flush duration metrics before changing behavior.
-- When queue depth crosses a high watermark, pause/resume Kafka consumption instead of allowing heap growth.
+1. **Bounded internal queue + Kafka pause/resume**
+   - Keep listener/flush separation but impose explicit queue limits and overflow policy.
+   - The listener enqueues without acknowledging the record. A worker completes the DB transaction first, then reports that offset as durable.
+   - Track completion per partition and acknowledge only the highest contiguous completed offset; do not advance past an unfinished lower offset.
+   - Pause the listener container at the queue high watermark and resume it at the low watermark.
+   - Leave unfinished offsets uncommitted during failure, shutdown, or rebalance so Kafka can redeliver them; keep DB unique constraints as the duplicate-delivery guard.
+   - Evaluate Spring Kafka manual acknowledgment with `asyncAcks` as an implementation candidate, but verify the effective container behavior and rebalance/error handling before selecting it.
+   - If listener/worker separation must survive process failure independently, compare a durable inbox/staging table: commit the inbox row, then acknowledge Kafka, and let the worker process the durable row.
+   - Reject the simpler "enqueue into a bounded in-memory queue, acknowledge immediately, persist later" variant because it leaves the delivery-to-DB failure window open.
+2. **Remove internal queues and use Kafka as the backlog**
+   - Process the polled record/batch through the durable DB boundary before listener completion.
+   - Let DB slowdown appear as Kafka consumer lag instead of application-heap growth.
+   - Rework the downstream purchase event/transaction boundary as part of the experiment; removing only the command queue while leaving purchase persistence behind another in-memory queue does not close the durability gap.
+
+Preferred first experiment:
+
+- Start with branch 2 because the measured Core queues drained without lag or DB convergence delay and the simpler boundary aligns listener completion with durable processing.
+- Keep branch 1 as the comparison path if synchronous listener-owned persistence cannot meet the target throughput or DB-pool constraints.
 
 Verify:
 
-- Unit or integration test covers offer failure / overflow policy.
-- Manual load test records queue depth, consumer lag, and flush duration.
+- Record the effective consumer acknowledgment/commit mode before changing code.
+- Inject failure after Kafka delivery but before DB commit, then restart/rebalance and verify no loss.
+- Verify duplicate delivery remains idempotent at the DB boundary.
+- Run the same k6 FCFS 800/1,000 payment scenarios and compare throughput, consumer lag, DB-pool usage, flush/query shape, DB convergence, loss, and duplicates.
+- If branch 1 is tested, cover offer failure, pause/resume watermarks, out-of-order worker completion, contiguous per-partition offset advancement, and rebalance with unfinished records.
 
 ### 3. Split command processing by type when metrics justify it
 
@@ -1111,10 +1131,8 @@ Why it matters:
 Recommended direction:
 
 - Do not blindly replace it before measuring.
-- If hardening this path, use a bounded queue plus an explicit overflow policy:
-- reject and route to DLT,
-- block briefly with timeout,
-- or record overload and fail fast.
+- The FCFS 800/1,000 measurements are now recorded, and the current decision is the A/B experiment in `### 2. Compare internal bounded backpressure with Kafka-native backlog`.
+- Test queue removal/Kafka-native backlog first. Keep bounded queue + pause/resume only as the comparison path, and do not adopt it without an offset boundary tied to durable processing or a durable inbox.
 
 Do not overclaim:
 
