@@ -4,7 +4,6 @@ import com.axon.core_service.domain.dashboard.DashboardPeriod;
 import com.axon.core_service.domain.dto.dashboard.CampaignDashboardResponse;
 import com.axon.core_service.domain.dashboard.LTVBatch;
 import com.axon.core_service.repository.LTVBatchRepository;
-import com.axon.core_service.service.CohortAnalysisService;
 import com.axon.core_service.service.DashboardService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,7 +25,6 @@ import com.axon.core_service.domain.dto.dashboard.OverviewData;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -36,7 +34,6 @@ import java.util.Optional;
 public class GeminiLLMQueryService implements LLMQueryService {
 
     private final DashboardService dashboardService;
-    private final CohortAnalysisService cohortAnalysisService;
     private final LTVBatchRepository ltvBatchRepository;
     private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper;
@@ -56,14 +53,6 @@ public class GeminiLLMQueryService implements LLMQueryService {
         log.info("Gemini LLM processing query for campaign: {}", campaignId);
 
         CampaignDashboardResponse dashboardData = dashboardService.getDashboardByCampaign(campaignId, DashboardPeriod.SEVEN_DAYS, null, null);
-        Object cohortData = null;
-        if (shouldFetchCohort(query) && !dashboardData.activities().isEmpty()) {
-            Long representativeActivityId = dashboardData.activities().get(0).activityId();
-            log.info("Fetching cohort data for representative activity: {}", representativeActivityId);
-            // Campaign level aggregation is complex, using representative activity's real-time analysis for now
-
-            cohortData = cohort_month_data(representativeActivityId);
-        }
 
         // Context Pinning System Instruction
         String systemInstruction = String.format(
@@ -76,31 +65,11 @@ public class GeminiLLMQueryService implements LLMQueryService {
                 geminiResponse.metadata());
     }
 
-    private Object cohort_month_data(Long campaignActivityId) {
-        Object CD = null;
-        Optional<LTVBatch> batchData = ltvBatchRepository.findTopByCampaignActivityIdOrderByMonthOffsetDesc(campaignActivityId);
-
-        if (batchData.isPresent()) {
-            log.info("Using cached LTVBatch data for activity: {}", campaignActivityId);
-            CD = convertBatchToMap(batchData.get());
-        } else {
-            // 2. If no batch data, fetch real-time data
-            log.info("Fetching realtime cohort data for activity: {}", campaignActivityId);
-            CD = cohortAnalysisService.analyzeCohortByActivity(campaignActivityId, null, null);
-        }
-        return CD;
-    }
-
     @Override
     public DashboardQueryResponse processQueryByActivity(Long activityId, String query) {
         log.info("Gemini LLM processing query for activity: {}", activityId);
 
         DashboardResponse dashboardData = dashboardService.getDashboardByActivity(activityId, DashboardPeriod.SEVEN_DAYS, null, null);
-        Object cohortData = null;
-        if (shouldFetchCohort(query)) {
-            // 1. Try to fetch latest batch data first
-            cohortData = cohort_month_data(activityId);
-        }
 
         // Context Pinning System Instruction
         String systemInstruction = String.format(
@@ -364,14 +333,6 @@ public class GeminiLLMQueryService implements LLMQueryService {
         String geminiResponse = callGeminiApi(prompt, systemInstruction);
 
         return new DashboardQueryResponse(geminiResponse, overview, "GEMINI_RAG_DETAIL");
-    }
-
-    private boolean shouldFetchCohort(String query) {
-        String lower = query.toLowerCase();
-        return lower.contains("ltv") || lower.contains("cohort") || lower.contains("retention")
-            || lower.contains("재구매") || lower.contains("코호트") || lower.contains("생애")
-            || lower.contains("평균주문금액") || lower.contains("구매 횟수") || lower.contains("누적이익")
-            || lower.contains("cac") || lower.contains("누적매");
     }
 
     /**

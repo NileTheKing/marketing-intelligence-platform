@@ -2,6 +2,8 @@ package com.axon.core_service.service.llm;
 
 import com.axon.core_service.AbstractIntegrationTest;
 import com.axon.core_service.domain.dashboard.DashboardPeriod;
+import com.axon.core_service.domain.dashboard.LTVBatch;
+import com.axon.core_service.repository.LTVBatchRepository;
 import com.axon.core_service.service.DashboardService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -10,10 +12,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @DisplayName("Gemini LLM 에이전트 도구 호출 및 날짜 해석 테스트")
 class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
@@ -23,6 +32,9 @@ class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
 
     @MockBean
     private DashboardService dashboardService;
+
+    @MockBean
+    private LTVBatchRepository ltvBatchRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -76,5 +88,57 @@ class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
                 argThat(actualStart -> actualStart.isEqual(expectedStart)),
                 argThat(actualEnd -> actualEnd.isEqual(expectedEnd))
         );
+    }
+
+    @Test
+    @DisplayName("코호트 배치 데이터가 없으면 실시간 집계 대신 집계 대기 상태를 반환한다")
+    void getCohortAnalysisWithoutBatchReturnsPending() {
+        // given
+        var args = objectMapper.createObjectNode();
+        args.put("activityId", 77L);
+        when(ltvBatchRepository.existsByCampaignActivityId(77L)).thenReturn(false);
+
+        // when
+        Object result = ReflectionTestUtils.invokeMethod(
+                geminiLLMQueryService, "executeTool", "get_cohort_analysis", args, 77L);
+
+        // then
+        assertEquals(Map.of("message", "데이터 집계 중입니다."), result);
+    }
+
+    @Test
+    @DisplayName("코호트 배치 데이터가 있으면 실시간 집계 없이 저장된 월별 결과를 반환한다")
+    void getCohortAnalysisWithBatchReturnsStoredMonthlyResults() {
+        // given
+        var args = objectMapper.createObjectNode();
+        args.put("activityId", 77L);
+        LocalDateTime collectedAt = LocalDateTime.of(2026, 7, 1, 3, 0);
+        LTVBatch batch = mock(LTVBatch.class);
+        when(batch.getCollectedAt()).thenReturn(collectedAt);
+        when(batch.getMonthOffset()).thenReturn(1);
+        when(batch.getLtvCumulative()).thenReturn(BigDecimal.valueOf(120_000));
+        when(batch.getAvgCac()).thenReturn(BigDecimal.valueOf(10_000));
+        when(batch.getLtvCacRatio()).thenReturn(BigDecimal.valueOf(12));
+        when(batch.getRepeatPurchaseRate()).thenReturn(BigDecimal.valueOf(25));
+        when(batch.getAvgPurchaseFrequency()).thenReturn(BigDecimal.valueOf(2));
+        when(batch.getAvgOrderValue()).thenReturn(BigDecimal.valueOf(60_000));
+        when(batch.getMonthlyRevenue()).thenReturn(BigDecimal.valueOf(70_000));
+        when(batch.getActiveUsers()).thenReturn(2);
+        when(batch.getIsBreakEven()).thenReturn(true);
+        when(batch.getCohortSize()).thenReturn(10);
+        when(ltvBatchRepository.existsByCampaignActivityId(77L)).thenReturn(true);
+        when(ltvBatchRepository.findByCampaignActivityIdOrderByMonthOffsetAsc(77L))
+                .thenReturn(List.of(batch));
+
+        // when
+        Object result = ReflectionTestUtils.invokeMethod(
+                geminiLLMQueryService, "executeTool", "get_cohort_analysis", args, 77L);
+
+        // then
+        List<?> rows = assertInstanceOf(List.class, result);
+        Map<?, ?> first = assertInstanceOf(Map.class, rows.getFirst());
+        assertEquals(collectedAt.toString(), first.get("analysisDate"));
+        assertEquals(BigDecimal.valueOf(120_000), first.get("ltvCurrent"));
+        assertEquals(true, first.get("isBreakEven"));
     }
 }
