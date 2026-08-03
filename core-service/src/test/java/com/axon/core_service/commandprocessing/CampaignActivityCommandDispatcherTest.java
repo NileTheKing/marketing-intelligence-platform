@@ -50,6 +50,19 @@ class CampaignActivityCommandDispatcherTest {
                 .hasRootCauseMessage("dlt unavailable");
     }
 
+    @Test
+    void dispatchDoesNotRouteWholeBatchWhenStrategyAlreadyBlockedOffsetCommit() {
+        CampaignStrategy strategy = new FailingOffsetCommitStrategy();
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
+        CampaignActivityCommandDispatcher dispatcher =
+                new CampaignActivityCommandDispatcher(List.of(strategy), kafkaTemplate, pipelineMetrics);
+
+        assertThatThrownBy(() -> dispatcher.dispatch(List.of(message())))
+                .isInstanceOf(OffsetCommitBlockedException.class);
+        org.mockito.Mockito.verifyNoInteractions(kafkaTemplate);
+    }
+
     private static CampaignActivityKafkaProducerDto message() {
         return CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
@@ -62,6 +75,18 @@ class CampaignActivityCommandDispatcherTest {
         @Override
         public void process(CampaignActivityKafkaProducerDto event) {
             throw new IllegalStateException("failed");
+        }
+
+        @Override
+        public CampaignActivityType getType() {
+            return CampaignActivityType.FIRST_COME_FIRST_SERVE;
+        }
+    }
+
+    private static class FailingOffsetCommitStrategy implements CampaignStrategy {
+        @Override
+        public void process(CampaignActivityKafkaProducerDto event) {
+            throw new OffsetCommitBlockedException("failure record unavailable", new IllegalStateException());
         }
 
         @Override

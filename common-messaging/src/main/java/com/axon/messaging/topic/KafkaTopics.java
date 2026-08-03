@@ -18,6 +18,7 @@ public final class KafkaTopics {
     // Dead Letter Topics (DLT) for Fault Tolerance
     public static final String CAMPAIGN_ACTIVITY_COMMAND_DLT = "axon.campaign-activity.command.dlt";
     public static final String PURCHASE_FAILED_DLT = "axon.purchase.failed.dlt";
+    public static final String USER_SUMMARY_PROJECTION_FAILED = "axon.projection.user-summary.failed";
     public static final String WEBHOOK_FAILED_DLT = "axon.webhook.failed.dlt";
 
     @Deprecated

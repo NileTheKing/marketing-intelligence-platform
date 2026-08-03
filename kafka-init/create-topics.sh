@@ -92,6 +92,13 @@ kafka-topics --create --if-not-exists \
   --partitions 1 \
   --replication-factor 1
 
+echo "Creating topic: axon.projection.user-summary.failed"
+kafka-topics --create --if-not-exists \
+  --topic "axon.projection.user-summary.failed" \
+  --bootstrap-server broker_1:29092 \
+  --partitions 1 \
+  --replication-factor 1
+
 echo "  ✅ Created: Dead Letter Topics"
 echo ""
 

@@ -25,6 +25,11 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
         // 캠페인별 구매 내역 조회
         List<Purchase> findByCampaignActivityId(Long campaignActivityId);
 
+        @Query("SELECT p FROM Purchase p WHERE p.campaignActivityId IN :activityIds AND p.userId IN :userIds")
+        List<Purchase> findByCampaignActivityIdsAndUserIds(
+                        @Param("activityIds") List<Long> activityIds,
+                        @Param("userIds") List<Long> userIds);
+
         // 캠페인별 영속 Purchase 건수 (Redis FCFS 대사용; 취소/환불 이력 포함)
         long countByCampaignActivityId(Long campaignActivityId);
 

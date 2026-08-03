@@ -73,6 +73,16 @@ public class UserSummary {
             : null;
     }
 
+    public void advanceLastPurchaseAt(Instant occurredAt) {
+        if (occurredAt == null) {
+            return;
+        }
+        LocalDateTime candidate = LocalDateTime.ofInstant(occurredAt, ZoneId.of("Asia/Seoul"));
+        if (lastPurchaseAt == null || candidate.isAfter(lastPurchaseAt)) {
+            lastPurchaseAt = candidate;
+        }
+    }
+
     /**
      * Update the stored timestamp of the user's last login.
      *
