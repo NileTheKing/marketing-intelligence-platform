@@ -1,6 +1,11 @@
 # Session Handoff - 2026-07-30
 
-Status: active
+Status: reference (completed)
+
+Current implementation replacement:
+`docs/plan/fcfs-entry-purchase-transaction-boundary-handoff.md`.
+This file preserves the queue-removal A/B and first crash-recovery evidence;
+its Purchase event/transaction description is not current.
 
 ## Current Code State
 

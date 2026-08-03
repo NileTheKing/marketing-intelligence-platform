@@ -426,25 +426,34 @@ Verify:
 
 ### 4. Make Purchase the source-of-truth path and move UserSummary to projection semantics
 
-Current issue:
+Status: implemented and OCI-validated on `bb34774` (2026-08-03)
 
-- `PurchaseHandler` still mixes `UserSummary` update and `Purchase` persistence in the hot path.
-- `UserSummary` is a derived read model, but failures can still be coupled to purchase handling.
-- Current `UserSummaryService.recordPurchaseBatch()` loads `User` entities and updates through lazy one-to-one `UserSummary`, which can add entity loading, lazy loading, persistence-context, and dirty-checking overhead.
+Implemented boundary:
 
-Target direction:
+- FCFS Entry and Purchase are stored in one physical ledger transaction.
+- A failed batch rolls back as a unit, then retries each message in a new
+  transaction; only final message failures go to the command DLT.
+- UserSummary runs after ledger commit in a separate transaction.
+- UserSummary failure is recorded synchronously in
+  `axon.projection.user-summary.failed`; recording failure prevents offset
+  progress.
+- Only a newly created Purchase emits the best-effort behavior event after the
+  ledger method returns.
+- Projection and behavior events use the durable `Purchase.purchaseAt` value,
+  including on redelivery.
 
-- Store `Purchase` first.
-- On purchase batch failure, keep batch-to-single fallback and DLQ around purchase persistence.
-- Update `UserSummary` only after successful purchase persistence.
-- Give UserSummary its own retry/DLQ/rebuild path, separate from purchase DLQ.
-- Consider explicit JDBC batch update for `user_summary` instead of loading `User` aggregates for timestamp-style projection updates.
+Validation:
 
-Verify:
-
-- Purchase failure does not create or require UserSummary success.
-- UserSummary failure does not trigger purchase fallback.
-- A rebuild path can recompute UserSummary from Purchase rows.
+- Spring/DB integration tests cover rollback after Entry flush, four existing
+  ledger states, poison-message isolation, late redelivery, projection failure,
+  and behavior-event ordering.
+- `core-service`: 124 tests, failures/errors `0`.
+- Oracle 1,000-VU and 3,000-VU FCFS 800 runs each completed three times at
+  Entry/Purchase `800/800`, DB convergence `0s`, final committed lag `0`.
+- Crash injection left `20/20` durable Entry/Purchase rows with no committed
+  offset progress; restart converged to `800/800` without duplicates or DLT.
+- Automatic UserSummary repair remains out of scope. Purchase rows provide the
+  rebuild source, while the failure topic provides the durable target list.
 
 ### 5. Evaluate JDBC multi-row insert for append-heavy Purchase persistence
 
@@ -467,10 +476,18 @@ Verify:
 
 ### 6. Add the missing reverse reconciliation query
 
-Current issue:
+Historical issue:
 
 - Existing reconciliation mainly covers `Purchase O, Entry X` style mismatch.
-- Core in-memory event handoff can also produce `Entry O, Purchase X` under some crash boundaries.
+- The former split Entry/Purchase transactions could also produce
+  `Entry O, Purchase X` under some crash boundaries.
+
+Current boundary:
+
+- The FCFS path now commits Entry and Purchase in one transaction, so a new
+  process crash cannot commit only one side through this path.
+- Legacy rows or out-of-band writes can still justify reverse detection, but it
+  is no longer a repair requirement for the current Kafka listener boundary.
 
 Target direction:
 

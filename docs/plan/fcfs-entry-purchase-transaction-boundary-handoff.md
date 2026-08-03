@@ -1,9 +1,9 @@
 # FCFS Entry–Purchase 트랜잭션 경계 개선 Handoff
 
-Status: active
+Status: active (implemented and OCI-validated)
 
 Last verified: 2026-08-03
-Verified code baseline: `6ffa7eb` (`codex/kafka-native-backlog`)
+Verified code baseline: `bb34774` (`codex/kafka-native-backlog`)
 
 ## 이 문서의 역할
 
@@ -281,7 +281,50 @@ mock 테스트만 추가하고 끝내지 않는다. 실제 Spring 트랜잭션 �
 - 기존 SHOP purchase 테스트 성공
 - 기존 Kafka batch listener 및 command dispatcher 테스트 성공
 
-## 11. 구현 완료 후 별도로 수행할 OCI 회귀 검증
+## 11. OCI 회귀 검증
+
+Status: completed on 2026-08-03
+
+검증 환경:
+
+- Oracle VM Docker Compose
+- Entry/Core/Axon nginx CPU: `1.5/1.2/0.5`
+- 코드: `bb34774`
+- 외부 payment `waiting_burst`
+
+정합성 회귀:
+
+- `1,000 users / 1,000 VUs / FCFS 800`: 3회 모두 성공 `800`,
+  오류 `0`, Entry/Purchase `800/800`, DB 수렴 `0s`
+- `3,000 users / 3,000 VUs / FCFS 800`: 3회 모두 성공 `800`,
+  오류 `0`, Entry/Purchase `800/800`, DB 수렴 `0s`
+- 최종 broker committed lag `0`
+- command DLT와 UserSummary projection-failure 토픽 end offset `0`
+- 최종 Hikari pending/timeout `0/0`
+- 3,000-VU 세 실행의 reservation p95는
+  `5.120s / 5.704s / 4.573s`였다. 외부망 상태와 Entry 응답 지연이
+  섞인 회귀 실행이므로 성능 향상 수치로 사용하지 않는다.
+
+강제 종료 복구:
+
+- Core 정지 상태에서 command lag `800`, DB Entry/Purchase `0/0`
+- Core가 첫 원장 배치 `20/20`을 커밋한 뒤 `SIGKILL`
+- kill 직후 committed offset은 전진하지 않아 20건 모두 재전달 대상
+- 재시작 후 Entry/Purchase, distinct user, 원장 pair, UserSummary가 모두
+  `800`
+- 최종 broker committed lag `0`, command DLT/projection failure `0`
+
+증거:
+
+- `artifacts/load-test/20260803-fcfs-ledger-regression-1000vu-800`
+- `artifacts/load-test/20260803-fcfs-ledger-regression-1000vu-800-r2`
+- `artifacts/load-test/20260803-fcfs-ledger-regression-1000vu-800-r3`
+- `artifacts/load-test/20260803-fcfs-ledger-3000vu-800-r1`
+- `artifacts/load-test/20260803-fcfs-ledger-3000vu-800-r2`
+- `artifacts/load-test/20260803-fcfs-ledger-3000vu-800-r3`
+- `artifacts/load-test/20260803-fcfs-ledger-crash-recovery/result.md`
+
+아래는 이 검증을 수행하기 전에 확정한 판정 기준으로 기록을 보존한다.
 
 이 절은 구현 에이전트의 작업 범위와 완료 조건이 아니다. 로컬 구현과 테스트가
 끝난 뒤, VM 접근 권한과 안정적인 부하 발생 환경을 가진 별도 작업에서 수행한다.
