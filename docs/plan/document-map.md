@@ -16,6 +16,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 
 | Document | Status | Use |
 |---|---|---|
+| `docs/plan/fcfs-entry-purchase-transaction-boundary-handoff.md` | active | **현재 FCFS 후속 구현 정본.** Entry–Purchase 단일 원장 트랜잭션, 단건 fallback/DLT, UserSummary projection 실패 기록, 행동 로그 커밋 경계 |
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
 | `docs/plan/session-handoff-2026-07-30.md` | active | completed Core queue/offset A/B, crash recovery evidence, current VM/branch state, and remaining decision boundary |
