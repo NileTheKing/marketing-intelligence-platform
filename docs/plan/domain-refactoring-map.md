@@ -65,7 +65,7 @@ This map is the agreed target for a behavior-preserving package refactor. It is 
 |---|---|---|---|
 | `campaign` | `CampaignController`, `CampaignActivityController`, `CampaignService`, `CampaignActivityService`, `Campaign`, `CampaignActivity`, campaign/activity request-response-filter DTOs, `CampaignRepository`, `CampaignActivityRepository` | `CampaignActivityEntry*` | Campaign and activity definition/administration change together; a durable participation record has a different lifecycle. |
 | `entry` | `CampaignActivityEntryQueryController`, `CampaignActivityEntry*` services, entity/status/page DTOs, repository, `ReconciliationScheduler`, eligibility validation API/services | Redis reservation and payment token logic in entry-service | Core owns durable participation persistence, retry, query, and reconciliation. |
-| `commandprocessing` | `CampaignActivityConsumerService`, command buffer, dispatcher, `CampaignStrategy`, `BatchStrategy`, FCFS/coupon/webhook strategies, command DLT handling, command-pipeline metrics | `MarketingRule` evaluation | This owns Kafka command intake, buffering, dispatch, and failure isolation. It executes a command; it does not decide whether a marketing action should exist. |
+| `commandprocessing` | `CampaignActivityConsumerService`, dispatcher, `CampaignStrategy`, `BatchStrategy`, FCFS/coupon/webhook strategies, command DLT handling, command-pipeline metrics | `MarketingRule` evaluation | This owns Kafka batch intake, dispatch, durable completion boundary, and failure isolation. It executes a command; it does not decide whether a marketing action should exist. |
 | `marketing` | `MarketingRule`, `MarketingAction`, their repositories, `BehaviorTriggerScheduler`, rule/action evaluation helpers | command consumer and strategy dispatch | This owns condition evaluation and action selection. It emits commands to the processing boundary. |
 | `coupon` | `CouponController`, `CouponService`, `Coupon`, `UserCoupon`, coupon DTOs, coupon repositories | `CouponStrategy` | Coupon definition and user coupon state are a business capability. The strategy is a Kafka command handler, so it remains in command processing. |
 | `purchase` | `Purchase`, `PurchaseService`, `PurchaseHandler`, dead-letter handler, purchase repository/DTOs, `UserSummary`, user-summary service/repository, purchase scheduler, cohort/LTV/RFM services and schedulers | OAuth user authentication | These are durable commerce facts and projections derived from purchase flow. |
@@ -102,8 +102,8 @@ Cross-cutting code stays at the root: `config`, `config/auth`, `aop`, `observabi
 2. `EntryReservationService.reserve()` executes Lua script and publishes `ReservationApprovedEvent`.
 3. Payment flow uses `PaymentController.preparePayment()` and `PaymentController.confirmPayment()`.
 4. `PaymentService.sendToKafkaWithRetry()` sends `CampaignActivityKafkaProducerDto` to Kafka and waits for broker ACK.
-5. `CampaignActivityConsumerService.consume()` buffers Kafka command messages.
-6. `CampaignActivityConsumerService.scheduledFlush()` drains up to 20 messages and dispatches by `CampaignActivityType`.
+5. `CampaignActivityConsumerService.consume()` receives up to 20 records from one Kafka poll.
+6. The listener dispatches by `CampaignActivityType` and returns after Entry/Purchase durable processing.
 7. `FirstComeFirstServeStrategy.processBatch()` bulk-loads `CampaignActivity` and delegates entry upsert.
 8. `CampaignActivityEntryService.upsertBatch()` saves entries, isolates batch failure through individual retry, and publishes purchase events.
 9. Purchase persistence is handled downstream by purchase handlers/listeners.
@@ -160,7 +160,7 @@ These are candidates, not mandatory package moves.
 | Entry / Reservation | Redis slot claim, duplicate/sold-out/closed result, reservation token issuing. | Durable purchase persistence, dashboard aggregation. | `EntryController`, `EntryReservationService`, `ReservationTokenService`, `FastValidationService` |
 | Payment Command | Payment prepare/confirm, approval token, Kafka command send. | Purchase history calculation, campaign dashboard. | `PaymentController`, `PaymentService`, `CampaignActivityProducerService` |
 | Campaign Operations | Campaign and campaign activity creation/update/status/filter/budget. | Kafka buffer management, Redis reservation internals. | `CampaignService`, `CampaignActivityService`, `CampaignActivity`, `Campaign` |
-| Activity Command Processing | Kafka command buffering, batch dispatch, strategy execution, DLT on command failure. | HTTP controller validation, dashboard response formatting. | `CampaignActivityConsumerService`, `CampaignStrategy`, `BatchStrategy`, `FirstComeFirstServeStrategy`, `CouponStrategy`, `WebhookStrategy` |
+| Activity Command Processing | Kafka batch intake, durable completion boundary, strategy execution, DLT on command failure. | HTTP controller validation, dashboard response formatting. | `CampaignActivityConsumerService`, `CampaignStrategy`, `BatchStrategy`, `FirstComeFirstServeStrategy`, `CouponStrategy`, `WebhookStrategy` |
 | Entry Persistence | Durable `CampaignActivityEntry` upsert, batch retry, purchase event publication after approved entry. | Kafka listener mechanics, Redis reservation. | `CampaignActivityEntryService`, `CampaignActivityEntryRetryService`, `CampaignActivityEntryRepository` |
 | Purchase / Commerce | Durable purchase records, LTV/cohort, user summary purchase metrics. | Payment API token validation. | `PurchaseService`, `PurchaseHandler`, `CohortAnalysisService`, `CohortLtvBatchService`, `UserSummaryService` |
 | Behavior Analytics | Behavior event collection/query, funnel mapping, dashboard stats. | Campaign mutation and payment command execution. | `BehaviorEventService`, `DashboardService`, `CampaignFunnelDefinition`, `FunnelStep`, `TriggerType` |
@@ -175,7 +175,7 @@ These are candidates, not mandatory package moves.
 |---|---|---|---|
 | `core-service/src/main/java/com/axon/core_service/service/DashboardService.java` | One service assembles activity, campaign, global dashboard, heatmap, GMV, ROAS, ranking, and ES error fallback. | Hard to test dashboard calculations independently; future metric changes can touch a large class. | Extract calculation helpers such as `DashboardMetricCalculator`; later extract query assemblers by dashboard level. |
 | `entry-service/src/main/java/com/axon/entry_service/service/entry/EntryApplicationService.java` | FCFS and coupon-entry use cases are intentionally orchestrated here after the controller extraction. | It is a central application-flow class, so unrelated activity flows must not accumulate here. | Keep controllers HTTP-only; split only if coupon and FCFS validation rules diverge materially. |
-| `core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java` | Now owns Kafka listener, scheduled flush, and shutdown flush only. Buffering and dispatch/DLT moved to named collaborators. | The flush policy remains a separate future backpressure concern, but responsibility is no longer hidden in one class. | Keep `CampaignActivityCommandBuffer` and `CampaignActivityCommandDispatcher` separate. |
+| `core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityConsumerService.java` | Owns the Kafka batch listener and delegates dispatch/metrics. | A slow strategy holds the poll open, which is visible as Kafka lag. | Keep the listener thin; split a slow strategy by topic/group only when metrics justify it. |
 
 ### 4.2 Long Method
 
@@ -213,7 +213,7 @@ These are candidates, not mandatory package moves.
 
 | File | Evidence | Direction |
 |---|---|---|
-| `CampaignActivityConsumerService` | Listener/flush coordination remains, while buffering and dispatch are now named classes. | The class is readable enough for the current flow. | Preserve the split; revisit only with a concrete queue/backpressure change. |
+| `CampaignActivityConsumerService` | Batch listener delegates directly to the dispatcher. | The class is readable enough for the current flow. | Keep the listener-owned durable boundary explicit. |
 | `DashboardService` | Section banners split dashboard levels but class remains broad. | Section banners are a signal that extract-class may help. |
 
 ### 4.7 Naming Smells
@@ -249,11 +249,11 @@ Risk: low to medium. Behavior is sensitive but extraction can be mechanical.
 
 ### Unit 2: CampaignActivity Command Buffer / Dispatcher Split
 
-Status: implemented
+Status: superseded by `d5f396b` queue removal
 
 Goal: make Kafka listener, buffer, batch dispatch, and DLT responsibility visible.
 
-Scope:
+Historical scope:
 - Extract buffer drain logic into `CampaignActivityCommandBuffer`.
 - Extract strategy dispatch and DLT send into `CampaignActivityCommandDispatcher`.
 - Keep batch size 20 and flush interval unchanged.
@@ -263,6 +263,9 @@ Verification:
 - Add unit test for unsupported type and batch failure DLT behavior if missing.
 
 Risk: medium. Threading and shutdown flush must be preserved.
+
+Current state: the dispatcher remains, but the command buffer, scheduled flush,
+and shutdown flush were removed after the 2026-07-30 A/B.
 
 ### Unit 3: Dashboard Pure Metric Calculator
 
@@ -327,7 +330,8 @@ Status: completed for items 1-5 on 2026-06-06.
 1. Dashboard pure metric calculator.
 2. Activity/user key value object.
 3. Entry controller use-case extraction.
-4. CampaignActivity command buffer/dispatcher split.
+4. CampaignActivity command buffer/dispatcher split (historical; the buffer was
+   removed by `d5f396b`, while the dispatcher remains).
 5. Package case cleanup.
 
 The first two are low-risk warmups. The third and fourth improve the actual boundary readability. The fifth is cosmetic but helps Java convention and AI navigation.

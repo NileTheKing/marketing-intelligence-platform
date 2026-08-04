@@ -654,7 +654,8 @@ Payment-flow metrics to add/check:
 - DB purchases convergence seconds.
 - Final Redis counter/users vs DB entries/purchases consistency.
 - DLQ count.
-- If needed: Kafka consumer lag, `CampaignActivityCommandBuffer` depth, `PurchaseHandler` buffer depth, flush latency, and retry fallback count.
+- Kafka consumer-group lag, listener batch duration/size, Hikari active/pending,
+  DB convergence, DLT count, and individual retry fallback count.
 
 ### VU-Capped Waiting Burst Boundary
 

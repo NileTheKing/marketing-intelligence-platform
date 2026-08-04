@@ -111,9 +111,12 @@ Optional exclusions:
 
 Purpose:
 
-- Focus on FCFS entry, Redis Lua reservation, Kafka command flow, Core consumer processing, CampaignActivityEntry persistence, Purchase buffering, batch flush, DLQ, and reconciliation-related risks.
+- Focus on FCFS entry, Redis Lua reservation, Kafka command flow, Core batch
+  listener processing, CampaignActivityEntry/Purchase persistence, consumer
+  lag, DLQ, and reconciliation-related risks.
 - Identify which API or internal method is slow.
-- Separate controller/service/repository time, DB connection wait, SQL execution, Redis calls, Kafka publish/consume, and scheduled flush delay.
+- Separate controller/service/repository time, DB connection wait, SQL
+  execution, Redis calls, Kafka publish/consume, and listener batch duration.
 - Guide one concrete code or configuration change.
 
 OTel-attached latency may be used as diagnostic evidence, but it is not the headline before/after performance number because the agent adds tracing overhead.
@@ -281,14 +284,14 @@ Key checks:
 
 Purpose:
 
-- Validate that Kafka receiving and DB persistence are separated.
-- Observe whether Purchase batch flush or DB connection acquisition becomes the bottleneck.
+- Validate that Kafka backlog and listener-owned DB persistence converge.
+- Observe whether listener batch processing or DB connection acquisition becomes the bottleneck.
 
 Key checks:
 
 - Core consumer trace
 - `CampaignActivityConsumerService` processing time
-- `PurchaseHandler` buffer and flush timing
+- `PurchaseHandler` batch persistence timing
 - Hikari pending connection count
 - SQL execution time
 - DLQ behavior under injected duplicate/failure input

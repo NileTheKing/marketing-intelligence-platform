@@ -584,3 +584,116 @@ Remeasure an individual intervention only when it will be a portfolio headline.
 After a passing final run, update T27 with the three-run median and link the
 result directory. Move this section to a dated completed record or mark it
 implemented; retain the 2026-07-15 boundary devlog as history.
+
+## 2026-07-30 Core Kafka-Native Backlog A/B
+
+Status: completed
+
+This comparison answers a Core durability-boundary question. It is not a
+headline ingress performance benchmark.
+
+Fixed conditions:
+
+- External Mac payment path
+- 1,000 users / 1,000 VUs / FCFS 800
+- Entry/Core/Axon nginx CPU: `1.5/1.2/0.5`
+- Host nginx: `worker_connections 4096`,
+  `worker_rlimit_nofile 16384`, no upstream `keepalive 256`, no host listen
+  backlog override
+- Axon nginx container: `worker_connections 2048`,
+  `listen 80 backlog=4096`; this uncommitted VM setting was held constant and
+  was not independently validated by this A/B
+
+| Result | Before `49ca09f` | After `d5f396b` |
+|---|---:|---:|
+| Measured FCFS success/errors | `800/0`, `800/0` | `800/0`, `800/0` |
+| DB Entry/Purchase | `800/800`, `800/800` | `800/800`, `800/800` |
+| DB convergence | `0s`, `0s` | `0s`, `0s` |
+| Hikari active scrape peak | `3` | `2` |
+| Hikari pending/timeout | `0/0` | `0/0` |
+| Reservation p95 | `3129ms`, `2723ms` | `4125ms`, `2547ms` |
+| HTTP p95 | `1637ms`, `1701ms` | `1884ms`, `1904ms` |
+
+The latency samples overlap and do not support a speedup claim. The accepted
+result is that the same 800-result workload converged without application
+queues or DB-pool pressure.
+
+Crash injection:
+
+- Core stopped: Kafka group lag `800`, DB `0/0`.
+- Abrupt kill after partial work: DB `360/360`, committed offset progress
+  `340`; 20 durable records remained uncommitted.
+- Restart: Entry/Purchase `800/800`, distinct users `800/800`, group lag `0`.
+
+Evidence:
+
+- `artifacts/load-test/20260730-152209-queue-before-main49ca-controlled`
+- `artifacts/load-test/20260730-153943-queue-after-d5f396b-controlled`
+- `artifacts/load-test/20260730-queue-crash-injection-d5f396b/result.md`
+
+## 2026-08-03 FCFS Ledger Transaction Regression
+
+Status: completed
+
+Purpose:
+
+- Validate the Entry–Purchase single-transaction boundary after removing the
+  former batch transaction-event/`REQUIRES_NEW` chain.
+- Confirm that UserSummary projection failure history and Kafka offset
+  boundaries do not cause loss or duplicate ledger rows.
+- This is a correctness/capacity regression, not a latency improvement A/B.
+
+Runtime:
+
+- Code: `bb34774`
+- Oracle VM Docker Compose
+- Entry/Core/Axon nginx CPU: `1.5/1.2/0.5`
+- External payment `waiting_burst`
+
+### Repeated results
+
+| Shape | Runs | FCFS success/errors | Entry/Purchase | DB convergence | reservation p95 | host request p95 | Axon completion peak |
+|---|---:|---|---|---|---|---|---|
+| 1,000 users / 1,000 VUs / FCFS 800 | 3 | all `800/0` | all `800/800` | all `0s` | `2.253s / 6.046s / 1.907s` | `1.664s / 5.240s / 1.306s` | `239 / 284 / 268 req/s` |
+| 3,000 users / 3,000 VUs / FCFS 800 | 3 | all `800/0` | all `800/800` | all `0s` | `5.120s / 5.704s / 4.573s` | `1.777s / 2.510s / 1.311s` | `817 / 898 / 1,067 req/s` |
+
+Final state after the repeated runs:
+
+- broker committed lag: `0`
+- command DLT end offset: `0`
+- UserSummary projection-failure topic end offset: `0`
+- Entry/Purchase pairs: `800`
+- UserSummary timestamps matching durable Purchase timestamps: `800`
+- Hikari active/pending/timeout at final snapshot: `0/0/0`
+
+Latency boundary:
+
+- Current host-to-Axon and Axon-to-Entry TCP connect p95 stayed in the
+  single-digit millisecond range.
+- Most server-side reservation time was upstream header/response wait inside
+  the Entry path.
+- The generator was on a non-final external network and the 1,000-VU second run
+  was a large latency outlier. Do not use these p95 values as a portfolio
+  speedup claim.
+- The accepted result is three consecutive loss-free 3,000-VU/800
+  convergences on the current code.
+
+### Crash injection
+
+- Core stopped: command lag `800`, DB Entry/Purchase `0/0`.
+- Core started and was terminated with `SIGKILL` after the first ledger batch
+  committed: Entry/Purchase `20/20`, committed offset progress `0`.
+- Restart redelivered those 20 durable-but-uncommitted messages.
+- Final Entry/Purchase, distinct users, ledger pairs, and matching UserSummary
+  timestamps were all `800`; committed lag was `0`.
+- Command DLT and projection-failure offsets remained `0`.
+
+Evidence:
+
+- `artifacts/load-test/20260803-fcfs-ledger-regression-1000vu-800`
+- `artifacts/load-test/20260803-fcfs-ledger-regression-1000vu-800-r2`
+- `artifacts/load-test/20260803-fcfs-ledger-regression-1000vu-800-r3`
+- `artifacts/load-test/20260803-fcfs-ledger-3000vu-800-r1`
+- `artifacts/load-test/20260803-fcfs-ledger-3000vu-800-r2`
+- `artifacts/load-test/20260803-fcfs-ledger-3000vu-800-r3`
+- `artifacts/load-test/20260803-fcfs-ledger-crash-recovery/result.md`

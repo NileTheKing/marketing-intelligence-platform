@@ -84,11 +84,15 @@ Immediate cleanup scope:
 
 5. Core event idempotency and backpressure cleanup
    - Add DB-level uniqueness for `CampaignActivityEntry(campaign_activity_id, user_id)` if it remains the participation idempotency boundary.
-   - Use the existing queue-depth, flush-duration, lag, and DB-convergence metrics to compare two paths instead of assuming a bounded queue is the answer.
-   - Path A: bounded internal queue plus Kafka pause/resume and an offset/durable-handoff boundary tied to successful persistence.
-   - Path B: remove the internal command/purchase queues, complete durable processing before listener return, and use Kafka lag as the backlog.
-   - Test Path B first because FCFS 800/1,000 measurements showed no sustained Core backlog; keep Path A if listener-owned persistence cannot meet throughput or DB-pool constraints.
-   - Verify failure between delivery and DB commit, restart/rebalance recovery, duplicate idempotency, consumer lag, DB convergence, and loss/duplicate counts under the same load scenario.
+   - Status: Path B implemented and validated on 2026-07-30 (`d5f396b`).
+   - The internal command/Purchase queues were removed. Kafka supplies the
+     backlog, and Entry/Purchase durable processing completes before the batch
+     listener returns.
+   - Controlled 800-result A/B retained `800/800` DB convergence with no pool
+     pending/timeout. Crash injection verified redelivery of 20
+     durable-but-uncommitted records and final `800/800` distinct rows.
+   - Keep Path A (bounded queue + pause/resume + durable offset handoff) only as
+     a future fallback if a larger measured workload fails the current gate.
 
 6. Purchase/UserSummary hot-path cleanup
    - Treat `Purchase` as the source-of-truth append path.
@@ -610,19 +614,22 @@ The first version modeled a marketing rule as one condition with one reward type
 
 ### Problem
 
-Webhook delivery is external HTTP I/O. If it runs inside the campaign command consumer flush path, a slow external endpoint can delay local queue flushing for unrelated campaign commands.
+Webhook delivery is external HTTP I/O. If it runs inside the campaign command
+batch listener, a slow external endpoint can delay offset progress for
+unrelated campaign commands in the same poll.
 
 Current code boundary:
 
 ```text
 Kafka listener
--> in-memory command buffer
--> scheduled synchronized flush
+-> poll batch (max 20)
 -> strategy dispatch
 -> FCFS / COUPON / WEBHOOK strategy
 ```
 
-This means Kafka message reception is already separated from strategy execution, but the strategy execution path is still shared. A slow `WEBHOOK` strategy can keep the flush task open and delay the next drain/dispatch cycle for other command types.
+The strategy execution path is shared within a poll batch. A slow `WEBHOOK`
+strategy can keep the listener open and delay the next poll/offset progress for
+other command types.
 
 ### Backend Idea
 
@@ -633,7 +640,7 @@ Use an outbox-style delivery boundary:
 ```text
 Campaign command consumer
 -> WebhookStrategy creates webhook_outbox PENDING row
--> flush returns quickly
+-> listener returns after durable outbox commit
 
 WebhookDeliveryWorker
 -> reads PENDING rows
@@ -645,15 +652,17 @@ WebhookDeliveryWorker
 ### Threading Boundary
 
 - The goal is not to replace every worker with virtual threads.
-- Kafka listener and flush workers should remain lightweight and focused on receiving/flushing internal commands.
+- Kafka listener should remain focused on short local durable work.
 - Webhook delivery may use a dedicated scheduler or executor later.
 - Virtual threads are a candidate for webhook HTTP delivery, but only with explicit concurrency/rate limits.
 
 Near-term implementation option:
 
-- Split the single command buffer into type-aware buffers or type-aware flush lanes.
+- Split webhook delivery to a separate topic/consumer group when measured
+  latency or retry ownership justifies it.
 - Keep internal DB-oriented strategies conservative until their idempotency and duplicate handling are verified.
-- Move webhook HTTP delivery to a dedicated bounded executor first if the goal is to reduce flush-path blocking without introducing a durable outbox yet.
+- Move webhook HTTP delivery to a dedicated bounded worker first if the goal is
+  to reduce listener blocking without introducing a durable outbox yet.
 - Treat virtual threads as an implementation option for the webhook delivery executor, not as a substitute for separating the webhook responsibility from command flushing.
 - If delivery state, operator retry, or process-crash recovery becomes part of the claim, promote the design to an outbox + delivery worker.
 
@@ -671,7 +680,7 @@ Input:
 - optional FCFS/PURCHASE follow-up commands if the scenario needs richer traffic
 
 Observe:
-- command buffer size over time
+- consumer-group lag over time
 - type별 처리 완료 시간
 - webhook delay / retry / DLT count
 - coupon issue completion time
@@ -683,7 +692,7 @@ Expected failure mode to confirm:
 
 ```text
 WEBHOOK delay
--> shared flush task remains open
+-> shared listener batch remains open
 -> next drain/dispatch is delayed
 -> COUPON/FCFS command processing completion time increases
 ```

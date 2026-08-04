@@ -325,7 +325,43 @@ Remaining verification:
 
 ### 2. Compare internal bounded backpressure with Kafka-native backlog
 
-Current issue:
+Status: Path 2 implemented and validated on 2026-07-30 (`d5f396b`)
+
+Decision:
+
+- Remove both application-level command and Purchase queues.
+- Use a Spring Kafka batch listener with `max.poll.records=20`,
+  `enable.auto.commit=false`, and explicit `AckMode.BATCH`.
+- Finish Entry and Purchase durable processing before listener return.
+- Await command and Purchase DLT sends; a DLT send failure escapes the listener
+  instead of allowing the offset boundary to advance.
+- Use Kafka consumer-group lag as the durable backlog signal. Do not add Path 1
+  unless a later measured workload fails the current throughput or DB-pool gate.
+
+Validated result:
+
+- Controlled A/B: external payment, 1,000 users / 1,000 VUs / FCFS 800,
+  Entry/Core/Axon nginx CPU `1.5/1.2/0.5`.
+- Before (`49ca09f`) and after (`d5f396b`) both completed Redis, Entry, and
+  Purchase at `800/800` with `0s` DB convergence and no Hikari pending/timeout.
+- Hikari active scrape peak was `3` before and `2` after.
+- Before moved backlog into the command queue (log-observed max `312`;
+  Prometheus scrape max `56`) while committed Kafka lag stayed `0`.
+- After exposed transient Kafka fetch lag while the DB work ran; the broker's
+  committed consumer-group lag converged to `0`.
+- External latency samples overlapped and are too variable to claim a speedup.
+  The accepted benefit is the simpler durability boundary, not lower p95.
+- Crash injection started with Kafka lag `800` and DB `0/0`. After an abrupt
+  Core kill, DB was `360/360` while committed offset progress covered `340`
+  records. The 20 durable-but-uncommitted records were redelivered after
+  restart; final Entry/Purchase and distinct-user counts were all `800`, with
+  consumer-group lag `0`.
+- Evidence:
+  - `artifacts/load-test/20260730-152209-queue-before-main49ca-controlled`
+  - `artifacts/load-test/20260730-153943-queue-after-d5f396b-controlled`
+  - `artifacts/load-test/20260730-queue-crash-injection-d5f396b/result.md`
+
+Pre-experiment issue:
 
 - `CampaignActivityCommandBuffer` and `PurchaseHandler` use unbounded in-memory queues.
 - The Kafka listener returns after enqueue, while scheduled workers perform durable DB work later.
@@ -351,8 +387,11 @@ Experiment branches:
 
 Preferred first experiment:
 
-- Start with branch 2 because the measured Core queues drained without lag or DB convergence delay and the simpler boundary aligns listener completion with durable processing.
-- Keep branch 1 as the comparison path if synchronous listener-owned persistence cannot meet the target throughput or DB-pool constraints.
+- Path 2 was selected because the measured Core queues drained without lag or
+  DB convergence delay and the simpler boundary aligns listener completion
+  with durable processing.
+- Keep Path 1 only as a future fallback if a larger measured workload exceeds
+  the current throughput or DB-pool constraints.
 
 Verify:
 
@@ -387,25 +426,34 @@ Verify:
 
 ### 4. Make Purchase the source-of-truth path and move UserSummary to projection semantics
 
-Current issue:
+Status: implemented and OCI-validated on `bb34774` (2026-08-03)
 
-- `PurchaseHandler` still mixes `UserSummary` update and `Purchase` persistence in the hot path.
-- `UserSummary` is a derived read model, but failures can still be coupled to purchase handling.
-- Current `UserSummaryService.recordPurchaseBatch()` loads `User` entities and updates through lazy one-to-one `UserSummary`, which can add entity loading, lazy loading, persistence-context, and dirty-checking overhead.
+Implemented boundary:
 
-Target direction:
+- FCFS Entry and Purchase are stored in one physical ledger transaction.
+- A failed batch rolls back as a unit, then retries each message in a new
+  transaction; only final message failures go to the command DLT.
+- UserSummary runs after ledger commit in a separate transaction.
+- UserSummary failure is recorded synchronously in
+  `axon.projection.user-summary.failed`; recording failure prevents offset
+  progress.
+- Only a newly created Purchase emits the best-effort behavior event after the
+  ledger method returns.
+- Projection and behavior events use the durable `Purchase.purchaseAt` value,
+  including on redelivery.
 
-- Store `Purchase` first.
-- On purchase batch failure, keep batch-to-single fallback and DLQ around purchase persistence.
-- Update `UserSummary` only after successful purchase persistence.
-- Give UserSummary its own retry/DLQ/rebuild path, separate from purchase DLQ.
-- Consider explicit JDBC batch update for `user_summary` instead of loading `User` aggregates for timestamp-style projection updates.
+Validation:
 
-Verify:
-
-- Purchase failure does not create or require UserSummary success.
-- UserSummary failure does not trigger purchase fallback.
-- A rebuild path can recompute UserSummary from Purchase rows.
+- Spring/DB integration tests cover rollback after Entry flush, four existing
+  ledger states, poison-message isolation, late redelivery, projection failure,
+  and behavior-event ordering.
+- `core-service`: 124 tests, failures/errors `0`.
+- Oracle 1,000-VU and 3,000-VU FCFS 800 runs each completed three times at
+  Entry/Purchase `800/800`, DB convergence `0s`, final committed lag `0`.
+- Crash injection left `20/20` durable Entry/Purchase rows with no committed
+  offset progress; restart converged to `800/800` without duplicates or DLT.
+- Automatic UserSummary repair remains out of scope. Purchase rows provide the
+  rebuild source, while the failure topic provides the durable target list.
 
 ### 5. Evaluate JDBC multi-row insert for append-heavy Purchase persistence
 
@@ -428,10 +476,18 @@ Verify:
 
 ### 6. Add the missing reverse reconciliation query
 
-Current issue:
+Historical issue:
 
 - Existing reconciliation mainly covers `Purchase O, Entry X` style mismatch.
-- Core in-memory event handoff can also produce `Entry O, Purchase X` under some crash boundaries.
+- The former split Entry/Purchase transactions could also produce
+  `Entry O, Purchase X` under some crash boundaries.
+
+Current boundary:
+
+- The FCFS path now commits Entry and Purchase in one transaction, so a new
+  process crash cannot commit only one side through this path.
+- Legacy rows or out-of-band writes can still justify reverse detection, but it
+  is no longer a repair requirement for the current Kafka listener boundary.
 
 Target direction:
 
@@ -1112,9 +1168,9 @@ Do not overclaim:
 
 ### 2. In-memory unbounded buffers
 
-Classification: `code smell` / `portfolio upgrade`.
+Classification: `resolved` (2026-07-30, `d5f396b`).
 
-Evidence:
+Previous evidence:
 
 - `core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java:32` uses `ConcurrentLinkedQueue` for Kafka command buffering.
 - `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java:38` uses `ConcurrentLinkedQueue` for purchase buffering.
@@ -1122,21 +1178,15 @@ Evidence:
 - `CampaignActivityConsumerService.consume()` only does `buffer.offer(...)` at line 54.
 - `PurchaseHandler.handle()` only does `purchaseBuffer.offer(...)` at line 46.
 
-Why it matters:
+Resolution:
 
-- The current design intentionally separates Kafka listener/event listener threads from DB flush work.
-- Under sustained overload, an unbounded queue hides backpressure and can turn DB slowness into heap growth.
-- For the current 200-result FCFS scenario and 20-size flush batches, this is acceptable as a pragmatic project design, but it is not a production-grade backpressure mechanism.
-
-Recommended direction:
-
-- Do not blindly replace it before measuring.
-- The FCFS 800/1,000 measurements are now recorded, and the current decision is the A/B experiment in `### 2. Compare internal bounded backpressure with Kafka-native backlog`.
-- Test queue removal/Kafka-native backlog first. Keep bounded queue + pause/resume only as the comparison path, and do not adopt it without an offset boundary tied to durable processing or a durable inbox.
-
-Do not overclaim:
-
-- Current queue design is "listener/flush responsibility separation", not full backpressure control.
+- Both queues and their scheduled flush workers were removed after the
+  controlled A/B in `### 2. Compare internal bounded backpressure with
+  Kafka-native backlog`.
+- Kafka now holds the backlog. The batch listener completes Entry/Purchase
+  durable work before returning.
+- Keep the previous line references only as historical evidence; they no longer
+  describe current code.
 
 ### 2-a. Purchase micro-batch is not guaranteed DB bulk insert
 

@@ -60,10 +60,14 @@ public class CampaignActivityCommandDispatcher {
                     log.info("Consumed message: {}", msg);
                 });
             }
+        } catch (OffsetCommitBlockedException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error processing batch for type {}: {}", type, e.getMessage(), e);
             log.warn("🚨 [DLQ] Sending {} failed messages to DLT: {}", batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
-            batch.forEach(msg -> kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, msg));
+            batch.forEach(msg -> kafkaTemplate
+                    .send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, msg)
+                    .join());
             pipelineMetrics.recordDltRouted("campaign-command", batch.size());
         }
     }

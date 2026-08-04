@@ -1,18 +1,13 @@
 package com.axon.core_service.service;
 
 import com.axon.core_service.domain.user.User;
-import com.axon.core_service.domain.user.UserSummary;
 import com.axon.core_service.repository.UserRepository;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
-import com.axon.core_service.service.purchase.PurchaseHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserSummaryService {
 
     private final UserRepository userRepository;
-    private final UserSummaryRepository userSummaryRepository;
     private final PurchaseRepository purchaseRepository;
     /**
      * Updates the user's purchase activity by recording a purchase that occurred at the given instant.
@@ -43,24 +37,24 @@ public class UserSummaryService {
     /**
      * Bulk 구매 기록 (마지막 구매 시간만 업데이트)
      *
-     * @param userSummaries userId -> PurchaseSummary 맵
+     * @param latestPurchaseTimes userId -> 가장 최근 구매 시각
      */
     @Transactional
-    public void recordPurchaseBatch(Map<Long, PurchaseHandler.PurchaseSummary> userSummaries) {
-        if (userSummaries.isEmpty()) {
+    public void recordLatestPurchaseBatch(Map<Long, Instant> latestPurchaseTimes) {
+        if (latestPurchaseTimes.isEmpty()) {
             return;
         }
 
-        log.info("Recording purchase for {} users", userSummaries.size());
+        log.info("Recording purchase for {} users", latestPurchaseTimes.size());
 
         // 1. User 조회 (UserSummary는 User와 1:1 관계)
-        List<User> users = userRepository.findAllById(userSummaries.keySet());
+        List<User> users = userRepository.findAllById(latestPurchaseTimes.keySet());
 
         // 2. 각 User의 마지막 구매 시간 업데이트
         for (User user : users) {
-            PurchaseHandler.PurchaseSummary summary = userSummaries.get(user.getId());
-            if (summary != null) {
-                user.recordPurchase(summary.lastPurchaseTime());
+            Instant latestPurchaseTime = latestPurchaseTimes.get(user.getId());
+            if (latestPurchaseTime != null) {
+                user.getUserSummary().advanceLastPurchaseAt(latestPurchaseTime);
             }
         }
 

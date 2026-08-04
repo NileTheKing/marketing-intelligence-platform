@@ -6,10 +6,8 @@ import com.axon.core_service.repository.PurchaseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 
 @Slf4j
 @Service
@@ -41,32 +39,4 @@ public class PurchaseService {
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void createPurchaseBatch(List<PurchaseInfoDto> purchases) {
-        if (purchases.isEmpty()) {
-            return;
-        }
-
-        log.info("Creating {} purchase records", purchases.size());
-
-        List<Purchase> purchaseEntities = purchases.stream()
-                .map(info -> new Purchase(
-                        info.userId(),
-                        info.productId(),
-                        info.campaignActivityId(),
-                        info.purchaseType(),
-                        info.price(),
-                        info.quantity(),
-                        info.purchasedAt()
-                ))
-                .toList();
-
-        purchaseRepository.saveAll(purchaseEntities);
-        log.info("[Purchase] Saved {} purchase records successfully", purchaseEntities.size());
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void saveSinglePurchaseInNewTransaction(Purchase purchase) {
-        purchaseRepository.save(purchase);
-    }
 }

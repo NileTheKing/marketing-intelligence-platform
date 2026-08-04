@@ -68,6 +68,7 @@ spec:
           # 4. Dead Letter Topics (Fault Tolerance)
           create_topic "axon.campaign-activity.command.dlt" 3 3
           create_topic "axon.purchase.failed.dlt" 3 3
+          create_topic "axon.projection.user-summary.failed" 3 3
 
           echo ""
           echo "✅ All topics created successfully!"

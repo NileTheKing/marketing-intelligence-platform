@@ -27,11 +27,12 @@ class LogDeadLetterHandler implements DeadLetterHandler<PurchaseInfoDto> {
         
         // [PORTFOLIO POINT] Persistent DLQ for Auditability
         try {
-            kafkaTemplate.send(KafkaTopics.PURCHASE_FAILED_DLT, data);
+            kafkaTemplate.send(KafkaTopics.PURCHASE_FAILED_DLT, data).join();
             pipelineMetrics.recordDltRouted("purchase", 1);
             log.info("📢 [DLQ] Failed purchase sent to {}: userId={}", KafkaTopics.PURCHASE_FAILED_DLT, data.userId());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("❌ [DLQ] Failed to send message to DLT: {}", e.getMessage());
+            throw e;
         }
     }
 }

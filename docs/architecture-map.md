@@ -2,7 +2,7 @@
 
 > **목적**: 새로 투입된 사람/에이전트가 30초에 "무엇이 무엇에게 무엇을 보내는지" 잡는 반 페이지 지도.
 > **원칙**: 짧게 유지. 상세는 각 flow 문서로. **충돌 시 코드가 이긴다.**
-> 개정: 2026-07-12.
+> 개정: 2026-08-03.
 
 ## 정체성 (왜 존재하나)
 1. **선착순(FCFS) 스파이크 트래픽을 안정적으로 수용·판정** (한정 상품 응모, 2초에 수천 명)
@@ -36,9 +36,14 @@
 ```
 당첨자 → entry PaymentController prepare/confirm (토큰 검증, entry↔core 경합 취약 구간)
   → PaymentService → Kafka CAMPAIGN_ACTIVITY_COMMAND
-  → core listener → command buffer → scheduled flush → strategy → Entry upsert
-  → PurchaseHandler → Purchase/UserSummary (MySQL)
-     (명령 배치 실패: command DLT, Purchase 실패: purchase DLT)
+  → core batch listener (poll당 최대 20건) → FCFS orchestration
+      → Entry + Purchase 단일 원장 트랜잭션
+          배치 실패: 전체 rollback → 메시지별 새 트랜잭션 재시도
+          최종 실패 메시지만 command DLT
+      → UserSummary 별도 projection 트랜잭션
+          실패: USER_SUMMARY_PROJECTION_FAILED에 기록
+      → 새 Purchase의 행동 로그 발행
+  → 필수 DB 처리/실패 기록 완료 후 listener 반환 → batch offset commit
 ```
 
 **C. 행동 로그 (축2)**
@@ -57,6 +62,7 @@ BEHAVIOR_EVENT → Kafka Connect Elasticsearch sink → Elasticsearch (행동 �
 | `axon.event.behavior` | 행동 이벤트 (축2, → Elasticsearch) |
 | `axon.event.commerce` | 커머스 이벤트 |
 | `axon.campaign-activity.command` (+`.dlt`) | 결제/캠페인 명령 (entry→core), 실패 시 DLT |
+| `axon.projection.user-summary.failed` | 원장 커밋 후 UserSummary projection 실패 기록 |
 | `axon.payment.retry` | 결제 재시도 (deprecated, 신규 사용 금지) |
 | `axon.purchase.failed.dlt` / `axon.webhook.failed.dlt` | 실패 격리 |
 | `axon.event.raw` / `axon.user.login` | 원시 이벤트 / 로그인 (deprecated, 신규 사용 금지) |

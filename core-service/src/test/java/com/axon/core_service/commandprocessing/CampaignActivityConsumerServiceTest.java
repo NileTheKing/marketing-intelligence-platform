@@ -133,7 +133,7 @@ class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("100건의 동시 구매 이벤트가 들어오면 모두 비동기 파이프라인에서 처리되어야 한다")
+    @DisplayName("100건의 동시 구매 이벤트가 들어오면 Kafka batch 파이프라인에서 모두 처리되어야 한다")
     void decreaseStock_ConcurrencyTest() throws InterruptedException {
         ExecutorService executorService = Executors.newFixedThreadPool(32);
         CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
@@ -170,6 +170,7 @@ class CampaignActivityConsumerServiceTest extends AbstractIntegrationTest {
                     // Verify that entries were created
                     long entryCount = campaignActivityEntryRepository.count();
                     assertThat(entryCount).isEqualTo(NUMBER_OF_THREADS);
+                    assertThat(purchaseRepository.count()).isEqualTo(NUMBER_OF_THREADS);
 
                     userIds.forEach(id -> assertThat(
                             userSummaryRepository.findById(id)

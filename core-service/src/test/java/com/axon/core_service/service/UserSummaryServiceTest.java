@@ -55,6 +55,21 @@ class UserSummaryServiceTest {
     }
 
     @Test
+    @DisplayName("배치 projection은 마지막 구매 시각만 전달하고 기존 값보다 과거로 갱신하지 않는다")
+    void recordLatestPurchaseBatchAdvancesSummary() {
+        User user = mock(User.class);
+        com.axon.core_service.domain.user.UserSummary summary = mock(com.axon.core_service.domain.user.UserSummary.class);
+        Instant olderMessage = Instant.parse("2026-08-01T00:00:00Z");
+        when(userRepository.findAllById(java.util.Set.of(1L))).thenReturn(java.util.List.of(user));
+        when(user.getId()).thenReturn(1L);
+        when(user.getUserSummary()).thenReturn(summary);
+
+        userSummaryService.recordLatestPurchaseBatch(java.util.Map.of(1L, olderMessage));
+
+        verify(summary).advanceLastPurchaseAt(olderMessage);
+    }
+
+    @Test
     @DisplayName("recordLogin은 사용자에 대한 마지막 로그인 시각을 갱신한다")
     void recordLoginUpdatesLastLogin() {
         Instant loggedAt = Instant.now();
