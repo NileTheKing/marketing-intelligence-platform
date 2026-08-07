@@ -27,11 +27,16 @@ public class RfmSegmentationScheduler {
     private final UserSummaryRepository userSummaryRepository;
     private final PurchaseRepository purchaseRepository;
     private final RfmSegmentationService rfmSegmentationService;
+    private final SchedulerExecutionLock schedulerExecutionLock;
 
     // 매일 새벽 4시 실행
     @Scheduled(cron = "0 0 4 * * *")
     @Transactional
     public void runRfmSegmentationBatch() {
+        schedulerExecutionLock.runIfAcquired("rfm-segmentation", this::runRfmSegmentationBatchLocked);
+    }
+
+    private void runRfmSegmentationBatchLocked() {
         log.info("========== RFM Segmentation Batch Started ==========");
 
         int pageNum = 0;

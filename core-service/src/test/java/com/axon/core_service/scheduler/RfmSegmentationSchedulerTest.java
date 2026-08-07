@@ -22,8 +22,13 @@ class RfmSegmentationSchedulerTest {
     void runRfmSegmentationBatch_usesPurchaseAggregateAndUpdatesSegment() {
         UserSummaryRepository userSummaryRepository = mock(UserSummaryRepository.class);
         PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
+        SchedulerExecutionLock schedulerExecutionLock = mock(SchedulerExecutionLock.class);
         RfmSegmentationScheduler scheduler = new RfmSegmentationScheduler(
-                userSummaryRepository, purchaseRepository, new RfmSegmentationService());
+                userSummaryRepository, purchaseRepository, new RfmSegmentationService(), schedulerExecutionLock);
+        doAnswer(invocation -> {
+            invocation.getArgument(1, Runnable.class).run();
+            return true;
+        }).when(schedulerExecutionLock).runIfAcquired(eq("rfm-segmentation"), any(Runnable.class));
         UserSummary summary = mock(UserSummary.class);
         when(summary.getUserId()).thenReturn(10L);
         when(summary.getLastPurchaseAt()).thenReturn(LocalDateTime.now().minusDays(10));
@@ -37,5 +42,20 @@ class RfmSegmentationSchedulerTest {
         verify(purchaseRepository).findRfmMetricsByUserIdIn(List.of(10L));
         verify(summary).updateRfmSegment(RfmSegment.VIP);
         verify(userSummaryRepository).saveAll(List.of(summary));
+    }
+
+    @Test
+    void runRfmSegmentationBatch_skipsWhenAnotherInstanceOwnsLock() {
+        UserSummaryRepository userSummaryRepository = mock(UserSummaryRepository.class);
+        PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
+        SchedulerExecutionLock schedulerExecutionLock = mock(SchedulerExecutionLock.class);
+        RfmSegmentationScheduler scheduler = new RfmSegmentationScheduler(
+                userSummaryRepository, purchaseRepository, new RfmSegmentationService(), schedulerExecutionLock);
+        when(schedulerExecutionLock.runIfAcquired(eq("rfm-segmentation"), any(Runnable.class)))
+                .thenReturn(false);
+
+        scheduler.runRfmSegmentationBatch();
+
+        verifyNoInteractions(userSummaryRepository, purchaseRepository);
     }
 }

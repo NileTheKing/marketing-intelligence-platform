@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 public class CohortLtvBatchScheduler {
 
     private final CohortLtvBatchService cohortLtvBatchService;
+    private final SchedulerExecutionLock schedulerExecutionLock;
 
     /**
      * 매월 1일 새벽 3시에 코호트 LTV 배치 실행
@@ -22,6 +23,10 @@ public class CohortLtvBatchScheduler {
      */
     @Scheduled(cron = "0 0 3 1 * ?")
     public void runMonthlyCohortLtvBatch() {
+        schedulerExecutionLock.runIfAcquired("cohort-ltv", this::runMonthlyCohortLtvBatchLocked);
+    }
+
+    private void runMonthlyCohortLtvBatchLocked() {
         log.info("========== Monthly Cohort LTV Batch Started ==========");
         try {
             cohortLtvBatchService.processMonthlyCohortStats();
