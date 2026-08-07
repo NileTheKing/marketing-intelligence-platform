@@ -628,7 +628,7 @@ The first version modeled a marketing rule as one condition with one reward type
 
 ## Main Upgrade 3-B: Webhook Delivery Isolation
 
-Status: `active (implemented 2026-08-06, real-provider smoke test pending)`
+Status: `active (implemented 2026-08-06, public external endpoint smoke completed 2026-08-07)`
 
 ### Problem
 
@@ -670,8 +670,11 @@ BehaviorTriggerScheduler
   `2xx`, `400`, request headers, and read timeout behavior.
 - Strategy tests verify `5xx` recovery, `429` retry, ordinary `4xx` immediate DLT, retry exhaustion,
   and DLT-publish failure propagation.
-- The repository and deployment configuration still do not provide a real provider endpoint URL.
-  A Pipedream/Slack/email smoke test remains external evidence, not a completed repository test.
+- `HttpWebhookClientExternalSmokeTest` is disabled unless `AXON_WEBHOOK_SMOKE_URL` is supplied, so
+  the repository does not store a temporary or provider URL.
+- A 2026-08-07 run sent one synthetic request to a public Webhook.site endpoint and confirmed the
+  JSON body and `Idempotency-Key` header. This verifies public-network delivery, not a CRM/provider
+  adapter.
 - KakaoTalk is not a drop-in generic webhook receiver. It still needs a provider adapter for OAuth,
   Kakao payloads, token refresh, and provider-specific delivery semantics.
 
@@ -710,6 +713,8 @@ Completed:
   - isolated topics/groups: FCFS completed in `5 / 4 / 4 ms` and its group committed one record while
     the Webhook group was still blocked
   - evidence: `docs/devlog/dev-log-2026-08-06-webhook-topic-isolation-ab.md`
+- A separate public-endpoint smoke test sent one synthetic Java 21 `HttpWebhookClient` request to
+  Webhook.site and confirmed the JSON body and idempotency header at the receiver.
 
 Still required before claiming an OCI or production latency improvement:
 
@@ -734,7 +739,7 @@ Observe:
 
 - Run the same mixed command input before/after under a separately controlled receiver.
 - Record consumer lag and coupon/FCFS completion time by consumer group.
-- Run one real-provider smoke test and record the provider response.
+- Add a provider-specific smoke test only when a real CRM, push, email, or Kakao adapter is selected.
 
 Until that experiment exists, the safe claim is structural isolation and failure-policy verification,
 not a numeric latency reduction.
@@ -887,7 +892,8 @@ Unit/integration acceptance tests:
 6. Coupon duplicate command still leaves one `UserCoupon`; webhook idempotency key includes action ID.
 
 External HTTP verification covers WireMock `2xx`, `400`, timeout, retry classification, and DLT
-failure propagation. One real provider smoke test remains a follow-up gate.
+failure propagation. The public Webhook.site smoke verifies real internet delivery; a
+provider-specific smoke remains optional until an actual CRM/channel adapter is selected.
 
 #### Completion Criteria
 
@@ -949,8 +955,9 @@ Completed foundation:
 
 Current next sequence:
 
-2. Run one real-provider webhook smoke test; WireMock HTTP failure injection and dedicated
-   topic/consumer isolation are implemented.
+2. Select a provider-specific adapter only if a real CRM/channel contract becomes part of scope;
+   WireMock failure injection, dedicated topic/consumer isolation, and a public endpoint smoke are
+   complete.
 3. If a numeric portfolio claim is needed, run a mixed-command before/after experiment and record
    group lag plus coupon/FCFS completion time.
 4. Add durable webhook delivery/execution history only if operator recovery or process-crash

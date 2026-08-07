@@ -4,6 +4,8 @@ Status: active evidence
 
 Date: 2026-08-06
 
+External smoke verification: 2026-08-07
+
 ## Question
 
 Does synchronous external Webhook work on the same Kafka topic and consumer execution path delay
@@ -75,10 +77,13 @@ Supported:
   consumer.
 - Topic and consumer-group isolation allowed FCFS to complete and commit while Webhook was still
   blocked.
+- `HttpWebhookClientExternalSmokeTest` sent one synthetic JSON request from Java 21 to a public
+  Webhook.site endpoint. The receiver confirmed the `application/json` body and
+  `Idempotency-Key: webhook:smoke:20260807` header.
 
 Not supported:
 
 - a production latency or throughput improvement percentage
 - an OCI mixed-load result
-- a real CRM, Kakao, email, or other provider integration
+- a real CRM, Kakao, email, or other provider-specific integration
 - end-to-end exactly-once Webhook delivery
