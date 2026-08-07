@@ -36,6 +36,18 @@ topics:
       - NOT for analytics (use event.raw instead)
       → Consumed by core-service @KafkaListener
 
+  - name: axon.webhook.command
+    partitions: 3
+    replicationFactor: 3
+    config:
+      retention.ms: 2592000000  # 30 days
+      compression.type: lz4
+      cleanup.policy: delete
+    description: |
+      External webhook delivery commands:
+      - Isolated from FCFS and coupon command processing
+      - Retried by the dedicated webhook consumer
+
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   # Kubernetes Application Logs Topic
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

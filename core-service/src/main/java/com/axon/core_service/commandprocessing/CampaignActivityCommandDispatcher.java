@@ -43,6 +43,12 @@ public class CampaignActivityCommandDispatcher {
     }
 
     private void dispatchBatch(CampaignActivityType type, List<CampaignActivityKafkaProducerDto> batch) {
+        if (type == CampaignActivityType.WEBHOOK) {
+            log.info("Forwarding legacy webhook commands to isolated topic: count={}", batch.size());
+            batch.forEach(message -> kafkaTemplate.send(KafkaTopics.WEBHOOK_COMMAND, message).join());
+            return;
+        }
+
         CampaignStrategy strategy = strategies.get(type);
 
         if (strategy == null) {

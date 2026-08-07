@@ -123,7 +123,7 @@ class BehaviorTriggerSchedulerTest {
     }
 
     private void stubSuccessfulSend() {
-        when(kafkaTemplate.send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), any()))
+        when(kafkaTemplate.send(anyString(), any()))
                 .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
     }
 
@@ -300,7 +300,7 @@ class BehaviorTriggerSchedulerTest {
         scheduler.runBehaviorCouponTrigger();
 
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
-        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), captor.capture());
+        verify(kafkaTemplate).send(eq(KafkaTopics.WEBHOOK_COMMAND), captor.capture());
 
         CampaignActivityKafkaProducerDto message = (CampaignActivityKafkaProducerDto) captor.getValue();
         assertThat(message.getCampaignActivityType()).isEqualTo(CampaignActivityType.WEBHOOK);
@@ -391,7 +391,8 @@ class BehaviorTriggerSchedulerTest {
         scheduler.runBehaviorCouponTrigger();
 
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
-        verify(kafkaTemplate, times(2)).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), captor.capture());
+        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND), captor.capture());
+        verify(kafkaTemplate).send(eq(KafkaTopics.WEBHOOK_COMMAND), captor.capture());
 
         List<CampaignActivityKafkaProducerDto> messages = captor.getAllValues().stream()
                 .map(CampaignActivityKafkaProducerDto.class::cast)

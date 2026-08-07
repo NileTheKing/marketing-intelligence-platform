@@ -135,7 +135,7 @@ public class BehaviorTriggerScheduler {
         CampaignActivityKafkaProducerDto message = buildRewardMessage(rule, action, userId, productId);
 
         try {
-            kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, message)
+            kafkaTemplate.send(commandTopic(action), message)
                     .whenComplete((result, ex) -> {
                         if (ex != null) {
                             log.error("Kafka send failed, releasing dedup key: actionId={}, userId={}, productId={}",
@@ -148,6 +148,12 @@ public class BehaviorTriggerScheduler {
                     action.getId(), userId, productId, ex);
             redisTemplate.delete(redisKey);
         }
+    }
+
+    private String commandTopic(MarketingAction action) {
+        return action.getActionType() == RewardType.WEBHOOK
+                ? KafkaTopics.WEBHOOK_COMMAND
+                : KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND;
     }
 
     private String triggerKey(MarketingAction action, Long userId, Long productId) {

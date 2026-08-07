@@ -9,8 +9,13 @@ import com.axon.messaging.topic.KafkaTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
+import java.util.concurrent.CompletionException;
 import java.util.List;
 
 @Slf4j
@@ -23,6 +28,7 @@ public class WebhookStrategy implements BatchStrategy {
     private final WebhookClient webhookClient;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final CorePipelineMetrics pipelineMetrics;
+    private final WebhookRetryBackoff retryBackoff;
 
     @Override
     public CampaignActivityType getType() {
@@ -71,12 +77,28 @@ public class WebhookStrategy implements BatchStrategy {
                 lastFailure = e;
                 log.warn("Webhook send failed: idempotencyKey={}, attempt={}, error={}",
                         request.getIdempotencyKey(), attempt, e.getMessage());
+                if (!isRetryable(e) || attempt == MAX_ATTEMPTS) {
+                    break;
+                }
+                retryBackoff.pauseAfterFailure(attempt);
             }
         }
 
         log.error("Webhook permanently failed. Sending to DLT: idempotencyKey={}",
                 request.getIdempotencyKey(), lastFailure);
-        kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, request);
-        pipelineMetrics.recordDltRouted("webhook", 1);
+        try {
+            kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, request).join();
+            pipelineMetrics.recordDltRouted("webhook", 1);
+        } catch (CompletionException e) {
+            throw new OffsetCommitBlockedException("Webhook DLT publish failed", e);
+        }
+    }
+
+    private boolean isRetryable(Exception failure) {
+        if (failure instanceof ResourceAccessException || failure instanceof HttpServerErrorException) {
+            return true;
+        }
+        return failure instanceof HttpClientErrorException clientError
+                && clientError.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS;
     }
 }

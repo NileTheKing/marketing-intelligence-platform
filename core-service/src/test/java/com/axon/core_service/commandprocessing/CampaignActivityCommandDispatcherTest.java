@@ -63,6 +63,27 @@ class CampaignActivityCommandDispatcherTest {
         org.mockito.Mockito.verifyNoInteractions(kafkaTemplate);
     }
 
+    @Test
+    void dispatchForwardsLegacyWebhookWithoutCallingExternalStrategy() {
+        CampaignStrategy webhookStrategy = mock(CampaignStrategy.class);
+        when(webhookStrategy.getType()).thenReturn(CampaignActivityType.WEBHOOK);
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
+        CampaignActivityKafkaProducerDto webhook = CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(CampaignActivityType.WEBHOOK)
+                .userId(10L)
+                .build();
+        when(kafkaTemplate.send(KafkaTopics.WEBHOOK_COMMAND, webhook))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        CampaignActivityCommandDispatcher dispatcher =
+                new CampaignActivityCommandDispatcher(List.of(webhookStrategy), kafkaTemplate, pipelineMetrics);
+
+        dispatcher.dispatch(List.of(webhook));
+
+        verify(kafkaTemplate).send(KafkaTopics.WEBHOOK_COMMAND, webhook);
+        org.mockito.Mockito.verify(webhookStrategy, org.mockito.Mockito.never()).process(webhook);
+    }
+
     private static CampaignActivityKafkaProducerDto message() {
         return CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)

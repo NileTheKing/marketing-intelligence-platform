@@ -53,7 +53,25 @@ echo "  ✅ Created: axon.campaign-activity.command (1 partition - local dev)"
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 3. event.commerce - Commerce events
+# 3. webhook.command - isolated external HTTP delivery
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+echo "Creating topic: axon.webhook.command"
+echo "  Purpose: Isolate external webhook latency from campaign ledger commands"
+
+kafka-topics --create --if-not-exists \
+  --topic "axon.webhook.command" \
+  --bootstrap-server broker_1:29092 \
+  --partitions 3 \
+  --replication-factor 1 \
+  --config min.insync.replicas=1 \
+  --config retention.ms=2592000000 \
+  --config compression.type=lz4
+
+echo "  ✅ Created: axon.webhook.command (3 partitions - local dev)"
+echo ""
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 4. event.commerce - Commerce events
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 echo "Creating topic: axon.event.commerce"
 
@@ -69,7 +87,7 @@ echo "  ✅ Created: axon.event.commerce (1 partition - local dev)"
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 4. Dead Letter Topics (DLT) for Fault Tolerance
+# 5. Dead Letter Topics (DLT) for Fault Tolerance
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 echo "Creating topic: axon.campaign-activity.command.dlt"
 kafka-topics --create --if-not-exists \

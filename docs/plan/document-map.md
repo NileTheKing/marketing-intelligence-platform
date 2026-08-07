@@ -77,6 +77,7 @@ These are still useful, but code must win if there is a conflict.
 | `docs/Filter_System_Architecture.md` | reference | filter system design context; verify current usage before reuse |
 | `docs/devlog/dev-log-2025-11-18-dashboard-architecture.md` | reference | dashboard architecture development log |
 | `docs/devlog/dev-log-2026-07-15-external-load-generator-boundary.md` | reference | external 3000-VU/800 measurement boundary, host-nginx observability, and stable-network retest criteria |
+| `docs/devlog/dev-log-2026-08-06-webhook-topic-isolation-ab.md` | active evidence | controlled shared-topic vs isolated-topic Webhook delay A/B, FCFS completion and offset boundary |
 | `docs/llm-insights-feature-plan.md` | reference | LLM feature planning context; T8 is newer for portfolio facts |
 | `docs/plan/js-sdk-enhancement-plan.md` | reference | JS SDK extension ideas; T3 is newer for implemented facts |
 | `docs/plan/redis-fast-validation-plan.md` | reference | Redis fast validation plan; verify against current entry-service implementation |

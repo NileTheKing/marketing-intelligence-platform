@@ -14,6 +14,7 @@ public final class KafkaTopics {
 
     //cqrs topics
     public static final String CAMPAIGN_ACTIVITY_COMMAND = "axon.campaign-activity.command";
+    public static final String WEBHOOK_COMMAND = "axon.webhook.command";
 
     // Dead Letter Topics (DLT) for Fault Tolerance
     public static final String CAMPAIGN_ACTIVITY_COMMAND_DLT = "axon.campaign-activity.command.dlt";

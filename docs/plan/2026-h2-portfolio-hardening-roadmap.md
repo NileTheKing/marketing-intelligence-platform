@@ -387,6 +387,19 @@ AI autonomously optimized infrastructure cost and scaling.
 
 ## Main Upgrade 2: DLQ Failure Triage Agent
 
+Status: deferred as a standalone generic feature (decision updated 2026-08-06)
+
+Decision boundary:
+
+- Do not build an LLM/DLT console only because a DLT topic exists.
+- The current FCFS ledger path is idempotent and has no ambiguous external side effect. After the
+  underlying cause is fixed, replay is comparatively safe and does not justify mandatory human
+  approval for every record.
+- First create a real operational need through external delivery history, especially webhook
+  outcomes where a timeout cannot prove whether the receiver applied the action.
+- Add approval-based replay only after a reproducible ambiguous outcome exists. AI may summarize
+  evidence later; it is not the retry decision maker.
+
 ### Problem
 
 DLQ isolates failed messages, but operations still need to know why the message failed and whether retry is safe.
@@ -439,6 +452,8 @@ Implementation note:
 - Current DLT handling isolates failed messages, but it does not yet provide operator-facing audit state.
 - The failure table should be the source for status, retry count, failure stage, and AI summary.
 - Kafka DLT remains the transport-level isolation path. The DB audit row is the operational recovery view.
+- For Axon, this generic model is a later extraction from a concrete webhook delivery/recovery
+  workflow, not the next implementation target.
 
 ## Main Upgrade 3: MarketingRule Execution History and Holdout Measurement
 
@@ -531,7 +546,8 @@ Multi-pod note:
 
 - Kafka consumer flush workers are local queue processors. Kafka consumer groups distribute partition ownership, so the same message is not normally processed by multiple pods in the same group.
 - Global scheduled jobs are different. `BehaviorTriggerScheduler`, stock sync, cohort batch, and segmentation batch read shared DB/ES state directly, so multi-pod deployment can run the same job more than once unless a scheduler lock or single-runner constraint is introduced.
-- `BehaviorTriggerScheduler` is protected by `SchedulerExecutionLock` (Redisson). Stock sync, cohort, and segmentation jobs remain follow-up work; do not claim general scheduler single-runner safety yet.
+- `BehaviorTriggerScheduler`, stock sync, reconciliation, cohort LTV, and RFM segmentation are protected by `SchedulerExecutionLock` (Redisson).
+- `UserPurchaseScheduler` remains a `dev`/`test`-profile batch launcher and is not part of the production single-runner claim.
 
 ## Main Upgrade 3-A: MarketingRule Multi-Action Model
 
@@ -587,8 +603,8 @@ BehaviorTriggerScheduler
 -> action-level dedup
 -> publish one command per active action
 
-COUPON action -> CouponStrategy -> UserCoupon save
-WEBHOOK action -> WebhookStrategy -> external CRM endpoint
+COUPON action -> Campaign command consumer -> CouponStrategy -> UserCoupon save
+WEBHOOK action -> Webhook command consumer -> WebhookStrategy -> external CRM endpoint
 ```
 
 `PUSH` and `EMAIL` are future types, not part of this implementation.
@@ -612,13 +628,15 @@ The first version modeled a marketing rule as one condition with one reward type
 
 ## Main Upgrade 3-B: Webhook Delivery Isolation
 
+Status: `active (implemented 2026-08-06, real-provider smoke test pending)`
+
 ### Problem
 
 Webhook delivery is external HTTP I/O. If it runs inside the campaign command
 batch listener, a slow external endpoint can delay offset progress for
 unrelated campaign commands in the same poll.
 
-Current code boundary:
+Previous code boundary:
 
 ```text
 Kafka listener
@@ -631,94 +649,95 @@ The strategy execution path is shared within a poll batch. A slow `WEBHOOK`
 strategy can keep the listener open and delay the next poll/offset progress for
 other command types.
 
-### Backend Idea
-
-Do not call external webhook endpoints directly from the campaign command flush path.
-
-Use an outbox-style delivery boundary:
+Implemented boundary:
 
 ```text
-Campaign command consumer
--> WebhookStrategy creates webhook_outbox PENDING row
--> listener returns after durable outbox commit
-
-WebhookDeliveryWorker
--> reads PENDING rows
--> sends HTTP request with Idempotency-Key
--> marks SENT / FAILED
--> increments retry count
+BehaviorTriggerScheduler
+-> COUPON: axon.campaign-activity.command -> axon-group
+-> WEBHOOK: axon.webhook.command -> axon-webhook-group
+   -> HTTP delivery
+   -> retryable: timeout/network, 5xx, 429
+   -> non-retryable: other 4xx
+   -> final failure: axon.webhook.failed.dlt
 ```
+
+- The existing command dispatcher forwards legacy `WEBHOOK` commands to the isolated topic and does
+  not perform external HTTP in the shared command listener.
+- Automatic retry uses exponential backoff with jitter and at most three total attempts.
+- The webhook DLT send awaits broker acknowledgment. If the DLT publish fails, the listener throws
+  `OffsetCommitBlockedException`, preventing a successful offset boundary.
+- `HttpWebhookClientIntegrationTest` opens a real local HTTP socket through WireMock and verifies
+  `2xx`, `400`, request headers, and read timeout behavior.
+- Strategy tests verify `5xx` recovery, `429` retry, ordinary `4xx` immediate DLT, retry exhaustion,
+  and DLT-publish failure propagation.
+- The repository and deployment configuration still do not provide a real provider endpoint URL.
+  A Pipedream/Slack/email smoke test remains external evidence, not a completed repository test.
+- KakaoTalk is not a drop-in generic webhook receiver. It still needs a provider adapter for OAuth,
+  Kakao payloads, token refresh, and provider-specific delivery semantics.
+
+### Chosen Scope
+
+The first isolation step uses a dedicated Kafka topic and consumer group. It does not add an outbox,
+delivery table, replay UI, or provider-specific adapter.
+
+An outbox/delivery worker becomes justified only if the project needs durable delivery history,
+operator replay, or a stronger process-crash recovery claim.
 
 ### Threading Boundary
 
 - The goal is not to replace every worker with virtual threads.
-- Kafka listener should remain focused on short local durable work.
-- Webhook delivery may use a dedicated scheduler or executor later.
-- Virtual threads are a candidate for webhook HTTP delivery, but only with explicit concurrency/rate limits.
+- The dedicated consumer may block only its own partitions while waiting for external HTTP.
+- Keep internal DB-oriented strategies on the existing command consumer.
+- Treat virtual threads as a later implementation option, not as a substitute for the Kafka
+  responsibility boundary.
+- If delivery state, operator retry, or process-crash recovery becomes part of the claim, promote
+  this design to an outbox + delivery worker.
 
-Near-term implementation option:
+### Evidence Boundary
 
-- Split webhook delivery to a separate topic/consumer group when measured
-  latency or retry ownership justifies it.
-- Keep internal DB-oriented strategies conservative until their idempotency and duplicate handling are verified.
-- Move webhook HTTP delivery to a dedicated bounded worker first if the goal is
-  to reduce listener blocking without introducing a durable outbox yet.
-- Treat virtual threads as an implementation option for the webhook delivery executor, not as a substitute for separating the webhook responsibility from command flushing.
-- If delivery state, operator retry, or process-crash recovery becomes part of the claim, promote the design to an outbox + delivery worker.
+Completed:
 
-### Baseline Before Refactor
+- Code inspection confirmed that the previous shared dispatcher called synchronous external HTTP
+  before the Kafka listener returned.
+- WireMock failure injection reproduces the actual HTTP success, client-error, and read-timeout
+  boundaries without mocking `WebhookClient`.
+- Dispatcher and listener tests verify that the shared command path now performs only a Kafka
+  forward for legacy webhook messages and that the dedicated listener owns HTTP delivery.
+- A three-run embedded-Kafka fault-injection A/B used the current `max.poll.records=20` boundary and
+  a deterministic 2-second Webhook delay:
+  - shared topic: FCFS completed in `1,920 / 2,013 / 2,015 ms`; the shared committed offset did not
+    advance during the Webhook wait
+  - isolated topics/groups: FCFS completed in `5 / 4 / 4 ms` and its group committed one record while
+    the Webhook group was still blocked
+  - evidence: `docs/devlog/dev-log-2026-08-06-webhook-topic-isolation-ab.md`
 
-Do not refactor this path only because it looks cleaner. First create a load scenario that makes the coupling visible.
-
-Suggested scenario:
+Still required before claiming an OCI or production latency improvement:
 
 ```text
-Input:
-- mixed CAMPAIGN_ACTIVITY_COMMAND messages
+Before input (previous revision):
+- mixed CAMPAIGN_ACTIVITY_COMMAND messages, including WEBHOOK
 - COUPON commands for internal DB writes
 - WEBHOOK commands pointing to a mock endpoint with 2-3s delay
 - optional FCFS/PURCHASE follow-up commands if the scenario needs richer traffic
+
+After input:
+- same command mix and rate
+- WEBHOOK is published to WEBHOOK_COMMAND
 
 Observe:
 - consumer-group lag over time
 - type별 처리 완료 시간
 - webhook delay / retry / DLT count
 - coupon issue completion time
-- consumer lag if available
 - core-service thread/CPU snapshot
 ```
 
-Expected failure mode to confirm:
+- Run the same mixed command input before/after under a separately controlled receiver.
+- Record consumer lag and coupon/FCFS completion time by consumer group.
+- Run one real-provider smoke test and record the provider response.
 
-```text
-WEBHOOK delay
--> shared listener batch remains open
--> next drain/dispatch is delayed
--> COUPON/FCFS command processing completion time increases
-```
-
-Only after this baseline is captured, compare with:
-
-```text
-After:
-- type-aware queue/flush lanes
-- webhook delivery executor
-- same command mix
-- same webhook mock delay
-- same VM/container resource boundary
-```
-
-Portfolio-safe claim after measurement:
-
-```text
-I found that Kafka reception was separated from business execution, but the post-Kafka in-memory flush path still shared different command types. Under delayed webhook delivery, internal coupon/FCFS commands could wait behind external HTTP work. I measured the coupling with a mixed-command load scenario, then separated type-specific flush lanes and webhook delivery execution to reduce delay propagation.
-```
-
-### Portfolio Message
-
-```text
-I separated external webhook delivery from the Kafka command flush path so slow partner endpoints could not delay internal campaign command processing. The command path only records delivery intent, while a dedicated worker handles retry, idempotency, and failure status.
-```
+Until that experiment exists, the safe claim is structural isolation and failure-policy verification,
+not a numeric latency reduction.
 
 Avoid:
 
@@ -848,8 +867,9 @@ BehaviorTriggerScheduler
    -> publish one typed Kafka command
    -> release dedup key if broker send fails
 
-COUPON command  -> CouponStrategy -> UserCoupon
-WEBHOOK command -> WebhookStrategy -> HTTP retry x3 -> WEBHOOK_FAILED_DLT
+COUPON command  -> CAMPAIGN_ACTIVITY_COMMAND -> CouponStrategy -> UserCoupon
+WEBHOOK command -> WEBHOOK_COMMAND -> dedicated consumer
+                -> HTTP retry x3 -> WEBHOOK_FAILED_DLT
 ```
 
 The rule/action repository query must fetch actions with the rule to avoid an N+1 query per active rule.
@@ -866,9 +886,8 @@ Unit/integration acceptance tests:
 5. Kafka send failure removes only that action's Redis dedup key.
 6. Coupon duplicate command still leaves one `UserCoupon`; webhook idempotency key includes action ID.
 
-External HTTP verification is a separate follow-up gate: run `WebhookStrategy` against WireMock or
-MockWebServer for 2xx, timeout, retry, and DLT. Do not claim external delivery resilience before that
-test exists.
+External HTTP verification covers WireMock `2xx`, `400`, timeout, retry classification, and DLT
+failure propagation. One real provider smoke test remains a follow-up gate.
 
 #### Completion Criteria
 
@@ -876,8 +895,9 @@ test exists.
 - Re-running the scheduler does not duplicate either action during its TTL.
 - Old single-reward columns are removed from the VM schema before creating new rules.
 - A failed Kafka publish does not leave a permanently blocking Redis dedup key.
-- No claim is made that webhook delivery is isolated from the shared command flush path; that is Main
-  Upgrade 3-B and needs its own delayed-webhook baseline.
+- Webhook HTTP delivery uses a dedicated topic and consumer group; the local fault-injection A/B
+  verifies causal isolation, while any OCI capacity or production latency claim still requires the
+  mixed-load baseline described in Main Upgrade 3-B.
 
 ## Main Upgrade 4: APM-Based Bottleneck Report
 
@@ -921,13 +941,24 @@ I used APM traces and runtime metrics to separate application, Redis, Kafka, and
 
 ## Recommended Execution Order
 
-0. Add minimum pipeline observability: consumer lag, internal queue depth, flush duration, DLQ count, and reconciliation mismatch count.
-1. Run stronger `FLOW=payment` tests and diagnose the Core consumption/persistence boundary before changing queue or batch behavior.
-2. Apply and re-measure the smallest evidence-backed Core improvement, then record DB convergence and consistency results.
-3. Build pre-event scale-out and hot-path warm-up only after the Core capacity boundary is measured: proposal -> operator approval -> rollout/readiness -> warm-up gate -> READY.
-4. Operationalize DLQ and reconciliation only when DLT recurrence or a mismatch is reproduced: durable failure/issue history, operator alert, and an approval-based recovery path. Promote this step ahead of pre-event scale-out if a real failure requires it.
-5. Add AI/Harness recovery assistance only after step 4 has accumulated real failure history and deterministic recovery criteria. AI summarizes risk; a person approves a bounded runbook.
-6. Add MarketingRule execution history or multi-action automation only when the target application specifically needs CRM-operation depth.
+Completed foundation:
+
+0. Minimum FCFS/Core observability, Kafka-native backlog, Entry/Purchase ledger boundary, failure
+   isolation, crash recovery, and 3,000-VU regression evidence are complete.
+1. MarketingRule multi-action and RFM AudienceSegment are implemented.
+
+Current next sequence:
+
+2. Run one real-provider webhook smoke test; WireMock HTTP failure injection and dedicated
+   topic/consumer isolation are implemented.
+3. If a numeric portfolio claim is needed, run a mixed-command before/after experiment and record
+   group lag plus coupon/FCFS completion time.
+4. Add durable webhook delivery/execution history only if operator recovery or process-crash
+   recovery becomes a real requirement.
+5. Add operator-approved replay only for ambiguous or terminal delivery outcomes. Deterministic
+   safe retries stay automatic; AI summarization remains optional and comes last.
+6. Build pre-event scale-out and hot-path warm-up after the external delivery story, unless a
+   target application values infrastructure automation more than CRM-operation depth.
 
 ## Company Mapping
 

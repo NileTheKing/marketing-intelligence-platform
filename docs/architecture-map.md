@@ -2,7 +2,7 @@
 
 > **목적**: 새로 투입된 사람/에이전트가 30초에 "무엇이 무엇에게 무엇을 보내는지" 잡는 반 페이지 지도.
 > **원칙**: 짧게 유지. 상세는 각 flow 문서로. **충돌 시 코드가 이긴다.**
-> 개정: 2026-08-03.
+> 개정: 2026-08-06.
 
 ## 정체성 (왜 존재하나)
 1. **선착순(FCFS) 스파이크 트래픽을 안정적으로 수용·판정** (한정 상품 응모, 2초에 수천 명)
@@ -56,12 +56,23 @@ BEHAVIOR_EVENT → Kafka Connect Elasticsearch sink → Elasticsearch (행동 �
   ※ 백엔드는 성공(reservation_approved)만 발행. 매진/거절 신호는 프론트 SDK 몫.
 ```
 
+**D. 행동 기반 후속 액션**
+```
+BehaviorTriggerScheduler
+  → COUPON: CAMPAIGN_ACTIVITY_COMMAND → 기존 command consumer → UserCoupon
+  → WEBHOOK: WEBHOOK_COMMAND → 전용 consumer
+      → timeout/네트워크·5xx·429만 최대 3회 backoff+jitter 재시도
+      → 일반 4xx 또는 최종 실패는 WEBHOOK_FAILED_DLT 기록
+      → DLT 발행 실패 시 listener 예외 전파로 offset commit 차단
+```
+
 ## Kafka 토픽 (`common-messaging` KafkaTopics)
 | 토픽 | 용도 |
 |---|---|
 | `axon.event.behavior` | 행동 이벤트 (축2, → Elasticsearch) |
 | `axon.event.commerce` | 커머스 이벤트 |
 | `axon.campaign-activity.command` (+`.dlt`) | 결제/캠페인 명령 (entry→core), 실패 시 DLT |
+| `axon.webhook.command` | 외부 Webhook 전달 전용 명령; FCFS·쿠폰 소비 경로와 분리 |
 | `axon.projection.user-summary.failed` | 원장 커밋 후 UserSummary projection 실패 기록 |
 | `axon.payment.retry` | 결제 재시도 (deprecated, 신규 사용 금지) |
 | `axon.purchase.failed.dlt` / `axon.webhook.failed.dlt` | 실패 격리 |

@@ -61,6 +61,7 @@ spec:
 
           # 3. Command Events (Critical, 3 partitions)
           create_topic "axon.campaign-activity.command" 3 3
+          create_topic "axon.webhook.command" 3 3
 
           # 3. Kubernetes Logs (Fluent Bit → Kafka → ES)
           create_topic "k8s.logs" 3 2
@@ -68,6 +69,7 @@ spec:
           # 4. Dead Letter Topics (Fault Tolerance)
           create_topic "axon.campaign-activity.command.dlt" 3 3
           create_topic "axon.purchase.failed.dlt" 3 3
+          create_topic "axon.webhook.failed.dlt" 3 3
           create_topic "axon.projection.user-summary.failed" 3 3
 
           echo ""

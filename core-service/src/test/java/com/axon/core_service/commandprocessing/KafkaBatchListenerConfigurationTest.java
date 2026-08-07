@@ -27,12 +27,13 @@ class KafkaBatchListenerConfigurationTest extends AbstractIntegrationTest {
     void listenerUsesKafkaBatchAndExplicitCommitBoundary() {
         var containers = kafkaListenerEndpointRegistry.getListenerContainers();
 
-        assertThat(containers).hasSize(1);
-        var container = containers.iterator().next();
-        assertThat(container.getContainerProperties().getAckMode())
-                .isEqualTo(ContainerProperties.AckMode.BATCH);
-        assertThat(container.getContainerProperties().getMessageListener())
-                .isInstanceOf(BatchMessageListener.class);
+        assertThat(containers).hasSize(2);
+        assertThat(containers).allSatisfy(container -> {
+            assertThat(container.getContainerProperties().getAckMode())
+                    .isEqualTo(ContainerProperties.AckMode.BATCH);
+            assertThat(container.getContainerProperties().getMessageListener())
+                    .isInstanceOf(BatchMessageListener.class);
+        });
         assertThat(consumerFactory.getConfigurationProperties()
                 .get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG)).hasToString("false");
         assertThat(consumerFactory.getConfigurationProperties()
