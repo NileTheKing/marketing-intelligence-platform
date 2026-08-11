@@ -20,7 +20,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
 | `docs/plan/backend-foundation-hardening-audit-2026-08-11.md` | active | correctness/security/test/overengineering audit, completed cleanup, verification boundary, and larger deferred work |
-| `docs/plan/api-contract-audit-2026-08-11.md` | active (Security boundary implemented; remaining contract work tracked) | current API authentication/authorization, error, validation, async completion, idempotency, and browser-caller audit |
+| `docs/plan/api-contract-audit-2026-08-11.md` | active (Security, behavior identity, image upload boundary implemented; remaining contract work tracked) | current API authentication/authorization, error, validation, async completion, idempotency, and browser-caller audit |
 | `docs/plan/session-handoff-2026-07-30.md` | reference (completed) | historical Core queue/offset A/B and first crash-recovery evidence; current FCFS boundary is superseded by `fcfs-entry-purchase-transaction-boundary-handoff.md` |
 | `docs/plan/session-handoff-2026-07-29.md` | superseded | replaced by the 2026-07-30 Core queue/offset A/B handoff |
 | `docs/plan/domain-refactoring-map.md` | active | DDD-style structure map, ubiquitous language draft, bounded context candidates, and small Fowler-style refactoring units |

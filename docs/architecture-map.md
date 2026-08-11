@@ -51,6 +51,7 @@
 **C. 행동 로그 (축2)**
 ```
 프론트 JS SDK → entry `POST /api/v1/behavior-events` → BehaviorEventController
+  → 로그인 userId는 JWT에서만 결정, 익명 요청은 브라우저 sessionId 사용
   → 공식 `properties` 타입 정규화 + 미등록 `attributes` 분리 → Kafka BEHAVIOR_EVENT
 ReservationApprovedEvent → entry BehaviorEventAdapter → CDP 포맷 Kafka 메시지
   → Kafka BEHAVIOR_EVENT

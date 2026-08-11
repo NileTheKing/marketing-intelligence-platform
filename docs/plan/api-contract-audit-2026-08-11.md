@@ -1,6 +1,6 @@
 # API 계약 감사 — 2026-08-11
 
-상태: active (감사 완료, 1단계 Security 경계 구현 완료)
+상태: active (감사 완료, Security·행동 identity·이미지 업로드 경계 구현 완료)
 
 아래 P0/P1/P2의 `현재`는 **감사 당시 상태**다. 이후 반영 여부는 바로 아래 구현 상태 표를 기준으로 판단한다.
 
@@ -21,7 +21,8 @@ URL 모양보다 **누가 호출할 수 있는지, 언제 성공으로 확정하
 | P0-1 결제 화면/API 불일치 | 미해결 · 결제 담당 범위 | Entry `prepare → confirm` 계약 합의 뒤 수정 |
 | P0-2 포괄적 `permitAll` | **해결** | 익명은 `GET /api/v1/events/active` 등 명시 경로만, 나머지 API는 인증 |
 | P0-3 USER/ADMIN 미분리 | **해결** | 운영 화면·명령·조회는 ADMIN, validation은 인증 사용자, Entry 메타 조회는 SYSTEM |
-| P0-4 행동 이벤트 identity | 미해결 · 다음 단계 | request body `userId` 신뢰 제거 필요 |
+| P0-4 행동 이벤트 identity | **해결** | 로그인 userId는 JWT에서만 결정, 익명 이벤트는 필수 sessionId와 `userId=null` 사용 |
+| P1-9 파일 업로드 | **해결** | ADMIN 전용, 5MB·25MP 제한, 실제 PNG/JPEG decode 후 서버 확장자로 저장 |
 
 관리자는 `AXON_ADMIN_EMAILS`에 지정한 이메일과 정확히 일치하는 OAuth 사용자를 로그인 시 승격한다. 설정에서 이메일을 지워도 기존 DB의 ADMIN을 자동 강등하지 않는다. 배포 전 운영자 이메일을 환경 변수에 넣어야 신규 환경에서 관리자 화면이 잠기지 않는다.
 
@@ -135,3 +136,9 @@ URL 모양보다 **누가 호출할 수 있는지, 언제 성공으로 확정하
 - `SecurityConfigTest`: 익명 401, USER 403, ADMIN 허용, SYSTEM 메타 조회 한정, 공개 Event 정의 조회를 실제 filter chain으로 검증
 - `CustomOAuth2UserServiceTest`: 신규·기존 USER 승격, 이메일 정규화, 기존 ADMIN 비강등 검증
 - `core-service ./gradlew --no-daemon test --rerun-tasks`: 통과 (2026-08-11)
+
+### 2단계 검증
+
+- `BehaviorEventControllerTest`: body `userId` 위조 무시, JWT userId 우선, 익명 sessionId 필수 계약 검증
+- `ImageStorageServiceTest`: 실행 가능한 SVG/HTML, 손상 이미지, 5MB 초과 파일 거절과 서버 확장자 재결정 검증
+- `FileControllerTest`, `SecurityConfigTest`: 잘못된 이미지 400과 USER 403/ADMIN 허용 검증
