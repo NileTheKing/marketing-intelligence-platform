@@ -9,6 +9,28 @@
   const DEFAULT_COLLECT_ENDPOINT = '/api/v1/behavior-events'; // entry-service via Ingress
   const DEFAULT_DIAGNOSTICS_ENDPOINT = '/api/v1/behavior-events/diagnostics';
   const DEFAULT_SCRIPT_SRC = '/js/behavior-tracker.js';
+  const SESSION_STORAGE_KEY = 'axon.behavior.session-id';
+
+  function getOrCreateSessionId() {
+    if (global.__AXON_SESSION_ID__) {
+      return global.__AXON_SESSION_ID__;
+    }
+
+    try {
+      const stored = global.sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (stored) {
+        return stored;
+      }
+
+      const created = global.crypto && typeof global.crypto.randomUUID === 'function'
+        ? global.crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      global.sessionStorage.setItem(SESSION_STORAGE_KEY, created);
+      return created;
+    } catch (error) {
+      return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+  }
 
   const overrides = global.__AXON_TRACKER_OVERRIDES__ || {};
 
@@ -23,12 +45,9 @@
       tokenProvider: overrides.tokenProvider || (typeof global.__AXON_TRACKER_TOKEN_PROVIDER__ === 'function'
         ? global.__AXON_TRACKER_TOKEN_PROVIDER__
         : () => (global.__AXON_TRACKER_TOKEN__ || null)),
-      userIdProvider: overrides.userIdProvider || (typeof global.__AXON_TRACKER_USER_ID_PROVIDER__ === 'function'
-        ? global.__AXON_TRACKER_USER_ID_PROVIDER__
-        : () => (global.__AXON_USER_ID__ ?? null)),
       sessionIdProvider: overrides.sessionIdProvider || (typeof global.__AXON_TRACKER_SESSION_PROVIDER__ === 'function'
         ? global.__AXON_TRACKER_SESSION_PROVIDER__
-        : () => (global.__AXON_SESSION_ID__ ?? null)),
+        : getOrCreateSessionId),
       debug: overrides.debug ?? global.__AXON_TRACKER_DEBUG__ ?? false
     },
     global.AxonTrackerConfig || {}

@@ -47,7 +47,8 @@ public class BehaviorEventController {
                                                     @AuthenticationPrincipal UserDetails userDetails,
                                                     HttpServletRequest servletRequest) {
         log.info("recordBehaviorEvent request={}", request);
-        Long userId = resolveUserId(request, userDetails);
+        Long userId = resolveUserId(userDetails);
+        validateIdentity(userId, request.getSessionId());
         
         Map<String, Object> enrichedProperties = new HashMap<>(
                 request.getProperties() != null ? request.getProperties() : Map.of());
@@ -134,21 +135,28 @@ public class BehaviorEventController {
     }
 
     /**
-     * Resolves the user ID to associate with the event, preferring a numeric authenticated principal username.
+     * Resolves the authenticated user ID from the security principal.
      *
-     * @param request     the incoming behavior event request whose `userId` is used as a fallback
      * @param userDetails the authenticated principal; if its username is numeric that value is used
-     * @return the resolved user ID: the numeric value of `userDetails.getUsername()` when present and parseable as a long, otherwise `request.getUserId()` (may be null)
+     * @return the authenticated user ID, or {@code null} for an anonymous request
      */
-    private Long resolveUserId(BehaviorEventRequest request, UserDetails userDetails) {
+    private Long resolveUserId(UserDetails userDetails) {
         if (userDetails != null && StringUtils.hasText(userDetails.getUsername())) {
             try {
                 return Long.parseLong(userDetails.getUsername());
             } catch (NumberFormatException e) {
-                log.debug("Authenticated principal username is not numeric. username={}", userDetails.getUsername());
+                throw new BehaviorEventValidationException("Authenticated user id is invalid.", e);
             }
         }
-        return request.getUserId();
+        return null;
+    }
+
+    private void validateIdentity(Long userId, String sessionId) {
+        if (userId == null && !StringUtils.hasText(sessionId)) {
+            throw new BehaviorEventValidationException(
+                    "Anonymous behavior event requires sessionId.",
+                    new IllegalArgumentException("sessionId is blank"));
+        }
     }
 
     /**

@@ -25,14 +25,6 @@
             window.__AXON_TRACKER_COLLECT_ENDPOINT__ = isLocal
                 ? 'http://localhost:8081/api/v1/behavior-events'
                 : '/api/v1/behavior-events';
-
-            /*[# th:if="${#authentication != null and #authentication.principal != 'anonymousUser'}"]*/
-                try {
-                    window.__AXON_USER_ID__ = /*[[${#authentication.principal.userId}]]*/ null;
-                } catch (e) {
-                    console.warn('[AxonTracker] User ID extraction failed', e);
-                }
-            /*[/]*/
         })();
     </script>
     <script th:src="@{/js/axon-tracker-config.js}"></script>

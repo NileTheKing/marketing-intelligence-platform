@@ -347,7 +347,6 @@
       occurredAt: new Date().toISOString(),
       pageUrl: properties.pageUrl || window.location.href,
       referrer: properties.referrer ?? document.referrer ?? null,
-      userId: await resolveValue(this.config.userIdProvider),
       sessionId: await resolveValue(this.config.sessionIdProvider),
       properties
     };

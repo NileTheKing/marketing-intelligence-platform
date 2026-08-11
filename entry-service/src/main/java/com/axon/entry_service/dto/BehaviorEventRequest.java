@@ -1,5 +1,6 @@
 package com.axon.entry_service.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -9,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
+@JsonIgnoreProperties("userId")
 public class BehaviorEventRequest {
 
     private Long eventId;
@@ -20,8 +22,6 @@ public class BehaviorEventRequest {
     private String triggerType;
 
     private Instant occurredAt;
-
-    private Long userId;
 
     @Size(max = 128)
     private String sessionId;
