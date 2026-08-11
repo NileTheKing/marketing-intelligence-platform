@@ -11,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -35,6 +37,9 @@ class ReconciliationSchedulerTest {
 
     @Mock
     private SchedulerExecutionLock schedulerExecutionLock;
+
+    @Mock
+    private TransactionTemplate transactionTemplate;
 
     @InjectMocks
     private ReconciliationScheduler reconciliationScheduler;
@@ -90,6 +95,11 @@ class ReconciliationSchedulerTest {
             ((Runnable) invocation.getArgument(1)).run();
             return true;
         }).when(schedulerExecutionLock).runIfAcquired(any(), any());
+        doAnswer(invocation -> {
+            invocation.getArgument(0, java.util.function.Consumer.class)
+                    .accept(mock(TransactionStatus.class));
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
         doAnswer(invocation -> {
             ((Runnable) invocation.getArgument(0)).run();
             return null;

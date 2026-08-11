@@ -1,10 +1,12 @@
 package com.axon.core_service.repository;
 
 import com.axon.core_service.domain.marketing.MarketingAction;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
 public interface MarketingActionRepository extends JpaRepository<MarketingAction, Long> {
+    @EntityGraph(attributePaths = "marketingRule")
     List<MarketingAction> findByMarketingRuleIdInAndIsActiveTrue(List<Long> marketingRuleIds);
 }

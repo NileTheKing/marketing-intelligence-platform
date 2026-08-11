@@ -50,7 +50,7 @@ public class PaymentController {
                             .reservationToken(reservationToken)
                             .build();
 
-                    String result = reservationTokenService.CreateApprovalToken(approvalPayload);
+                    String result = reservationTokenService.createApprovalToken(approvalPayload);
 
                     if (result != null) {
                         return ResponseEntity.ok(PaymentPrepareResponse.success("결제를 진행해주세요.", result));
@@ -74,7 +74,7 @@ public class PaymentController {
         Optional<PaymentApprovalPayload> payloadOpt = reservationTokenService.getApprovalPayload(token);
 
         if (payloadOpt.isEmpty()) {
-            log.warn("2차 토큰 만료 또는 없음: token={}", token);
+            log.warn("2차 토큰 만료 또는 없음: userId={}", currentUserId);
             return ResponseEntity.status(HttpStatus.GONE)
                     .body(PaymentConfirmationResponse.failure(ReservationResult.error(), "결제 시간이 만료되었습니다. 관리자에게 문의해주세요."));
         }

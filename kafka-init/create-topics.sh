@@ -96,13 +96,6 @@ kafka-topics --create --if-not-exists \
   --partitions 1 \
   --replication-factor 1
 
-echo "Creating topic: axon.purchase.failed.dlt"
-kafka-topics --create --if-not-exists \
-  --topic "axon.purchase.failed.dlt" \
-  --bootstrap-server broker_1:29092 \
-  --partitions 1 \
-  --replication-factor 1
-
 echo "Creating topic: axon.webhook.failed.dlt"
 kafka-topics --create --if-not-exists \
   --topic "axon.webhook.failed.dlt" \

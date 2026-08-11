@@ -27,7 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 
@@ -85,7 +85,7 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private UserSummaryRepository userSummaryRepository;
 
-    @SpyBean
+    @MockitoSpyBean
     private PurchaseRepository purchaseRepositorySpy;
 
     private Long activityId;

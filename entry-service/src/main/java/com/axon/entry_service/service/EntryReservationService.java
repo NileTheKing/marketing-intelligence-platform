@@ -7,14 +7,17 @@ import java.time.Instant;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EntryReservationService {
 
     private final StringRedisTemplate redisTemplate;
@@ -101,14 +104,18 @@ public class EntryReservationService {
         }
 
         Long order = result;
-        // Publish APPROVED event for dashboard tracking
-        eventPublisher.publishEvent(new ReservationApprovedEvent(
-                campaignActivityId,
-                userId,
-                order,
-                requestedAt,
-                meta.productId(),
-                meta.campaignActivityType()));
+        try {
+            eventPublisher.publishEvent(new ReservationApprovedEvent(
+                    campaignActivityId,
+                    userId,
+                    order,
+                    requestedAt,
+                    meta.productId(),
+                    meta.campaignActivityType()));
+        } catch (TaskRejectedException exception) {
+            log.error("Reservation approved event scheduling failed. campaignActivityId={}, userId={}",
+                    campaignActivityId, userId, exception);
+        }
 
         return ReservationResult.success(order);
     }

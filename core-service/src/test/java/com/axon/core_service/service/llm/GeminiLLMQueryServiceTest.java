@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -30,10 +30,10 @@ class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
     @Autowired
     private GeminiLLMQueryService geminiLLMQueryService;
 
-    @MockBean
+    @MockitoBean
     private DashboardService dashboardService;
 
-    @MockBean
+    @MockitoBean
     private LTVBatchRepository ltvBatchRepository;
 
     @Autowired
@@ -56,7 +56,7 @@ class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
         // then
         // DashboardService가 CUSTOM 모드와 정확한 시작/종료 시간으로 호출되었는지 검증
         LocalDateTime expectedStart = LocalDateTime.of(2025, 6, 1, 0, 0, 0);
-        LocalDateTime expectedEnd = LocalDateTime.of(2025, 8, 31, 23, 59, 59);
+        LocalDateTime expectedEnd = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
 
         verify(dashboardService).getDashboardByCampaign(
                 eq(1L),
@@ -80,7 +80,7 @@ class GeminiLLMQueryServiceTest extends AbstractIntegrationTest {
 
         // then
         LocalDateTime expectedStart = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
-        LocalDateTime expectedEnd = LocalDateTime.of(2025, 9, 30, 23, 59, 59);
+        LocalDateTime expectedEnd = LocalDateTime.of(2025, 10, 1, 0, 0, 0);
 
         verify(dashboardService).getDashboardByActivity(
                 eq(77L),

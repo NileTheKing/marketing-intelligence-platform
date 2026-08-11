@@ -30,7 +30,6 @@ public class JwtTokenProvider {
     private static final long REFRESH_TOKEN_EXPIRE_TIME = 7 * 24 * 60 * 60 * 1000L; // 7일
 
     public JwtTokenProvider(@Value("${jwt.secret}") String secretKey) {
-        log.info("Loaded JWT Secret Key: {}", secretKey);
         byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
         this.key = Keys.hmacShaKeyFor(keyBytes);
     }

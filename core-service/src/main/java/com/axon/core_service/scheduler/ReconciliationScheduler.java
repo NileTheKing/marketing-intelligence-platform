@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -23,6 +23,7 @@ public class ReconciliationScheduler {
     private final CorePipelineMetrics pipelineMetrics;
     private final ReconciliationIssueService reconciliationIssueService;
     private final SchedulerExecutionLock schedulerExecutionLock;
+    private final TransactionTemplate transactionTemplate;
 
     /**
      * [Ghost Data 탐지 대사 배치]
@@ -31,10 +32,10 @@ public class ReconciliationScheduler {
      * 데이터 불일치 건(Ghost)을 찾아 운영 이력으로 남깁니다.
      */
     @Scheduled(cron = "0 0 3 * * ?")
-    @Transactional
     public void detectGhostPurchases() {
         schedulerExecutionLock.runIfAcquired("reconciliation",
-                () -> pipelineMetrics.recordReconciliationScan(this::detectGhostPurchasesInTransaction));
+                () -> transactionTemplate.executeWithoutResult(status ->
+                        pipelineMetrics.recordReconciliationScan(this::detectGhostPurchasesInTransaction)));
     }
 
     private void detectGhostPurchasesInTransaction() {

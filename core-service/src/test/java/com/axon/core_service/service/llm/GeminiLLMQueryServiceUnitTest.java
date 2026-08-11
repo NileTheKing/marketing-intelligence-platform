@@ -45,9 +45,9 @@ class GeminiLLMQueryServiceUnitTest {
         ReflectionTestUtils.invokeMethod(geminiLLMQueryService, "executeTool", "get_campaign_dashboard", args, 1L);
 
         // then
-        // 시작일은 00:00:00, 종료일은 23:59:59로 변환되었는지 검증
+        // 시작일은 포함하고 종료일의 다음 날 00:00은 제외 경계로 전달한다.
         LocalDateTime expectedStart = LocalDateTime.of(2025, 6, 1, 0, 0, 0);
-        LocalDateTime expectedEnd = LocalDateTime.of(2025, 8, 31, 23, 59, 59);
+        LocalDateTime expectedEnd = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
 
         verify(dashboardService).getDashboardByCampaign(
                 eq(1L),
@@ -71,7 +71,7 @@ class GeminiLLMQueryServiceUnitTest {
 
         // then
         LocalDateTime expectedStart = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
-        LocalDateTime expectedEnd = LocalDateTime.of(2025, 9, 30, 23, 59, 59);
+        LocalDateTime expectedEnd = LocalDateTime.of(2025, 10, 1, 0, 0, 0);
 
         verify(dashboardService).getDashboardByActivity(
                 eq(77L),
@@ -79,5 +79,18 @@ class GeminiLLMQueryServiceUnitTest {
                 argThat(actualStart -> actualStart != null && actualStart.isEqual(expectedStart)),
                 argThat(actualEnd -> actualEnd != null && actualEnd.isEqual(expectedEnd))
         );
+    }
+
+    @Test
+    @DisplayName("날짜 없는 도구 호출은 기본 7일 기간을 사용한다")
+    void testExecuteToolWithoutDateUsesDefaultPeriod() {
+        var args = objectMapper.createObjectNode();
+        args.put("campaignId", 1L);
+
+        ReflectionTestUtils.invokeMethod(
+                geminiLLMQueryService, "executeTool", "get_campaign_dashboard", args, 1L);
+
+        verify(dashboardService).getDashboardByCampaign(
+                1L, DashboardPeriod.SEVEN_DAYS, null, null);
     }
 }

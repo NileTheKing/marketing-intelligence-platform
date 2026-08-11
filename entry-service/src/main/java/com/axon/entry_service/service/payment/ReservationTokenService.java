@@ -3,10 +3,10 @@ package com.axon.entry_service.service.payment;
 import com.axon.entry_service.dto.payment.PaymentApprovalPayload;
 import com.axon.messaging.dto.payment.ReservationTokenPayload;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.HmacAlgorithms;
 import org.apache.commons.codec.digest.HmacUtils;
@@ -16,12 +16,16 @@ import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ReservationTokenService {
     private final RedisTemplate<String, Object> redisTemplate;
+    private final String secretTokenKey;
 
-    @Value("${payment.token.secret}")
-    private String SECRET_TOKEN_KEY;
+    public ReservationTokenService(
+            RedisTemplate<String, Object> redisTemplate,
+            @Value("${payment.token.secret}") String secretTokenKey) {
+        this.redisTemplate = redisTemplate;
+        this.secretTokenKey = secretTokenKey;
+    }
 
     private static final String TOKEN_PREFIX = "RESERVATION_TOKEN:";
     private static final String APPROVAL_PREFIX = "PAYMENT_APPROVED_TOKEN:";
@@ -29,32 +33,8 @@ public class ReservationTokenService {
     private static final long TOKEN_TTL_MINUTES = 5;
     private static final long APPROVALTOKEN_TTL_MINUTES = 30;
 
-    /**
-     * 스레드별 HmacUtils 인스턴스 캐시 (Thread-Safe + 고성능)
-     *
-     * <성능 최적화>
-     * - 각 스레드가 독립적인 HmacUtils 인스턴스를 가짐
-     * - Mac.getInstance() + mac.init() 호출을 스레드당 1회로 제한
-     * - 10만 요청 기준: 450ms → 85ms (5.3배 향상)
-     *
-     * <메모리 사용>
-     * - 스레드당 약 1KB (HmacUtils + Mac 객체)
-     * - Tomcat 기본 200 스레드 → 약 200KB (무시 가능)
-     *
-     * <Thread-Safety>
-     * - ThreadLocal: 각 스레드가 독립 인스턴스 보유
-     * - 동기화 불필요, Lock 경합 없음
-     * - Mac.doFinal()이 매 호출마다 상태 리셋
-     */
-    private final ThreadLocal<HmacUtils> hmacUtilsThreadLocal =
-            ThreadLocal.withInitial(() -> {
-                log.debug("HmacUtils 인스턴스 생성: thread={}", Thread.currentThread().getName());
-                return new HmacUtils(HmacAlgorithms.HMAC_SHA_256, SECRET_TOKEN_KEY);
-            });
-
-    // HMAC 시그니쳐 서명
     private String hmacSha256Hex(String data) {
-        return hmacUtilsThreadLocal.get().hmacHex(data);
+        return new HmacUtils(HmacAlgorithms.HMAC_SHA_256, secretTokenKey).hmacHex(data);
     }
 
     // HMAC 토큰 생성
@@ -80,8 +60,8 @@ public class ReservationTokenService {
         // 무조건 저장 및 TTL 갱신 (덮어쓰기)
         redisTemplate.opsForValue().set(redisKey, payload, TOKEN_TTL_MINUTES, TimeUnit.MINUTES);
 
-        log.info("1차 토큰 발급/갱신: userId={}, campaignActivityId={}, token={}...",
-                payload.getUserId(), payload.getCampaignActivityId(), token.substring(0, Math.min(10, token.length())));
+        log.info("1차 토큰 발급/갱신: userId={}, campaignActivityId={}",
+                payload.getUserId(), payload.getCampaignActivityId());
 
         return token;
     }
@@ -102,18 +82,17 @@ public class ReservationTokenService {
     public Optional<ReservationTokenPayload> getPayloadFromToken(String token) {
         String redisKey = TOKEN_PREFIX + token;
         Object payload = redisTemplate.opsForValue().get(redisKey);
-        String substring = token.substring(0, Math.min(10, token.length()));
 
         if (payload != null) {
-            log.debug("토큰 검증 성공 (Redis): token={}...", substring);
+            log.debug("토큰 검증 성공 (Redis)");
             return Optional.of((ReservationTokenPayload) payload);
         }
 
         // Redis에 없으면 토큰 자체를 검증 (오버 엔지니어링 또는 부하가 예상되면 뺄 예정)
         if (verifyTokenSignature(token)) {
-            log.debug("토큰 서명은 유효하지만 Redis에 없음 (만료 또는 첫 시도): token={}...", substring);
+            log.debug("토큰 서명은 유효하지만 Redis에 없음 (만료 또는 첫 시도)");
         } else {
-            log.warn("토큰 검증 실패 (위변조 또는 잘못된 형식): token={}...", substring);
+            log.warn("토큰 검증 실패 (위변조 또는 잘못된 형식)");
         }
 
         return Optional.empty();
@@ -131,7 +110,7 @@ public class ReservationTokenService {
             // 2. 파싱
             String[] parts = decoded.split(":");
             if (parts.length != 3) {
-                log.warn("토큰 형식 오류 (parts != 3): decoded={}", decoded);
+                log.warn("토큰 형식 오류 (parts != 3)");
                 return false;
             }
 
@@ -144,7 +123,9 @@ public class ReservationTokenService {
             String expectedSignature = hmacSha256Hex(payload);
 
             // 4. 비교
-            boolean valid = expectedSignature.equals(providedSignature);
+            boolean valid = MessageDigest.isEqual(
+                    expectedSignature.getBytes(StandardCharsets.US_ASCII),
+                    providedSignature.getBytes(StandardCharsets.US_ASCII));
 
             if (!valid) {
                 log.warn("토큰 서명 불일치 (위변조 시도): userId={}, campaignActivityId={}", userId, campaignActivityId);
@@ -153,7 +134,7 @@ public class ReservationTokenService {
             return valid;
 
         } catch (Exception e) {
-            log.error("토큰 검증 중 예외 발생: token={}", token, e);
+            log.error("토큰 검증 중 예외 발생", e);
             return false;
         }
     }
@@ -165,7 +146,7 @@ public class ReservationTokenService {
     }
 
     // 2차 토큰 생성 또는 refresh
-    public String CreateApprovalToken(PaymentApprovalPayload paymentApprovalPayload) {
+    public String createApprovalToken(PaymentApprovalPayload paymentApprovalPayload) {
         String redisKey = paymentApprovalPayload.getUserId() + ":" + paymentApprovalPayload.getCampaignActivityId();
         String approvalToken = approvalRedisKey(redisKey);
 

@@ -46,9 +46,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.apache.commons:commons-pool2'  // Required for Lettuce connection pooling
     implementation 'org.springframework.kafka:spring-kafka'
-    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'com.axon:common-messaging:0.0.1-SNAPSHOT'
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
     // Monitoring
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
@@ -58,9 +56,6 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
     implementation 'io.jsonwebtoken:jjwt-impl:0.13.0'
     implementation 'io.jsonwebtoken:jjwt-jackson:0.13.0'
-
-    // axon-module
-    implementation 'com.axon:common-messaging:0.0.1-SNAPSHOT'
 
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'

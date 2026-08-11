@@ -21,6 +21,7 @@ import java.time.ZoneId;
 @Slf4j
 public class BehaviorEventService {
 
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Seoul");
     private final ElasticsearchClient elasticsearchClient;
 
     // public api
@@ -31,22 +32,6 @@ public class BehaviorEventService {
                 CampaignFunnelDefinition.triggerTypesFor(activityType, step),
                 start,
                 end);
-    }
-
-    public Long getVisitCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.VISIT, start, end);
-    }
-
-    public Long getEngageCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.ENGAGE, start, end);
-    }
-
-    public Long getQualifyCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.QUALIFY, start, end);
-    }
-
-    public Long getPurchaseCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getFunnelStepCount(activityId, CampaignActivityType.FIRST_COME_FIRST_SERVE, FunnelStep.PURCHASE, start, end);
     }
 
     /**
@@ -94,17 +79,6 @@ public class BehaviorEventService {
                 }));
     }
 
-    // Deprecated: kept for backward compatibility
-    @Deprecated
-    public Long getClickCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getEngageCount(activityId, start, end);
-    }
-
-    @Deprecated
-    public Long getApprovedCount(Long activityId, LocalDateTime start, LocalDateTime end) throws IOException {
-        return getQualifyCount(activityId, start, end);
-    }
-
     /**
      * Optimized Aggregation: Fetch statistics for all activities in a campaign in a single query.
      */
@@ -147,22 +121,6 @@ public class BehaviorEventService {
         return stats;
     }
 
-    public java.util.Map<Integer, Long> getHourlyTraffic(Long campaignId, LocalDateTime start, LocalDateTime end)
-            throws IOException {
-        // Hourly aggregation for the campaign (all activities)
-        // Filter by campaignId (assuming pageUrl contains campaignId or we filter by
-        // multiple activityIds)
-        // For MVP, we will filter by time range and assume all traffic in that range is
-        // relevant or filter by a broader pattern if possible.
-        // Ideally, we should filter by list of activity IDs belonging to the campaign.
-        // But for now, let's assume we pass a list of activity IDs or just use a broad
-        // wildcard if the URL structure supports it.
-        // Given the URL structure .../campaign-activity/{id}/..., we need to filter by
-        // all activity IDs.
-        // Let's change the signature to accept list of activity IDs.
-        return java.util.Collections.emptyMap(); // Placeholder to be replaced by actual implementation in next step
-    }
-
     public java.util.Map<Integer, Long> getHourlyTraffic(java.util.List<Long> activityIds, LocalDateTime start,
             LocalDateTime end) throws IOException {
         if (activityIds == null || activityIds.isEmpty()) {
@@ -194,7 +152,7 @@ public class BehaviorEventService {
 
                 // Convert epoch seconds to hour of day (0-23)
                 int hour = LocalDateTime
-                        .ofInstant(java.time.Instant.ofEpochSecond(epochSeconds), ZoneId.systemDefault()).getHour();
+                        .ofInstant(java.time.Instant.ofEpochSecond(epochSeconds), BUSINESS_ZONE).getHour();
                 hourlyTraffic.put(hour, hourlyTraffic.getOrDefault(hour, 0L) + bucket.docCount());
             }
         }
@@ -375,14 +333,14 @@ public class BehaviorEventService {
 
     private Query buildTimeRangeFilter(LocalDateTime start, LocalDateTime end) {
         // timestamp range 필터 쿼리 작성 (occurredAt is Unix epoch in seconds)
-        long startEpoch = start.atZone(ZoneId.systemDefault()).toEpochSecond();
-        long endEpoch = end.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long startEpoch = start.atZone(BUSINESS_ZONE).toEpochSecond();
+        long endEpoch = end.atZone(BUSINESS_ZONE).toEpochSecond();
 
         return Query.of(q -> q
                 .range(r -> r
                         .field("occurredAt")
-                        .gte(JsonData.of(startEpoch)) // Fixed: use epoch seconds
-                        .lte(JsonData.of(endEpoch))));
+                        .gte(JsonData.of(startEpoch))
+                        .lt(JsonData.of(endEpoch))));
     }
 
 }

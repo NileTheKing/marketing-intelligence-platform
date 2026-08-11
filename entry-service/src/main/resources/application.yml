@@ -46,6 +46,8 @@ payment:
 axon:
   core-service:
     base-url: ${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}
+    connect-timeout: ${AXON_CORE_SERVICE_CONNECT_TIMEOUT:2s}
+    read-timeout: ${AXON_CORE_SERVICE_READ_TIMEOUT:3s}
   cors:
     allowed-origins: ${AXON_CORS_ALLOWED_ORIGINS:${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}}
   backend-event:

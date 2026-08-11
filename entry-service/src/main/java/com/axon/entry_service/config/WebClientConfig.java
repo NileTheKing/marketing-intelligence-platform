@@ -3,7 +3,10 @@ package com.axon.entry_service.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
 
 @Configuration
 public class WebClientConfig {
@@ -17,9 +20,16 @@ public class WebClientConfig {
      */
     @Bean
     public RestClient campaignRestClient(
-            @Value("${axon.core-service.base-url:http://localhost:8080}") String baseUrl) {
+            @Value("${axon.core-service.base-url:http://localhost:8080}") String baseUrl,
+            @Value("${axon.core-service.connect-timeout:2s}") Duration connectTimeout,
+            @Value("${axon.core-service.read-timeout:3s}") Duration readTimeout) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(connectTimeout);
+        requestFactory.setReadTimeout(readTimeout);
+
         return RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
                 .build();
     }
 }

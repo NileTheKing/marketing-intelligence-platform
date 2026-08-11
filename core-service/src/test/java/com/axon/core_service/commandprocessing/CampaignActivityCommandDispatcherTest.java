@@ -84,6 +84,43 @@ class CampaignActivityCommandDispatcherTest {
         org.mockito.Mockito.verify(webhookStrategy, org.mockito.Mockito.never()).process(webhook);
     }
 
+    @Test
+    void dispatchRoutesUnsupportedTypeToDltInsteadOfCommittingSilently() {
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
+        CampaignActivityKafkaProducerDto unsupported = CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(CampaignActivityType.GIVEAWAY)
+                .userId(10L)
+                .build();
+        when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, unsupported))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        CampaignActivityCommandDispatcher dispatcher =
+                new CampaignActivityCommandDispatcher(List.of(), kafkaTemplate, pipelineMetrics);
+
+        dispatcher.dispatch(List.of(unsupported));
+
+        verify(kafkaTemplate).send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, unsupported);
+        verify(pipelineMetrics).recordDltRouted("campaign-command", 1);
+    }
+
+    @Test
+    void dispatchRoutesMissingTypeToDltInsteadOfFailingDuringGrouping() {
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
+        CampaignActivityKafkaProducerDto missingType = CampaignActivityKafkaProducerDto.builder()
+                .userId(10L)
+                .build();
+        when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, missingType))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        CampaignActivityCommandDispatcher dispatcher =
+                new CampaignActivityCommandDispatcher(List.of(), kafkaTemplate, pipelineMetrics);
+
+        dispatcher.dispatch(List.of(missingType));
+
+        verify(kafkaTemplate).send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, missingType);
+        verify(pipelineMetrics).recordDltRouted("campaign-command", 1);
+    }
+
     private static CampaignActivityKafkaProducerDto message() {
         return CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)

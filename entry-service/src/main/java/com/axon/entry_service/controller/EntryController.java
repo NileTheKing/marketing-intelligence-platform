@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 @RestController
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // Same-origin via Ingress, wildcard for flexibility
 public class EntryController {
     private final EntryApplicationService entryApplicationService;
 

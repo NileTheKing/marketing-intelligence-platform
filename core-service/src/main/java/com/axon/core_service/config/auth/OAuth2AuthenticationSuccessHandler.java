@@ -9,7 +9,6 @@ import com.axon.messaging.dto.validation.UserCacheDto;
 import com.axon.util.CookieUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +21,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -34,7 +32,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
     private final UserRepository userRepository;
     private final UserSummaryService userSummaryService;
     private final RedisTemplate<String, Object> redisTemplate;
@@ -84,16 +81,15 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
 
 
-        clearAuthenticationAttributes(request, response);
+        super.clearAuthenticationAttributes(request);
         getRedirectStrategy().sendRedirect(request, response, targetUrl);
     }
 
     /**
-     * Constructs a redirect URL containing newly generated JWT access and refresh tokens for the authenticated user.
+     * Creates an access-token cookie and returns the configured post-login redirect URL.
      *
-     * <p>Generates access and refresh tokens using the authenticated user's internal userId, stores the access token
-     * in a non-HttpOnly cookie, publishes a user login event, and appends both tokens as query parameters to the
-     * resolved target URL (either from a redirect-cookie or the default target URL).</p>
+     * <p>Generates an access token using the authenticated user's internal userId, stores it in a cookie,
+     * and publishes a user login event.</p>
      *
      * @param request the incoming HTTP request (used to resolve optional redirect URI cookie)
      * @param response the HTTP response used to set the access token cookie
@@ -101,10 +97,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
      * @return the redirect URL with `accessToken` and `refreshToken` query parameters
      */
     protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
-        Optional<String> redirectUri = CookieUtils.getCookie(request, HttpCookieOAuth2AuthorizationRequestRepository.REDIRECT_URI_PARAM_COOKIE_NAME)
-                .map(Cookie::getValue);
-
-        String targetUrl = redirectUri.orElse(getDefaultTargetUrl());
+        String targetUrl = getDefaultTargetUrl();
 
         // 내부 DB의 userId를 사용하도록 수정
         CustomOAuth2User oauthUser = (CustomOAuth2User) authentication.getPrincipal();
@@ -114,14 +107,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         Authentication newAuth = new UsernamePasswordAuthenticationToken(oauthUser, null, oauthUser.getAuthorities());
 
         String accessToken = jwtTokenProvider.generateAccessToken(newAuth);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(newAuth);
         int accessTokenMaxAge = 30 * 60;     // 30분
-        int refreshTokenMaxAge = 7 * 24 * 60 * 60; // 7일
 
         CookieUtils.addCookie(response, "accessToken", accessToken, accessTokenMaxAge, false);
-        //CookieUtils.addCookie(response, "refreshToken", refreshToken, refreshTokenMaxAge, true);
-        log.info("Generated Access Token (first 15 chars): {}", accessToken.substring(0, 15));
-        log.info("Generated Refresh Token (first 15 chars): {}", refreshToken.substring(0, 15));
 
         // Publish domain event for analytics pipeline
         eventPublisher.publishEvent(new UserLoginEvent(userId, Instant.now()));
@@ -130,14 +118,4 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
                 .build().toUriString();
     }
 
-    /**
-     * Clears stored authentication attributes and removes the OAuth2 authorization request cookies.
-     *
-     * @param request  the current HTTP request from which authentication attributes and cookies are cleared
-     * @param response the current HTTP response used to remove authorization request cookies
-     */
-    protected void clearAuthenticationAttributes(HttpServletRequest request, HttpServletResponse response) {
-        super.clearAuthenticationAttributes(request);
-        httpCookieOAuth2AuthorizationRequestRepository.removeAuthorizationRequestCookies(request, response);
-    }
 }

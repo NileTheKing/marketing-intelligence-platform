@@ -76,7 +76,9 @@ public class EntryApplicationService {
         }
 
         CouponRequestDto payload = new CouponRequestDto(userId, meta.id(), meta.couponId(), meta.campaignActivityType());
-        couponEntryService.publishCouponIssue(payload);
+        if (!couponEntryService.publishCouponIssue(payload)) {
+            return EntryUseCaseResult.noBody(EntryUseCaseStatus.INTERNAL_SERVER_ERROR);
+        }
 
         return EntryUseCaseResult.ok(PaymentConfirmationResponse.success("COUPON_ISSUED"));
     }
@@ -111,8 +113,8 @@ public class EntryApplicationService {
         Optional<ReservationTokenPayload> existingToken = reservationTokenService.getPayloadFromToken(deterministicToken);
 
         if (existingToken.isPresent()) {
-            log.info("재결제 시나리오: 기존 1차 토큰 재사용, userId={}, campaignActivityId={}, token={}...",
-                    userId, campaignActivityId, deterministicToken.substring(0, Math.min(10, deterministicToken.length())));
+            log.info("재결제 시나리오: 기존 1차 토큰 재사용, userId={}, campaignActivityId={}",
+                    userId, campaignActivityId);
             return EntryUseCaseResult.ok(PaymentConfirmationResponse.successWithRetry(deterministicToken));
         }
 

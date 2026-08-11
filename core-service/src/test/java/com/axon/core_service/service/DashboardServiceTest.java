@@ -23,12 +23,52 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
+
+    @Test
+    @DisplayName("CUSTOM Activity Dashboard는 지정한 종료 시각과 같은 길이의 이전 구간을 사용한다")
+    void getDashboardByActivityUsesExactCustomWindow() throws Exception {
+        RealtimeMetricsService realtimeMetricsService = mock(RealtimeMetricsService.class);
+        BehaviorEventService behaviorEventService = mock(BehaviorEventService.class);
+        CampaignRepository campaignRepository = mock(CampaignRepository.class);
+        CampaignActivityRepository campaignActivityRepository = mock(CampaignActivityRepository.class);
+        PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
+        DashboardService dashboardService = new DashboardService(
+                realtimeMetricsService,
+                behaviorEventService,
+                campaignRepository,
+                campaignActivityRepository,
+                purchaseRepository,
+                new DashboardMetricCalculator());
+
+        Long activityId = 9L;
+        LocalDateTime start = LocalDateTime.of(2026, 8, 1, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 8, 3, 16, 0);
+        LocalDateTime previousStart = LocalDateTime.of(2026, 7, 30, 4, 0);
+        CampaignActivity activity = CampaignActivity.builder()
+                .name("custom activity")
+                .activityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .budget(BigDecimal.ZERO)
+                .limitCount(10)
+                .build();
+
+        when(campaignActivityRepository.findById(activityId)).thenReturn(Optional.of(activity));
+        when(realtimeMetricsService.getParticipantCount(activityId)).thenReturn(0L);
+        when(realtimeMetricsService.getRemainingStock(0L, 10L)).thenReturn(10L);
+
+        dashboardService.getDashboardByActivity(activityId, DashboardPeriod.CUSTOM, start, end);
+
+        verify(behaviorEventService).getHourlyTraffic(java.util.List.of(activityId), start, end);
+        verify(purchaseRepository, atLeastOnce())
+                .findConfirmedAggregateByActivityIdAndPeriod(activityId, start, end);
+        verify(purchaseRepository)
+                .findConfirmedAggregateByActivityIdAndPeriod(activityId, previousStart, start);
+    }
 
     @Test
     @DisplayName("FCFS Activity Dashboard는 공통 FunnelStep 순서와 기존 count 의미를 유지한다")
@@ -79,7 +119,7 @@ class DashboardServiceTest {
         assertThat(response.funnel())
                 .extracting("count")
                 .containsExactly(100L, 40L, 12L, 10L);
-        verify(behaviorEventService, never()).getFunnelStepCount(eq(activityId),
+        verify(behaviorEventService, org.mockito.Mockito.never()).getFunnelStepCount(eq(activityId),
                 eq(CampaignActivityType.FIRST_COME_FIRST_SERVE), eq(FunnelStep.PURCHASE), any(), any());
     }
 
@@ -128,9 +168,7 @@ class DashboardServiceTest {
         assertThat(response.funnel())
                 .extracting("count")
                 .containsExactly(0L, 0L, 0L, 0L);
-        verify(behaviorEventService, never()).getVisitCount(eq(activityId), any(), any());
-        verify(behaviorEventService, never()).getEngageCount(eq(activityId), any(), any());
-        verify(behaviorEventService, never()).getQualifyCount(eq(activityId), any(), any());
-        verify(behaviorEventService, never()).getPurchaseCount(eq(activityId), any(), any());
+        verify(behaviorEventService, org.mockito.Mockito.never()).getFunnelStepCount(
+                eq(activityId), eq(CampaignActivityType.FIRST_COME_FIRST_SERVE), any(), any(), any());
     }
 }

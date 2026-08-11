@@ -5,12 +5,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 import com.axon.entry_service.domain.CampaignActivityMeta;
 import com.axon.entry_service.domain.CampaignActivityStatus;
 import com.axon.entry_service.domain.ReservationResult;
 import com.axon.entry_service.domain.ReservationStatus;
+import com.axon.entry_service.event.ReservationApprovedEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.Collections;
@@ -20,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -45,6 +48,18 @@ class EntryReservationServiceTest {
     @Test
     void reserveSuccess() {
         when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(1L);
+
+        ReservationResult result = reservationService.reserve(1L, 100L, activeMeta, Instant.now());
+
+        assertThat(result.status()).isEqualTo(ReservationStatus.SUCCESS);
+        assertThat(result.order()).isEqualTo(1L);
+    }
+
+    @Test
+    void reserveRemainsSuccessfulWhenApprovedEventCannotBeScheduled() {
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(1L);
+        doThrow(new TaskRejectedException("executor queue is full"))
+                .when(eventPublisher).publishEvent(any(ReservationApprovedEvent.class));
 
         ReservationResult result = reservationService.reserve(1L, 100L, activeMeta, Instant.now());
 

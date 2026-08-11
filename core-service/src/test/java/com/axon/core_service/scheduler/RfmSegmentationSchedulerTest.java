@@ -9,6 +9,8 @@ import com.axon.core_service.service.RfmSegmentationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -23,8 +25,10 @@ class RfmSegmentationSchedulerTest {
         UserSummaryRepository userSummaryRepository = mock(UserSummaryRepository.class);
         PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
         SchedulerExecutionLock schedulerExecutionLock = mock(SchedulerExecutionLock.class);
+        TransactionTemplate transactionTemplate = immediateTransactionTemplate();
         RfmSegmentationScheduler scheduler = new RfmSegmentationScheduler(
-                userSummaryRepository, purchaseRepository, new RfmSegmentationService(), schedulerExecutionLock);
+                userSummaryRepository, purchaseRepository, new RfmSegmentationService(),
+                schedulerExecutionLock, transactionTemplate);
         doAnswer(invocation -> {
             invocation.getArgument(1, Runnable.class).run();
             return true;
@@ -49,13 +53,25 @@ class RfmSegmentationSchedulerTest {
         UserSummaryRepository userSummaryRepository = mock(UserSummaryRepository.class);
         PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
         SchedulerExecutionLock schedulerExecutionLock = mock(SchedulerExecutionLock.class);
+        TransactionTemplate transactionTemplate = immediateTransactionTemplate();
         RfmSegmentationScheduler scheduler = new RfmSegmentationScheduler(
-                userSummaryRepository, purchaseRepository, new RfmSegmentationService(), schedulerExecutionLock);
+                userSummaryRepository, purchaseRepository, new RfmSegmentationService(),
+                schedulerExecutionLock, transactionTemplate);
         when(schedulerExecutionLock.runIfAcquired(eq("rfm-segmentation"), any(Runnable.class)))
                 .thenReturn(false);
 
         scheduler.runRfmSegmentationBatch();
 
         verifyNoInteractions(userSummaryRepository, purchaseRepository);
+    }
+
+    private static TransactionTemplate immediateTransactionTemplate() {
+        TransactionTemplate template = mock(TransactionTemplate.class);
+        doAnswer(invocation -> {
+            invocation.getArgument(0, java.util.function.Consumer.class)
+                    .accept(mock(TransactionStatus.class));
+            return null;
+        }).when(template).executeWithoutResult(any());
+        return template;
     }
 }

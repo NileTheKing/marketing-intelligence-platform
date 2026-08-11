@@ -30,11 +30,11 @@ public class ReservationExpirationListener extends KeyExpirationEventMessageList
 
         try {
             String tokenValue = expiredKey.replace("RESERVATION_TOKEN:", "");
-            String decoded = new String(Base64.getDecoder().decode(tokenValue), StandardCharsets.UTF_8);
+            String decoded = new String(Base64.getUrlDecoder().decode(tokenValue), StandardCharsets.UTF_8);
 
             String[] parts = decoded.split(":");
             if(parts.length < 2) {
-                log.warn("Invalid token format ignored: {}", decoded);
+                log.warn("Invalid reservation token format ignored");
                 return;
             }
 
@@ -58,7 +58,7 @@ public class ReservationExpirationListener extends KeyExpirationEventMessageList
                 log.debug("Another pod Accessed and Skipped decrease request");
             }
         } catch (Exception e) {
-            log.error("1차 토큰 만료로 인한 재고 복구 실패 token={}", expiredKey, e);
+            log.error("1차 토큰 만료로 인한 재고 복구 실패", e);
         }
     }
 }

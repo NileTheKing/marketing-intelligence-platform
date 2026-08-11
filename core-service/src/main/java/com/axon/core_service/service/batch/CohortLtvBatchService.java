@@ -11,14 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StopWatch;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +27,7 @@ public class CohortLtvBatchService {
     private final PurchaseRepository purchaseRepository;
     private final LTVBatchRepository ltvBatchRepository;
     private final NamedParameterJdbcTemplate namedJdbc;
+    private final TransactionTemplate transactionTemplate;
 
     private record MonthlyAggResult(BigDecimal monthlyRevenue, int monthlyOrders, int activeUsers) {}
     private record RepeatAggResult(BigDecimal repeatRate, BigDecimal avgFrequency, BigDecimal avgOrderValue) {}
@@ -40,6 +40,7 @@ public class CohortLtvBatchService {
                   COUNT(DISTINCT user_id)             AS active_users
                 FROM purchases
                 WHERE user_id IN (:userIds)
+                  AND status = 'CONFIRMED'
                   AND purchase_at >= :start
                   AND purchase_at < :end
                 """;
@@ -64,27 +65,30 @@ public class CohortLtvBatchService {
                     SELECT user_id, COUNT(*) as purchase_count, SUM(price * quantity) as total_revenue
                     FROM purchases
                     WHERE user_id IN (:userIds)
-                      AND purchase_at <= :until
+                      AND status = 'CONFIRMED'
+                      AND purchase_at < :until
                     GROUP BY user_id
-                    ) AS user_agg
-                    """;
-                    MapSqlParameterSource params = new MapSqlParameterSource()
-                    .addValue("userIds", userIds)
-                    .addValue("until", until);
-                    return namedJdbc.queryForObject(sql, params, (rs, rowNum) -> new RepeatAggResult(
-                    rs.getBigDecimal("repeat_rate"),
-                    rs.getBigDecimal("avg_frequency"),
-                    rs.getBigDecimal("avg_order_value")
-                    ));
-                    }
+                ) AS user_agg
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("userIds", userIds)
+                .addValue("until", until);
+        return namedJdbc.queryForObject(sql, params, (rs, rowNum) -> new RepeatAggResult(
+                rs.getBigDecimal("repeat_rate"),
+                rs.getBigDecimal("avg_frequency"),
+                rs.getBigDecimal("avg_order_value")
+        ));
+    }
 
-                    private BigDecimal queryCumulativeLtv(List<Long> userIds, LocalDateTime until) {
-                    String sql = """
-                    SELECT COALESCE(SUM(price * quantity), 0) AS ltv_cumulative
-                    FROM purchases
-                    WHERE user_id IN (:userIds)
-                      AND purchase_at <= :until
-                    """;        MapSqlParameterSource params = new MapSqlParameterSource()
+    private BigDecimal queryCumulativeLtv(List<Long> userIds, LocalDateTime until) {
+        String sql = """
+                SELECT COALESCE(SUM(price * quantity), 0) AS ltv_cumulative
+                FROM purchases
+                WHERE user_id IN (:userIds)
+                  AND status = 'CONFIRMED'
+                  AND purchase_at < :until
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("userIds", userIds)
                 .addValue("until", until);
         return namedJdbc.queryForObject(sql, params, BigDecimal.class);
@@ -100,22 +104,21 @@ public class CohortLtvBatchService {
 
         for (Long activityId : activityIds) {
             try {
-                processActivityCohortInTransaction(activityId, now);
+                transactionTemplate.executeWithoutResult(status -> processActivityCohort(activityId, now));
             } catch (Exception e) {
                 log.error("Failed to process activity {}: {}", activityId, e.getMessage());
             }
         }
     }
 
-    @Transactional
-    public void processActivityCohortInTransaction(Long activityId, LocalDateTime collectedAt) {
-        LTVBatch stat = processActivityCohort(activityId, collectedAt);
+    private void processActivityCohort(Long activityId, LocalDateTime collectedAt) {
+        LTVBatch stat = calculateActivityCohort(activityId, collectedAt);
         if (stat != null) {
             ltvBatchRepository.save(stat);
         }
     }
 
-    private LTVBatch processActivityCohort(Long activityId, LocalDateTime collectedAt) {
+    private LTVBatch calculateActivityCohort(Long activityId, LocalDateTime collectedAt) {
         StopWatch sw = new StopWatch();
         sw.start();
 
@@ -137,7 +140,7 @@ public class CohortLtvBatchService {
         if (newMonthEnd.isAfter(collectedAt)) return null;
 
         List<Purchase> firstPurchases = purchaseRepository.findFirstPurchasesByActivityAndPeriod(
-                activityId, cohortStartDate, LocalDateTime.now());
+                activityId, cohortStartDate, collectedAt);
 
         if (firstPurchases.isEmpty()) return null;
 

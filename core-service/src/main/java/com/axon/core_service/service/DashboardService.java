@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -42,15 +43,14 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public DashboardResponse getDashboardByActivity(Long activityId, DashboardPeriod period,
             LocalDateTime customStart, LocalDateTime customEnd) {
-        LocalDateTime start = customStart != null ? customStart
-                : period.getStartDateTime();
-        LocalDateTime end = LocalDateTime.now();
+        DashboardWindow window = resolveWindow(period, customStart, customEnd);
+        LocalDateTime start = window.start();
+        LocalDateTime end = window.end();
 
         OverviewData overview = buildOverviewDataByActivity(activityId, start, end);
 
-        LocalDateTime previousStart = start.minusDays(period.getDays());
-        LocalDateTime previousEnd = end.minusDays(period.getDays());
-        OverviewData previousOverview = buildOverviewDataByActivity(activityId, previousStart, previousEnd);
+        OverviewData previousOverview = buildOverviewDataByActivity(
+                activityId, window.previousStart(), window.previousEnd());
 
         List<FunnelStep> funnelSteps = List.of(
                 FunnelStep.VISIT,
@@ -180,16 +180,16 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public CampaignDashboardResponse getDashboardByCampaign(Long campaignId, DashboardPeriod period,
             LocalDateTime customStart, LocalDateTime customEnd) {
-        LocalDateTime start = customStart != null ? customStart : period.getStartDateTime();
-        LocalDateTime end = customEnd != null ? customEnd : LocalDateTime.now();
+        DashboardWindow window = resolveWindow(period, customStart, customEnd);
+        LocalDateTime start = window.start();
+        LocalDateTime end = window.end();
 
         // 1. Build Current Overview
         CampaignOverviewResult currentResult = buildOverviewDataByCampaign(campaignId, start, end);
 
         // 2. Build Previous Overview (for calc trends)
-        LocalDateTime previousStart = start.minusDays(period.getDays());
-        LocalDateTime previousEnd = end.minusDays(period.getDays());
-        CampaignOverviewResult previousResult = buildOverviewDataByCampaign(campaignId, previousStart, previousEnd);
+        CampaignOverviewResult previousResult = buildOverviewDataByCampaign(
+                campaignId, window.previousStart(), window.previousEnd());
 
         // 3. Get Heatmap (Current Period)
         HeatmapData heatmap = getHourlyHeatmap(campaignId, start, end);
@@ -328,6 +328,34 @@ public class DashboardService {
 
     public double calculateROAS(java.math.BigDecimal gmv, java.math.BigDecimal budget) {
         return metricCalculator.roas(gmv, budget);
+    }
+
+    private DashboardWindow resolveWindow(DashboardPeriod period,
+            LocalDateTime customStart,
+            LocalDateTime customEnd) {
+        LocalDateTime end = customEnd != null ? customEnd : LocalDateTime.now();
+        LocalDateTime start;
+        if (customStart != null) {
+            start = customStart;
+        } else if (period == DashboardPeriod.CUSTOM) {
+            throw new IllegalArgumentException("customStart is required for a custom dashboard period");
+        } else {
+            start = end.minusDays(period.getDays());
+        }
+
+        if (!start.isBefore(end)) {
+            throw new IllegalArgumentException("Dashboard period start must be before end");
+        }
+
+        Duration duration = Duration.between(start, end);
+        return new DashboardWindow(start, end, start.minus(duration), start);
+    }
+
+    private record DashboardWindow(
+            LocalDateTime start,
+            LocalDateTime end,
+            LocalDateTime previousStart,
+            LocalDateTime previousEnd) {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

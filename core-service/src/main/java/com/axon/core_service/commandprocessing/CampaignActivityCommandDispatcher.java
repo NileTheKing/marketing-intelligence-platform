@@ -35,8 +35,17 @@ public class CampaignActivityCommandDispatcher {
             return;
         }
 
+        List<CampaignActivityKafkaProducerDto> missingType = messages.stream()
+                .filter(message -> message.getCampaignActivityType() == null)
+                .toList();
+        if (!missingType.isEmpty()) {
+            log.warn("Campaign activity type is missing: count={}", missingType.size());
+            routeToDlt(missingType);
+        }
+
         Map<CampaignActivityType, List<CampaignActivityKafkaProducerDto>> groupedByType =
                 messages.stream()
+                        .filter(message -> message.getCampaignActivityType() != null)
                         .collect(Collectors.groupingBy(CampaignActivityKafkaProducerDto::getCampaignActivityType));
 
         groupedByType.forEach(this::dispatchBatch);
@@ -52,7 +61,8 @@ public class CampaignActivityCommandDispatcher {
         CampaignStrategy strategy = strategies.get(type);
 
         if (strategy == null) {
-            log.warn("지원하지 않는 캠페인 활동 타입입니다: {}", type);
+            log.warn("Unsupported campaign activity type: type={}, count={}", type, batch.size());
+            routeToDlt(batch);
             return;
         }
 
@@ -70,11 +80,16 @@ public class CampaignActivityCommandDispatcher {
             throw e;
         } catch (Exception e) {
             log.error("Error processing batch for type {}: {}", type, e.getMessage(), e);
-            log.warn("🚨 [DLQ] Sending {} failed messages to DLT: {}", batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
-            batch.forEach(msg -> kafkaTemplate
-                    .send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, msg)
-                    .join());
-            pipelineMetrics.recordDltRouted("campaign-command", batch.size());
+            routeToDlt(batch);
         }
+    }
+
+    private void routeToDlt(List<CampaignActivityKafkaProducerDto> batch) {
+        log.warn("Sending {} command messages to DLT: {}",
+                batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
+        batch.forEach(message -> kafkaTemplate
+                .send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message)
+                .join());
+        pipelineMetrics.recordDltRouted("campaign-command", batch.size());
     }
 }

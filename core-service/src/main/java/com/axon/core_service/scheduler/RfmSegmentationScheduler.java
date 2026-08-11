@@ -12,7 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -28,12 +28,13 @@ public class RfmSegmentationScheduler {
     private final PurchaseRepository purchaseRepository;
     private final RfmSegmentationService rfmSegmentationService;
     private final SchedulerExecutionLock schedulerExecutionLock;
+    private final TransactionTemplate transactionTemplate;
 
     // 매일 새벽 4시 실행
     @Scheduled(cron = "0 0 4 * * *")
-    @Transactional
     public void runRfmSegmentationBatch() {
-        schedulerExecutionLock.runIfAcquired("rfm-segmentation", this::runRfmSegmentationBatchLocked);
+        schedulerExecutionLock.runIfAcquired("rfm-segmentation",
+                () -> transactionTemplate.executeWithoutResult(status -> runRfmSegmentationBatchLocked()));
     }
 
     private void runRfmSegmentationBatchLocked() {
