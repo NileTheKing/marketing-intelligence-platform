@@ -15,10 +15,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,8 +47,20 @@ class CampaignStockSyncSchedulerTest {
     @Mock
     private ReconciliationIssueService reconciliationIssueService;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private CampaignStockSyncService syncService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void executeTransactionCallbacks() {
+        doAnswer(invocation -> {
+            java.util.function.Consumer<TransactionStatus> callback = invocation.getArgument(0);
+            callback.accept(mock(TransactionStatus.class));
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+    }
 
     @Test
     @DisplayName("정산 시 Redis와 MySQL 수치가 다르면, MySQL(SSOT) 기준으로 재고가 정산되어야 한다")
@@ -75,9 +92,6 @@ class CampaignStockSyncSchedulerTest {
         
         // 2. 캠페인 상태가 ENDED로 업데이트 되어야 함
         verify(campaign, times(1)).updateStatus(CampaignActivityStatus.ENDED);
-        verify(campaignActivityRepository, times(1)).save(campaign);
-        
-        System.out.println("✅ Audit Test Success: Redis(15) vs MySQL(10) -> Sycned with 10.");
     }
 
     @Test
@@ -106,6 +120,35 @@ class CampaignStockSyncSchedulerTest {
 
         // Then
         verify(productService, times(1)).syncCampaignStock(eq(productId), eq(5L));
-        System.out.println("✅ Audit Test Success: Redis(null) vs MySQL(5) -> Sycned with 5.");
+    }
+
+    @Test
+    void failureInOneActivityDoesNotPreventTheNextActivityTransaction() {
+        CampaignActivity first = mock(CampaignActivity.class);
+        CampaignActivity second = mock(CampaignActivity.class);
+        when(campaignActivityRepository.findIdsByStatus(CampaignActivityStatus.ACTIVE))
+                .thenReturn(List.of(1L, 2L));
+        when(campaignActivityRepository.findById(1L)).thenReturn(Optional.of(first));
+        when(campaignActivityRepository.findById(2L)).thenReturn(Optional.of(second));
+        when(first.getId()).thenReturn(1L);
+        when(first.getProductId()).thenReturn(100L);
+        when(first.getSyncedCount()).thenReturn(0);
+        when(second.getId()).thenReturn(2L);
+        when(second.getProductId()).thenReturn(200L);
+        when(second.getSyncedCount()).thenReturn(0);
+        when(second.getEndDate()).thenReturn(LocalDateTime.now().plusDays(1));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("campaign:1:counter")).thenReturn("1");
+        when(valueOperations.get("campaign:2:counter")).thenReturn("1");
+        when(purchaseRepository.countByCampaignActivityId(any())).thenReturn(1L);
+        when(purchaseRepository.countByCampaignActivityIdAndStatus(any(), eq(PurchaseStatus.CONFIRMED)))
+                .thenReturn(1L);
+        doThrow(new IllegalStateException("poison activity"))
+                .when(productService).syncCampaignStock(100L, 1L);
+
+        syncService.syncOngoingCampaignStocks();
+
+        verify(transactionTemplate, times(2)).executeWithoutResult(any());
+        verify(productService).syncCampaignStock(200L, 1L);
     }
 }

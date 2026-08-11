@@ -26,6 +26,9 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
     @EntityGraph(attributePaths = {"product", "coupon"})
     List<CampaignActivity> findAllByStatus(CampaignActivityStatus status);
 
+    @Query("SELECT ca.id FROM CampaignActivity ca WHERE ca.status = :status")
+    List<Long> findIdsByStatus(@Param("status") CampaignActivityStatus status);
+
     @EntityGraph(attributePaths = "campaign")
     @Query("SELECT ca FROM CampaignActivity ca WHERE ca.id = :id")
     Optional<CampaignActivity> findWithCampaignById(@Param("id") Long id);

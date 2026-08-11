@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,30 +26,35 @@ public class CampaignStockSyncService {
     private final RedisTemplate<String, String> redisTemplate;
     private final PurchaseRepository purchaseRepository;
     private final ReconciliationIssueService reconciliationIssueService;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
     public void syncOngoingCampaignStocks() {
+        List<Long> activeCampaignIds = campaignActivityRepository
+                .findIdsByStatus(CampaignActivityStatus.ACTIVE);
 
-        List<CampaignActivity> activeCampaigns = campaignActivityRepository
-                .findAllByStatus(CampaignActivityStatus.ACTIVE);
-
-        if (activeCampaigns.isEmpty()) {
+        if (activeCampaignIds.isEmpty()) {
             return;
         }
 
-        log.info("Found {} active campaigns to sync stock", activeCampaigns.size());
+        log.info("Found {} active campaigns to sync stock", activeCampaignIds.size());
 
-        for (CampaignActivity activity : activeCampaigns) {
+        for (Long activityId : activeCampaignIds) {
             try {
-                syncCampaignStock(activity);
-                if (activity.getEndDate() != null && activity.getEndDate().isBefore(LocalDateTime.now())) {
-                    activity.updateStatus(CampaignActivityStatus.ENDED);
-                    campaignActivityRepository.save(activity);
-                    log.info("Activity {} marked as ENDED after final sync", activity.getId());
-                }
+                transactionTemplate.executeWithoutResult(status -> syncOneActivity(activityId, false));
             } catch (Exception e) {
-                log.error("Failed to sync stock for activity {}: {}", activity.getId(), e.getMessage());
+                log.error("Failed to sync stock for activity {}: {}", activityId, e.getMessage());
             }
+        }
+    }
+
+    private void syncOneActivity(Long activityId, boolean forceEnd) {
+        CampaignActivity activity = campaignActivityRepository.findById(activityId)
+                .orElseThrow(() -> new IllegalArgumentException("Activity not found: " + activityId));
+
+        syncCampaignStock(activity);
+        if (forceEnd || activity.getEndDate() != null && activity.getEndDate().isBefore(LocalDateTime.now())) {
+            activity.updateStatus(CampaignActivityStatus.ENDED);
+            log.info("Activity {} marked as ENDED after final sync", activity.getId());
         }
     }
 
@@ -81,14 +86,8 @@ public class CampaignStockSyncService {
         }
     }
 
-    @Transactional
     public void syncCampaignStockManually(Long campaignActivityId) {
-        CampaignActivity activity = campaignActivityRepository.findById(campaignActivityId)
-                .orElseThrow(() -> new IllegalArgumentException("Activity not found: " + campaignActivityId));
-
         log.info("Manual sync requested for activity {}", campaignActivityId);
-        syncCampaignStock(activity);
-        activity.updateStatus(CampaignActivityStatus.ENDED);
-        campaignActivityRepository.save(activity);
+        transactionTemplate.executeWithoutResult(status -> syncOneActivity(campaignActivityId, true));
     }
 }
