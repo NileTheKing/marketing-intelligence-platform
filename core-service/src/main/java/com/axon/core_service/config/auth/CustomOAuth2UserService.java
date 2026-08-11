@@ -5,8 +5,8 @@ import com.axon.core_service.domain.user.CustomOAuth2User;
 import com.axon.core_service.config.auth.dto.OAuthAttributes;
 import com.axon.core_service.domain.user.User;
 import com.axon.core_service.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
@@ -16,14 +16,25 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
-@RequiredArgsConstructor
 @Service
 public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
 
     private final UserRepository userRepository;
+    private final Set<String> adminEmails;
+
+    public CustomOAuth2UserService(
+            UserRepository userRepository,
+            @Value("${axon.security.admin-emails:}") String configuredAdminEmails) {
+        this.userRepository = userRepository;
+        this.adminEmails = parseEmails(configuredAdminEmails);
+    }
 
     /**
      * Load or create an application user from the OAuth2 provider response and return a CustomOAuth2User representing that user.
@@ -59,11 +70,26 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         );
     }
 
-    private User saveOrUpdate(OAuthAttributes attributes) {
+    User saveOrUpdate(OAuthAttributes attributes) {
         User user = userRepository.findByEmail(attributes.getEmail())
                 .map(entity -> entity.update(attributes.getName(), attributes.getPicture()))
                 .orElseGet(attributes::toEntity);
 
+        if (adminEmails.contains(normalizeEmail(attributes.getEmail()))) {
+            user.promoteToAdmin();
+        }
+
         return userRepository.save(user);
+    }
+
+    private static Set<String> parseEmails(String configuredAdminEmails) {
+        return Arrays.stream(configuredAdminEmails.split(","))
+                .map(CustomOAuth2UserService::normalizeEmail)
+                .filter(email -> !email.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 }

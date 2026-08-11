@@ -1,6 +1,7 @@
 package com.axon.core_service.config.auth;
 
 import com.axon.core_service.domain.user.Role;
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,9 +15,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
-import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -26,7 +24,6 @@ public class SecurityConfig {
         private final JwtTokenProvider jwtTokenProvider;
         private final CustomOAuth2UserService customOAuth2UserService;
         private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
-        private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
         private final CustomLogoutHandler customLogoutHandler;
 
         /**
@@ -61,39 +58,38 @@ public class SecurityConfig {
                                                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))  // Allow session for OAuth2 login to preserve original request
                                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
                                 .authorizeHttpRequests(authz -> authz
+                                                .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                                                 .requestMatchers("/", "/shop", "/css/**", "/image/**", "/images/**", "/js/**", "/uploads/**",
-                                                                        "/h2-console/**", "/favicon.ico", "/welcomepage",
-                                                                "/welcomepage.html", "/test/**")
+                                                                "/favicon.ico", "/welcomepage", "/welcomepage.html",
+                                                                "/oauth2/**", "/login/**", "/test/**")
                                                 .permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**",
-                                                                "/api/v1/dashboard/**", "/api/v1/store/**", "/api/v1/products/**")
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/events/active")
                                                 .permitAll()
-                                                .requestMatchers(HttpMethod.POST, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**", "/api/v1/files/**")
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/campaign-activities/{campaignActivityId:[0-9]+}")
+                                                .hasAnyAuthority(Role.ADMIN.getKey(), "ROLE_SYSTEM")
+                                                .requestMatchers("/admin/**", "/api/v1/campaigns/**",
+                                                                "/api/v1/campaign-activities/**", "/api/v1/coupons/**",
+                                                                "/api/v1/dashboard/**", "/api/v1/events/**",
+                                                                "/api/v1/files/**", "/api/v1/monitoring/**",
+                                                                "/api/v1/products/**", "/core/api/v1/**",
+                                                                "/fake/data/**")
+                                                .hasAuthority(Role.ADMIN.getKey())
+                                                .requestMatchers("/api/v1/validation")
                                                 .authenticated()
-                                                .requestMatchers(HttpMethod.PUT, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**")
-                                                .authenticated()
-                                                .requestMatchers(HttpMethod.PATCH, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**")
-                                                .authenticated()
-                                                .requestMatchers(HttpMethod.DELETE, "/api/v1/campaigns/**", "/api/v1/campaign-activities/**")
-                                                .authenticated()
-                                                .requestMatchers("/api/v1/coupons/**").authenticated()
-                                                .requestMatchers("/api/v1/**").permitAll()
-                                                .requestMatchers("/core/api/v1/**").authenticated() // Core API 인증 필수
+                                                .requestMatchers("/api/v1/**").authenticated()
                                                 .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
-                                                // .requestMatchers("/admin/**").hasRole(Role.ADMIN.name())
                                                 .anyRequest().authenticated())
                                 .exceptionHandling(exceptions -> exceptions
-
-                                                .defaultAuthenticationEntryPointFor(
-                                                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                                                                antMatcher("/api/**"))
-                                                .defaultAuthenticationEntryPointFor(
-                                                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                                                                antMatcher("/core/api/**")) // Core API도 401 반환
-                                                .defaultAuthenticationEntryPointFor(
-                                                                new HttpStatusEntryPoint(HttpStatus.OK), // 200 OK 반환 (리다이렉트 방지)
-                                                                antMatcher("/test/**"))
-                                                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/naver")))
+                                                .authenticationEntryPoint((request, response, authException) -> {
+                                                        String uri = request.getRequestURI();
+                                                        if (uri.startsWith("/api/") || uri.startsWith("/core/api/")) {
+                                                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)
+                                                                        .commence(request, response, authException);
+                                                                return;
+                                                        }
+                                                        new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/naver")
+                                                                .commence(request, response, authException);
+                                                }))
                                 .logout(logout -> logout
                                                 .logoutUrl("/logout")
                                                 .logoutSuccessUrl("/shop")

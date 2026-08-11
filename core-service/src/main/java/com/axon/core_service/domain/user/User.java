@@ -101,6 +101,10 @@ public class User extends BaseTimeEntity {
         return this.role.getKey();
     }
 
+    public void promoteToAdmin() {
+        this.role = Role.ADMIN;
+    }
+
     /**
      * Updates the user's last login timestamp.
      *
