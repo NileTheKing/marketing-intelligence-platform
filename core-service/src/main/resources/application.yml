@@ -52,6 +52,10 @@ spring:
     scheduling:
       pool:
         size: 2
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 gemini:
   api:
@@ -61,6 +65,8 @@ gemini:
 
 axon:
   entry-service-url: ${AXON_ENTRY_SERVICE_URL:${ENTRY_SERVICE_URL:http://localhost:8081}}
+  upload:
+    directory: ${AXON_UPLOAD_DIRECTORY:core-service/uploads}
   security:
     admin-emails: ${AXON_ADMIN_EMAILS:}
 

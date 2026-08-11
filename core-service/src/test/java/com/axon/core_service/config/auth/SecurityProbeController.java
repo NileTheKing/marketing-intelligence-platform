@@ -17,6 +17,11 @@ class SecurityProbeController {
         return "ok";
     }
 
+    @PostMapping("/api/v1/files/upload")
+    String uploadFile() {
+        return "ok";
+    }
+
     @GetMapping("/api/v1/dashboard/overview")
     String dashboard() {
         return "ok";

@@ -1,5 +1,7 @@
 package com.axon.core_service.config;
 
+import java.nio.file.Path;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -7,11 +9,17 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
+    private final String uploadResourceLocation;
+
+    public WebConfig(@Value("${axon.upload.directory:core-service/uploads}") String uploadDirectory) {
+        String location = Path.of(uploadDirectory).toAbsolutePath().normalize().toUri().toString();
+        this.uploadResourceLocation = location.endsWith("/") ? location : location + "/";
+    }
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Serve files from the uploads directory
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:./uploads/", "file:./core-service/uploads/");
+                .addResourceLocations(uploadResourceLocation);
 
         // Serve static resources
         registry.addResourceHandler("/images/**")

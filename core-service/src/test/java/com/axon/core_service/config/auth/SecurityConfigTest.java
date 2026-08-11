@@ -76,6 +76,9 @@ class SecurityConfigTest {
                         .content("{}"))
                 .andExpect(status().isForbidden());
 
+        mockMvc.perform(post("/api/v1/files/upload").with(user("1").roles("USER")))
+                .andExpect(status().isForbidden());
+
         mockMvc.perform(get("/core/api/v1/reconciliation-issues")
                         .with(user("1").roles("USER")))
                 .andExpect(status().isForbidden());
@@ -111,6 +114,9 @@ class SecurityConfigTest {
                         .with(user("1").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/files/upload").with(user("1").roles("ADMIN")))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/core/api/v1/reconciliation-issues")
