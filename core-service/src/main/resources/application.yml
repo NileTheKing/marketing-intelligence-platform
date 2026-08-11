@@ -56,9 +56,13 @@ spring:
 gemini:
   api:
     key: ${GEMINI_API_KEY:}
+    connect-timeout: ${GEMINI_CONNECT_TIMEOUT:2s}
+    read-timeout: ${GEMINI_READ_TIMEOUT:10s}
 
 axon:
   entry-service-url: ${AXON_ENTRY_SERVICE_URL:${ENTRY_SERVICE_URL:http://localhost:8081}}
+  security:
+    admin-emails: ${AXON_ADMIN_EMAILS:}
 
 server:
   forward-headers-strategy: framework
