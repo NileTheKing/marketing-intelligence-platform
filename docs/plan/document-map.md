@@ -19,6 +19,8 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/fcfs-entry-purchase-transaction-boundary-handoff.md` | active (implemented, OCI-validated) | **현재 FCFS 후속 구현 정본.** Entry–Purchase 단일 원장 트랜잭션, 단건 fallback/DLT, UserSummary projection 실패 기록, 행동 로그 커밋 경계와 2026-08-03 회귀 검증 |
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
 | `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
+| `docs/plan/backend-foundation-hardening-audit-2026-08-11.md` | active | correctness/security/test/overengineering audit, completed cleanup, verification boundary, and larger deferred work |
+| `docs/plan/api-contract-audit-2026-08-11.md` | active (Security boundary implemented; remaining contract work tracked) | current API authentication/authorization, error, validation, async completion, idempotency, and browser-caller audit |
 | `docs/plan/session-handoff-2026-07-30.md` | reference (completed) | historical Core queue/offset A/B and first crash-recovery evidence; current FCFS boundary is superseded by `fcfs-entry-purchase-transaction-boundary-handoff.md` |
 | `docs/plan/session-handoff-2026-07-29.md` | superseded | replaced by the 2026-07-30 Core queue/offset A/B handoff |
 | `docs/plan/domain-refactoring-map.md` | active | DDD-style structure map, ubiquitous language draft, bounded context candidates, and small Fowler-style refactoring units |
@@ -39,7 +41,6 @@ These are still useful, but code must win if there is a conflict.
 
 | Document | Status | Use |
 |---|---|---|
-| `docs/flow/payment-resilience-flow.md` | active/reference | payment resilience flow details |
 | `docs/flow/reservation-payment-flow.md` | active/reference | reservation to payment flow |
 | `docs/flow/token-based-payment-flow.md` | active/reference | token/payment flow reference |
 | `docs/design/llm-query-architecture.md` | active/reference | LLM query architecture background |
@@ -95,6 +96,7 @@ These are still useful, but code must win if there is a conflict.
 | `docs/MONITORING_DEPLOYMENT.md` | legacy/reference | older monitoring stack; first-pass plan now prefers OTel/Jaeger + Actuator for tracing diagnosis |
 | `docs/infrastructure-status-report.md` | legacy/reference | old infrastructure state; do not mix with Oracle VM/k3s plan without rechecking |
 | `docs/flow/behavior-event-fluentd-plan.md` | legacy/reference | Fluentd/Fluent Bit behavior-event plan; current behavior pipeline facts should come from code/T3 |
+| `docs/flow/payment-resilience-flow.md` | legacy | removed Core `/process` payment controller and recovery-service design; current contract is Entry `prepare`/`confirm` plus Kafka Core processing |
 | `docs/project-tasks.md` | legacy backlog | old 4-week project plan; not a current implementation source |
 | `docs/purchase-domain-refactoring-plan.md` | legacy/draft | planned purchase-domain refactor; do not claim as implemented without code check |
 | `docs/plan/marketing-dashboard-development-plan.md` | legacy/reference | broad team plan mixing completed, planned, and future dashboard/LLM items |

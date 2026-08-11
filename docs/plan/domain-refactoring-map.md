@@ -15,7 +15,7 @@ It is not a rewrite plan. The goal is to make the existing Axon backend easier t
 | Module | Current role | Main evidence |
 |---|---|---|
 | `entry-service` | Handles public entry/payment APIs, Redis reservation, token issuance, and Kafka command publishing. | `EntryController`, `PaymentController`, `EntryReservationService`, `PaymentService`, `CampaignActivityProducerService` |
-| `core-service` | Handles campaign/activity persistence, Kafka command consumption, purchase/entry persistence, dashboard aggregation, marketing rules, validation, and LLM query. | `CampaignActivityConsumerService`, `CampaignActivityEntryService`, `PurchaseHandler`, `DashboardService`, `BehaviorTriggerScheduler`, `GeminiLLMQueryService` |
+| `core-service` | Handles campaign/activity persistence, Kafka command consumption, purchase/entry persistence, dashboard aggregation, marketing rules, validation, and LLM query. | `CampaignActivityConsumerService`, `FcfsCommandOrchestrator`, `FcfsLedgerPersistenceService`, `DashboardService`, `BehaviorTriggerScheduler`, `GeminiLLMQueryService` |
 | `common-messaging` | Shares Kafka topic names and message DTOs between services. | `KafkaTopics`, `CampaignActivityKafkaProducerDto`, `ReservationTokenPayload`, `UserBehaviorEventMessage` |
 
 ### Current Package Shape
@@ -68,7 +68,7 @@ This map is the agreed target for a behavior-preserving package refactor. It is 
 | `commandprocessing` | `CampaignActivityConsumerService`, dispatcher, `CampaignStrategy`, `BatchStrategy`, FCFS/coupon/webhook strategies, command DLT handling, command-pipeline metrics | `MarketingRule` evaluation | This owns Kafka batch intake, dispatch, durable completion boundary, and failure isolation. It executes a command; it does not decide whether a marketing action should exist. |
 | `marketing` | `MarketingRule`, `MarketingAction`, their repositories, `BehaviorTriggerScheduler`, rule/action evaluation helpers | command consumer and strategy dispatch | This owns condition evaluation and action selection. It emits commands to the processing boundary. |
 | `coupon` | `CouponController`, `CouponService`, `Coupon`, `UserCoupon`, coupon DTOs, coupon repositories | `CouponStrategy` | Coupon definition and user coupon state are a business capability. The strategy is a Kafka command handler, so it remains in command processing. |
-| `purchase` | `Purchase`, `PurchaseService`, `PurchaseHandler`, dead-letter handler, purchase repository/DTOs, `UserSummary`, user-summary service/repository, purchase scheduler, cohort/LTV/RFM services and schedulers | OAuth user authentication | These are durable commerce facts and projections derived from purchase flow. |
+| `purchase` | `Purchase`, `PurchaseCancellationService`, purchase repository/query DTOs, `UserSummary`, user-summary service/repository, purchase scheduler, cohort/LTV/RFM services and schedulers | FCFS command orchestration, OAuth user authentication | These are durable commerce facts and projections derived from purchase flow. |
 | `behavior` | `BehaviorEventService`, core behavior publisher/adapter, funnel definition/step, behavior-event collection/query controller if it remains in Core | dashboard assembly | This owns behavior-event interpretation; dashboard consumes its query result. |
 | `dashboard` | dashboard REST/SSR/query controllers, `DashboardService`, metric/realtime services, calculator, dashboard DTOs/domain values, LLM query services | raw behavior storage/query | This owns dashboard response assembly and controlled insight querying. |
 | `store` | `StoreController`, `StoreViewService`, store-only view routes | admin/dashboard views | This owns Thymeleaf shopping experience composition. |
@@ -104,9 +104,9 @@ Cross-cutting code stays at the root: `config`, `config/auth`, `aop`, `observabi
 4. `PaymentService.sendToKafkaWithRetry()` sends `CampaignActivityKafkaProducerDto` to Kafka and waits for broker ACK.
 5. `CampaignActivityConsumerService.consume()` receives up to 20 records from one Kafka poll.
 6. The listener dispatches by `CampaignActivityType` and returns after Entry/Purchase durable processing.
-7. `FirstComeFirstServeStrategy.processBatch()` bulk-loads `CampaignActivity` and delegates entry upsert.
-8. `CampaignActivityEntryService.upsertBatch()` saves entries, isolates batch failure through individual retry, and publishes purchase events.
-9. Purchase persistence is handled downstream by purchase handlers/listeners.
+7. `FirstComeFirstServeStrategy.processBatch()` delegates the FCFS batch to `FcfsCommandOrchestrator`.
+8. `FcfsLedgerPersistenceService` flushes Entry and Purchase in one transaction; a failed batch is retried per message and final command failures are sent to the command DLT.
+9. After ledger commit, UserSummary is projected in a separate transaction and a new Purchase emits its behavior log.
 
 ### Analytics / Dashboard Flow
 
@@ -161,8 +161,8 @@ These are candidates, not mandatory package moves.
 | Payment Command | Payment prepare/confirm, approval token, Kafka command send. | Purchase history calculation, campaign dashboard. | `PaymentController`, `PaymentService`, `CampaignActivityProducerService` |
 | Campaign Operations | Campaign and campaign activity creation/update/status/filter/budget. | Kafka buffer management, Redis reservation internals. | `CampaignService`, `CampaignActivityService`, `CampaignActivity`, `Campaign` |
 | Activity Command Processing | Kafka batch intake, durable completion boundary, strategy execution, DLT on command failure. | HTTP controller validation, dashboard response formatting. | `CampaignActivityConsumerService`, `CampaignStrategy`, `BatchStrategy`, `FirstComeFirstServeStrategy`, `CouponStrategy`, `WebhookStrategy` |
-| Entry Persistence | Durable `CampaignActivityEntry` upsert, batch retry, purchase event publication after approved entry. | Kafka listener mechanics, Redis reservation. | `CampaignActivityEntryService`, `CampaignActivityEntryRetryService`, `CampaignActivityEntryRepository` |
-| Purchase / Commerce | Durable purchase records, LTV/cohort, user summary purchase metrics. | Payment API token validation. | `PurchaseService`, `PurchaseHandler`, `CohortAnalysisService`, `CohortLtvBatchService`, `UserSummaryService` |
+| FCFS Ledger Persistence | Durable `CampaignActivityEntry` and `Purchase` persistence, batch rollback, per-message retry, command DLT boundary. | Kafka listener mechanics, Redis reservation, post-commit projections. | `FcfsCommandOrchestrator`, `FcfsLedgerPersistenceService`, `CampaignActivityEntryRepository`, `PurchaseRepository` |
+| Purchase / Commerce | Durable purchase records, cancellation, LTV/cohort, user summary purchase metrics. | Payment API token validation and FCFS command orchestration. | `PurchaseCancellationService`, `CohortAnalysisService`, `CohortLtvBatchService`, `UserSummaryService` |
 | Behavior Analytics | Behavior event collection/query, funnel mapping, dashboard stats. | Campaign mutation and payment command execution. | `BehaviorEventService`, `DashboardService`, `CampaignFunnelDefinition`, `FunnelStep`, `TriggerType` |
 | Marketing Automation | Rule evaluation, action-level dedup, reward command emission. | Coupon persistence internals and webhook HTTP delivery internals. | `BehaviorTriggerScheduler`, `MarketingRule`, `MarketingAction`, `CouponStrategy`, `WebhookStrategy` |
 | LLM Query | Controlled dashboard query/tooling, answer formatting, metadata boundary. | Direct DB mutation or uncontrolled operations. | `GeminiLLMQueryService`, `MockLLMQueryService`, `LLMQueryService` |
@@ -183,7 +183,7 @@ These are candidates, not mandatory package moves.
 |---|---|---|
 | `EntryApplicationService.createEntry()` | Validation, retry token handling, reservation, and token issuance are one FCFS application use case. | Keep its flow coherent; extract only a repeated validation policy with a clear owner. |
 | `DashboardService.buildOverviewDataByCampaign()` | Fetch campaign, read stats, loop activities, calculate totals/rates/table in one method. | Extract `buildActivityComparison()`, `accumulateOverview()`, and pure metric calculator. |
-| `CampaignActivityEntryService.upsertBatch()` | Existing lookup, entity mutation, purchase event decision, saveAll fallback retry, event publishing in one method. | Extract key creation and purchase event creation first. Keep transaction boundary unchanged. |
+| `FcfsCommandOrchestrator.process()` | Coordinates ledger persistence, per-message fallback, UserSummary projection, and behavior publication. | Keep ledger work in `FcfsLedgerPersistenceService`; split only if orchestration gains another independent responsibility. |
 
 ### 4.3 Primitive Obsession / Data Clumps
 
@@ -197,7 +197,7 @@ These are candidates, not mandatory package moves.
 
 | File | Evidence | Risk | Direction |
 |---|---|---|---|
-| `CampaignActivityEntryService` | Entry persistence publishes `PurchaseInfoDto` when approved and purchase-related. | Entry persistence knows purchase event shape. This is acceptable as current event boundary, but it is a coupling point. | If this grows, introduce domain event record dedicated to approved entry, then purchase listener maps it. |
+| `FcfsCommandOrchestrator` | Coordinates the durable ledger result with post-commit UserSummary and behavior side effects. | The orchestrator knows both the ledger result and projection policies. | Keep the transaction boundary explicit; extract a projection coordinator only if another projection is added. |
 | `DashboardService` | Reads `CampaignActivity.getProduct().getCategory()` while building campaign comparison. | Dashboard aggregation depends on entity graph and lazy associations. | Keep repository fetch graph explicit. Later project query DTO for dashboard. |
 | `EntryApplicationService` | Reads `CampaignActivityMeta` and applies request/meta tamper validation. | This is now correctly in the application layer; it can still grow if every activity type adds special cases. | Keep result mapping in `EntryUseCaseResult`; extract type-specific validation only when duplication appears. |
 
@@ -340,19 +340,11 @@ The first two are low-risk warmups. The third and fourth improve the actual boun
 
 These are not part of the completed 1-5 refactoring set. Re-check code before implementing because later performance or deployment work may change priorities.
 
-### Candidate A: ReservationTokenService Cleanup
+### Candidate A: ReservationTokenService Cleanup — resolved
 
-Current issue:
-- `ReservationTokenService` still mixes token generation, Redis storage, signature verification, approval-token refresh, and cleanup.
-- Method name `CreateApprovalToken` violates Java method naming convention.
-
-Small next step:
-- Rename `CreateApprovalToken` to `createApprovalToken`.
-- Keep old behavior and update callers/tests only.
-- Do not redesign token flow in the same change.
-
-Why later:
-- Low risk, but not as important as bottleneck testing.
+`CreateApprovalToken` was renamed to `createApprovalToken`. Token verification now
+uses constant-time comparison and the ineffective virtual-thread `ThreadLocal` HMAC
+cache was removed. The broader reservation-token flow remains unchanged.
 
 ### Candidate B: CampaignActivity Entity Behavior Naming
 
@@ -382,19 +374,13 @@ Small next step:
 Why later:
 - Current service is improved enough for now. Further split should follow a real dashboard change or test pain.
 
-### Candidate D: CampaignActivityEntryService Batch Upsert Split
+### Candidate D: FCFS Orchestration Split — resolved
 
-Current issue:
-- `upsertBatch()` still does existing-entry lookup, entity mutation, purchase event decision, batch save, individual retry fallback, and event publishing.
-
-Small next step:
-- Extract pure/key logic first:
-  - `ActivityUserKey` is already introduced.
-  - next split can be purchase-event creation or retry fallback handling.
-- Preserve transaction boundary and batch failure policy.
-
-Why later:
-- This flow is correctness-sensitive, so split only with targeted tests around duplicate handling and purchase event publication.
+The old batch entry/event chain was replaced by `FcfsCommandOrchestrator` and
+`FcfsLedgerPersistenceService`. Entry and Purchase now share one ledger transaction;
+per-message fallback, command DLT, UserSummary projection, and behavior publication
+have explicit boundaries and focused regression tests. Do not restore the removed
+`CampaignActivityEntryService`/`PurchaseHandler` chain.
 
 ### Candidate E: Payment Retry Policy Naming/Configuration
 
@@ -413,6 +399,5 @@ Why later:
 
 If the next session is about refactoring, start here:
 
-1. Decide whether to do a tiny convention cleanup (`CreateApprovalToken` -> `createApprovalToken`) or move to performance baseline work.
-2. If refactoring continues, prefer Candidate A or D.
-3. If portfolio competitiveness is the priority, pause refactoring and run the Oracle Compose baseline from `docs/plan/oracle-compose-baseline-runbook.md`.
+1. If refactoring continues, choose a concrete behavior or test pain before moving packages.
+2. If portfolio competitiveness is the priority, pause refactoring and run the Oracle Compose baseline from `docs/plan/oracle-compose-baseline-runbook.md`.

@@ -1,8 +1,8 @@
 # Payment & Resilience Flow Scenarios
 
-> 상태: active/reference
-> 용도: 결제 정상 흐름과 장애 대응 시나리오 도식화 참고
-> 주의: 실제 구현 세부사항과 용어는 코드와 최신 T파일 기준으로 재확인.
+> 상태: legacy
+> 대체 문서: `docs/flow/token-based-payment-flow.md`, `docs/architecture-map.md`
+> 주의: 이 문서의 Core `/process`, PaymentFailureLog, 자동 복구 구조는 제거됐다. 현재 구현 근거로 사용하지 않는다.
 
 > **문서 목적**: 결제 시스템의 정상 처리 및 장애 발생 시 복구 흐름을 시나리오별로 상세 도식화.
 

@@ -2,7 +2,7 @@
 
 > **목적**: 새로 투입된 사람/에이전트가 30초에 "무엇이 무엇에게 무엇을 보내는지" 잡는 반 페이지 지도.
 > **원칙**: 짧게 유지. 상세는 각 flow 문서로. **충돌 시 코드가 이긴다.**
-> 개정: 2026-08-06.
+> 개정: 2026-08-11.
 
 ## 정체성 (왜 존재하나)
 1. **선착순(FCFS) 스파이크 트래픽을 안정적으로 수용·판정** (한정 상품 응모, 2초에 수천 명)
@@ -19,6 +19,8 @@
 - SSR 화면은 `/shop`, `/products/{id}`, `/campaign-activities/{id}`, `/admin/**`처럼 API와 분리한다.
 - CRUD/조회와 참여·이벤트 기록은 `/api/v1`의 명사 collection으로 노출한다 (`campaigns`, `campaign-activities`, `entries`, `behavior-events`).
 - 상태 전이 command는 억지로 resource화하지 않는다. 결제 `prepare`/`confirm`은 RPC-style로 유지한다.
+- 익명 호출은 진행 중 Event 정의 조회처럼 명시한 경로만 허용한다. 사용자 검증은 인증이 필요하고, 캠페인·대시보드·대사 등 운영 API와 `/admin/**`는 `ROLE_ADMIN`만 허용한다.
+- Entry가 Core의 액티비티 메타를 읽을 때는 `ROLE_SYSTEM` 토큰을 사용한다. 관리자 이메일은 `AXON_ADMIN_EMAILS`에 쉼표로 지정하며 로그인 시 기존 USER를 ADMIN으로 승격한다.
 
 ## 핵심 흐름 (누가 뭘 emit/consume)
 
@@ -26,7 +28,7 @@
 ```
 클라 → nginx → entry `POST /api/v1/entries` → EntryController#createEntry
   → EntryReservationService (Redis Lua: SADD+INCR+한도)
-      성공(202+토큰) / 매진(410) / 중복(409)   ← 매진판정은 Lua가 원자적, 이미 견고
+      성공(200+토큰) / 매진(410) / 중복(409)   ← 매진판정은 Lua가 원자적, 이미 견고
   → 성공 시 ReservationApprovedEvent (앱 내부 이벤트)
       → BackendEventPublisher(@Async @EventListener)
       → Kafka BEHAVIOR_EVENT  (축2로 합류)
@@ -75,7 +77,7 @@ BehaviorTriggerScheduler
 | `axon.webhook.command` | 외부 Webhook 전달 전용 명령; FCFS·쿠폰 소비 경로와 분리 |
 | `axon.projection.user-summary.failed` | 원장 커밋 후 UserSummary projection 실패 기록 |
 | `axon.payment.retry` | 결제 재시도 (deprecated, 신규 사용 금지) |
-| `axon.purchase.failed.dlt` / `axon.webhook.failed.dlt` | 실패 격리 |
+| `axon.webhook.failed.dlt` | Webhook 최종 실패 격리 |
 | `axon.event.raw` / `axon.user.login` | 원시 이벤트 / 로그인 (deprecated, 신규 사용 금지) |
 
 ## 스코프 경계 (누가 뭘 담당)
