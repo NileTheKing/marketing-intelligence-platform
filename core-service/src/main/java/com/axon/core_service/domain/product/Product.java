@@ -76,6 +76,9 @@ public class Product {
      *                               than zero
      */
     public void decreaseStock(long quantity) {
+        if (quantity < 0) {
+            throw new IllegalArgumentException("quantity must not be negative");
+        }
         if (this.stock - quantity < 0) {
             throw new IllegalStateException("재고가 부족합니다.");
         }

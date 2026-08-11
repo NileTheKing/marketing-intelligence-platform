@@ -73,6 +73,12 @@ public class Purchase {
         this.purchaseType = Objects.requireNonNull(purchaseType, "purchaseType must not be null");
         this.price = Objects.requireNonNull(price, "price must not be null");
         this.quantity = quantity != null ? quantity : 1;
+        if (this.price.signum() < 0) {
+            throw new IllegalArgumentException("price must not be negative");
+        }
+        if (this.quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be positive");
+        }
         this.purchaseAt = purchasedAt != null
             ? LocalDateTime.ofInstant(purchasedAt, ZoneId.of("Asia/Seoul"))
             : LocalDateTime.now();

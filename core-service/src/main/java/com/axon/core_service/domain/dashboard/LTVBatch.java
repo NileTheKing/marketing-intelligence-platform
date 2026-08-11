@@ -11,7 +11,13 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
-@Table(name = "cohort_ltv_monthly_stats")
+@Table(
+        name = "cohort_ltv_monthly_stats",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_cohort_ltv_activity_month",
+                columnNames = {"campaign_activity_id", "month_offset"}
+        )
+)
 @Builder
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class LTVBatch extends BaseTimeEntity {
