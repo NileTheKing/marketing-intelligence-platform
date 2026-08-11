@@ -216,7 +216,7 @@ public class CouponService {
      */
     @Transactional
     public void useCoupon(Long userCouponId, Long userId) {
-        UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
+        UserCoupon userCoupon = userCouponRepository.findByIdForUpdate(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("UserCoupon not found: " + userCouponId));
 
         // 소유자 확인

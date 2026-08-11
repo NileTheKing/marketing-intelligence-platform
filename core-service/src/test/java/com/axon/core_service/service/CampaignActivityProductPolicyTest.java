@@ -2,6 +2,7 @@ package com.axon.core_service.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.axon.core_service.domain.campaign.Campaign;
@@ -47,12 +48,14 @@ class CampaignActivityProductPolicyTest {
         ReflectionTestUtils.setField(campaignProduct, "id", 2L);
         when(campaignRepository.findById(1L)).thenReturn(Optional.of(mock(Campaign.class)));
         when(productRepository.findById(2L)).thenReturn(Optional.of(campaignProduct));
+        when(productRepository.findByIdWithPessimisticLock(2L)).thenReturn(Optional.of(campaignProduct));
         when(activityRepository.existsByProduct_IdAndStatusAndActivityType(2L,
                 CampaignActivityStatus.ACTIVE, CampaignActivityType.FIRST_COME_FIRST_SERVE)).thenReturn(true);
 
         assertThatThrownBy(() -> service.createCampaignActivity(1L, activeFcfsRequest(2L)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("only one ACTIVE");
+        verify(productRepository).findByIdWithPessimisticLock(2L);
     }
 
     private CampaignActivityService service(CampaignRepository campaignRepository, ProductRepository productRepository,

@@ -317,6 +317,9 @@ public class CampaignActivityService {
             throw new IllegalStateException("An ACTIVE FCFS activity requires a campaign-only product");
         }
 
+        productRepository.findByIdWithPessimisticLock(product.getId())
+                .orElseThrow(() -> new IllegalArgumentException("product not found: " + product.getId()));
+
         boolean activeProductAlreadyUsed = currentActivityId == null
                 ? campaignActivityRepository.existsByProduct_IdAndStatusAndActivityType(
                         product.getId(), CampaignActivityStatus.ACTIVE,
