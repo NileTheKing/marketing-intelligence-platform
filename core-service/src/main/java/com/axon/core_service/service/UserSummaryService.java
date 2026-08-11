@@ -3,10 +3,12 @@ package com.axon.core_service.service;
 import com.axon.core_service.domain.user.User;
 import com.axon.core_service.repository.UserRepository;
 import java.time.Instant;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 
 import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserSummaryService {
 
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Seoul");
+
     private final UserRepository userRepository;
+    private final UserSummaryRepository userSummaryRepository;
     private final PurchaseRepository purchaseRepository;
     /**
      * Updates the user's purchase activity by recording a purchase that occurred at the given instant.
@@ -29,9 +34,7 @@ public class UserSummaryService {
      */
     @Transactional
     public void recordPurchase(Long userId, Instant occurredAt) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-        user.recordPurchase(occurredAt);
+        advanceLastPurchaseAt(userId, occurredAt);
     }
 
     /**
@@ -47,31 +50,25 @@ public class UserSummaryService {
 
         log.info("Recording purchase for {} users", latestPurchaseTimes.size());
 
-        // 1. User 조회 (UserSummary는 User와 1:1 관계)
-        List<User> users = userRepository.findAllById(latestPurchaseTimes.keySet());
-
-        // 2. 각 User의 마지막 구매 시간 업데이트
-        for (User user : users) {
-            Instant latestPurchaseTime = latestPurchaseTimes.get(user.getId());
-            if (latestPurchaseTime != null) {
-                user.getUserSummary().advanceLastPurchaseAt(latestPurchaseTime);
+        for (Map.Entry<Long, Instant> entry : latestPurchaseTimes.entrySet()) {
+            if (entry.getValue() != null) {
+                advanceLastPurchaseAt(entry.getKey(), entry.getValue());
             }
         }
 
-        // 3. Dirty Checking으로 자동 UPDATE
-        log.info("Updated purchase time for {} users", users.size());
+        log.info("Updated purchase time for {} users", latestPurchaseTimes.size());
     }
 
     @Transactional
     public void rebuildPurchaseSummary(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        var summary = userSummaryRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User summary not found: " + userId));
 
         purchaseRepository.findFirstByUserIdAndStatusOrderByPurchaseAtDesc(userId, PurchaseStatus.CONFIRMED)
                 .ifPresentOrElse(
-                        purchase -> user.getUserSummary().updateLastPurchaseAt(
-                                purchase.getPurchaseAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()),
-                        () -> user.getUserSummary().updateLastPurchaseAt(null));
+                        purchase -> summary.updateLastPurchaseAt(
+                                purchase.getPurchaseAt().atZone(BUSINESS_ZONE).toInstant()),
+                        () -> summary.updateLastPurchaseAt(null));
     }
     /**
         * Records a login event for the specified user at the given timestamp, updating the user's activity summary.
@@ -85,5 +82,17 @@ public class UserSummaryService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
         user.recordLogin(loggedAt);
+    }
+
+    private void advanceLastPurchaseAt(Long userId, Instant occurredAt) {
+        if (occurredAt == null) {
+            return;
+        }
+
+        LocalDateTime candidate = LocalDateTime.ofInstant(occurredAt, BUSINESS_ZONE);
+        int updated = userSummaryRepository.advanceLastPurchaseAt(userId, candidate);
+        if (updated == 0 && !userSummaryRepository.existsById(userId)) {
+            throw new IllegalArgumentException("User summary not found: " + userId);
+        }
     }
 }

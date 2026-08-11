@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.axon.core_service.domain.user.User;
 import com.axon.core_service.repository.UserRepository;
 import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import java.time.Instant;
@@ -29,6 +30,9 @@ class UserSummaryServiceTest {
     @Mock
     private PurchaseRepository purchaseRepository;
 
+    @Mock
+    private UserSummaryRepository userSummaryRepository;
+
     @InjectMocks
     private UserSummaryService userSummaryService;
 
@@ -36,37 +40,40 @@ class UserSummaryServiceTest {
     @DisplayName("recordPurchase는 사용자에 대한 마지막 구매 시각을 갱신한다")
     void recordPurchaseUpdatesLastPurchase() {
         Instant occurredAt = Instant.now();
-        User user = mock(User.class);
-        when(userRepository.findById(eq(1L))).thenReturn(Optional.of(user));
+        java.time.LocalDateTime candidate = java.time.LocalDateTime.ofInstant(
+                occurredAt, java.time.ZoneId.of("Asia/Seoul"));
+        when(userSummaryRepository.advanceLastPurchaseAt(1L, candidate)).thenReturn(1);
 
         userSummaryService.recordPurchase(1L, occurredAt);
 
-        verify(user).recordPurchase(eq(occurredAt));
+        verify(userSummaryRepository).advanceLastPurchaseAt(1L, candidate);
     }
 
     @Test
     @DisplayName("recordPurchase는 사용자가 존재하지 않을 경우 예외를 던진다")
     void recordPurchaseThrowsIfUserNotFound() {
-        when(userRepository.findById(eq(2L))).thenReturn(Optional.empty());
+        Instant occurredAt = Instant.now();
+        java.time.LocalDateTime candidate = java.time.LocalDateTime.ofInstant(
+                occurredAt, java.time.ZoneId.of("Asia/Seoul"));
+        when(userSummaryRepository.advanceLastPurchaseAt(2L, candidate)).thenReturn(0);
+        when(userSummaryRepository.existsById(2L)).thenReturn(false);
 
-        assertThatThrownBy(() -> userSummaryService.recordPurchase(2L, Instant.now()))
+        assertThatThrownBy(() -> userSummaryService.recordPurchase(2L, occurredAt))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found: 2");
+                .hasMessageContaining("User summary not found: 2");
     }
 
     @Test
     @DisplayName("배치 projection은 마지막 구매 시각만 전달하고 기존 값보다 과거로 갱신하지 않는다")
     void recordLatestPurchaseBatchAdvancesSummary() {
-        User user = mock(User.class);
-        com.axon.core_service.domain.user.UserSummary summary = mock(com.axon.core_service.domain.user.UserSummary.class);
         Instant olderMessage = Instant.parse("2026-08-01T00:00:00Z");
-        when(userRepository.findAllById(java.util.Set.of(1L))).thenReturn(java.util.List.of(user));
-        when(user.getId()).thenReturn(1L);
-        when(user.getUserSummary()).thenReturn(summary);
+        java.time.LocalDateTime candidate = java.time.LocalDateTime.ofInstant(
+                olderMessage, java.time.ZoneId.of("Asia/Seoul"));
+        when(userSummaryRepository.advanceLastPurchaseAt(1L, candidate)).thenReturn(1);
 
         userSummaryService.recordLatestPurchaseBatch(java.util.Map.of(1L, olderMessage));
 
-        verify(summary).advanceLastPurchaseAt(olderMessage);
+        verify(userSummaryRepository).advanceLastPurchaseAt(1L, candidate);
     }
 
     @Test
@@ -97,8 +104,7 @@ class UserSummaryServiceTest {
         User user = mock(User.class);
         com.axon.core_service.domain.user.UserSummary summary = mock(com.axon.core_service.domain.user.UserSummary.class);
         Purchase purchase = mock(Purchase.class);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(user.getUserSummary()).thenReturn(summary);
+        when(userSummaryRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(summary));
         when(purchaseRepository.findFirstByUserIdAndStatusOrderByPurchaseAtDesc(1L, PurchaseStatus.CONFIRMED))
                 .thenReturn(Optional.of(purchase));
         when(purchase.getPurchaseAt()).thenReturn(java.time.LocalDateTime.of(2026, 7, 28, 10, 0));
