@@ -30,9 +30,20 @@ jobs:
         working-directory: core-service
         run: ./gradlew test --no-daemon
 
+      - name: Verify core integration suites executed
+        run: |
+          bash scripts/ci/assert-test-suite-ran.sh \
+            core-service/build/test-results/test/TEST-com.axon.core_service.service.PurchaseFlowIntegrationTest.xml \
+            core-service/build/test-results/test/TEST-com.axon.core_service.controller.CampaignActivityHttpDbIntegrationTest.xml
+
       - name: Test entry-service
         working-directory: entry-service
         run: ./gradlew test --no-daemon
+
+      - name: Verify entry integration suite executed
+        run: |
+          bash scripts/ci/assert-test-suite-ran.sh \
+            entry-service/build/test-results/test/TEST-com.axon.entry_service.service.EntryReservationServiceRedisIntegrationTest.xml
 
       - name: Validate Docker Compose config
         run: docker compose -f compose.app.yml config --quiet
