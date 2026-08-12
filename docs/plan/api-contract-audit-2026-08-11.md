@@ -162,7 +162,7 @@ URL 모양보다 **누가 호출할 수 있는지, 언제 성공으로 확정하
 
 - Entry는 인증 실패 응답이 403으로 나오던 설정을 확인하고, 미인증 API 호출은 401을 반환하도록 수정했다.
 - CampaignActivity는 일반 `IllegalArgumentException`·`IllegalStateException` 대신 미존재와 업무 충돌을 구분해 404·409로 매핑했다.
-- `CampaignActivityRequest`는 음수 가격·수량·예산 및 `endDate <= startDate`를 controller 진입 전에 거절한다.
+- `CampaignActivityRequest`는 음수 가격·수량·예산, 상품 액티비티의 0 수량 및 `endDate <= startDate`를 controller 진입 전에 거절한다. 쿠폰 액티비티의 수량 0은 허용한다.
 - Event와 Coupon은 클라이언트 입력 오류와 리소스 미존재를 별도 예외로 구분해 400·404로 반환한다.
 - HTTP → service → MySQL 저장을 통과하는 Testcontainers 테스트 4건을 추가했다: 정상 저장, validation 실패 무저장, 미존재 campaign 무저장, 상태 전이 거절 후 기존 상태 유지.
 - CI는 FCFS Kafka→MySQL, CampaignActivity HTTP→MySQL, Entry Redis 통합 테스트 보고서가 없거나 skip되면 실패한다.

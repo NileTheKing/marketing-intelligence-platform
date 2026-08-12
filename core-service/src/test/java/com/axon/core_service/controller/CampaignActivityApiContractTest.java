@@ -119,6 +119,40 @@ class CampaignActivityApiContractTest {
     }
 
     @Test
+    void zeroQuantityForProductActivityReturnsValidationError() throws Exception {
+        String invalidRequest = VALID_REQUEST.replace("\"quantity\": 1", "\"quantity\": 0");
+
+        mockMvc.perform(post("/api/v1/campaigns/1/activities")
+                        .with(user("1").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidRequest))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_FAILED"));
+
+        verifyNoInteractions(campaignActivityService);
+    }
+
+    @Test
+    void zeroQuantityRemainsValidForCouponActivity() throws Exception {
+        CampaignActivityResponse response = CampaignActivityResponse.builder()
+                .id(11L)
+                .campaignId(1L)
+                .name("쿠폰 이벤트")
+                .status(CampaignActivityStatus.DRAFT)
+                .build();
+        when(campaignActivityService.createCampaignActivity(eq(1L), any())).thenReturn(response);
+        String couponRequest = VALID_REQUEST
+                .replace("FIRST_COME_FIRST_SERVE", "COUPON")
+                .replace("\"quantity\": 1", "\"quantity\": 0");
+
+        mockMvc.perform(post("/api/v1/campaigns/1/activities")
+                        .with(user("1").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(couponRequest))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void missingActivityReturnsNotFoundContract() throws Exception {
         when(campaignActivityService.getCampaignActivity(999L))
                 .thenThrow(new ResourceNotFoundException("campaign activity", 999L));

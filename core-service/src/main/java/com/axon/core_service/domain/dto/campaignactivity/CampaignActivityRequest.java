@@ -66,4 +66,13 @@ public class CampaignActivityRequest {
     public boolean isDateRangeValid() {
         return startDate == null || endDate == null || endDate.isAfter(startDate);
     }
+
+    @JsonIgnore
+    @AssertTrue(message = "quantity must be positive for product activities")
+    public boolean isQuantityValid() {
+        return quantity == null
+                || activityType == null
+                || activityType == CampaignActivityType.COUPON
+                || quantity > 0;
+    }
 }
