@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 
 @WebMvcTest(controllers = SecurityProbeController.class)
-@Import({SecurityConfig.class, TestSecurityConfig.class})
+@Import({SecurityConfig.class, TestSecurityConfig.class, SecurityProbeController.class})
 class SecurityConfigTest {
 
     @Autowired

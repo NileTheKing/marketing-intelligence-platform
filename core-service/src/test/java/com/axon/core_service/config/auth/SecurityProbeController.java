@@ -1,9 +1,11 @@
 package com.axon.core_service.config.auth;
 
+import org.springframework.boot.test.context.TestComponent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@TestComponent
 @RestController
 class SecurityProbeController {
 
