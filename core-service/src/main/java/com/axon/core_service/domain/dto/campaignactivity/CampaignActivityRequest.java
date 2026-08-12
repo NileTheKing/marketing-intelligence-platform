@@ -1,8 +1,9 @@
 package com.axon.core_service.domain.dto.campaignactivity;
 
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
-import com.axon.core_service.domain.product.Product;
 import com.axon.messaging.CampaignActivityType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -44,6 +45,7 @@ public class CampaignActivityRequest {
     private List<FilterDetail> filters;
 
     @NotNull
+    @PositiveOrZero
     private BigDecimal price;
 
     private Long productId;
@@ -51,9 +53,17 @@ public class CampaignActivityRequest {
     private Long couponId;
 
     @NotNull
+    @PositiveOrZero
     private Integer quantity;
 
+    @PositiveOrZero
     private BigDecimal budget;
 
     private String imageUrl;
+
+    @JsonIgnore
+    @AssertTrue(message = "endDate must be after startDate")
+    public boolean isDateRangeValid() {
+        return startDate == null || endDate == null || endDate.isAfter(startDate);
+    }
 }

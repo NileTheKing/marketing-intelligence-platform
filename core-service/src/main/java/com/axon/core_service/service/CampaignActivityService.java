@@ -6,6 +6,8 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRequest
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityResponse;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.exception.BusinessConflictException;
+import com.axon.core_service.exception.ResourceNotFoundException;
 import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
@@ -248,12 +250,12 @@ public class CampaignActivityService {
      */
     private Campaign findCampaign(Long id) {
         return campaignRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("campaign not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("campaign", id));
     }
 
     private Product findProduct(Long id) {
         return productRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("product not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("product", id));
     }
 
     /**
@@ -266,12 +268,12 @@ public class CampaignActivityService {
      */
     private CampaignActivity findCampaignActivity(Long id) {
         return campaignActivityRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("campaign activity not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("campaign activity", id));
     }
 
     private com.axon.core_service.domain.coupon.Coupon findCoupon(Long id) {
         return couponRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("coupon not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("coupon", id));
     }
 
     /**
@@ -304,7 +306,7 @@ public class CampaignActivityService {
         if (current == CampaignActivityStatus.PAUSED && next == CampaignActivityStatus.ACTIVE) {
             return;
         }
-        throw new IllegalStateException("invalid status transition: " + current + " -> " + next);
+        throw new BusinessConflictException("invalid status transition: " + current + " -> " + next);
     }
 
     private void validateFcfsProductPolicy(com.axon.messaging.CampaignActivityType activityType,
@@ -314,11 +316,11 @@ public class CampaignActivityService {
             return;
         }
         if (product == null || !product.isCampaignOnly()) {
-            throw new IllegalStateException("An ACTIVE FCFS activity requires a campaign-only product");
+            throw new BusinessConflictException("An ACTIVE FCFS activity requires a campaign-only product");
         }
 
         productRepository.findByIdWithPessimisticLock(product.getId())
-                .orElseThrow(() -> new IllegalArgumentException("product not found: " + product.getId()));
+                .orElseThrow(() -> new ResourceNotFoundException("product", product.getId()));
 
         boolean activeProductAlreadyUsed = currentActivityId == null
                 ? campaignActivityRepository.existsByProduct_IdAndStatusAndActivityType(
@@ -328,7 +330,7 @@ public class CampaignActivityService {
                         product.getId(), CampaignActivityStatus.ACTIVE,
                         com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, currentActivityId);
         if (activeProductAlreadyUsed) {
-            throw new IllegalStateException("A campaign-only product can belong to only one ACTIVE FCFS activity");
+            throw new BusinessConflictException("A campaign-only product can belong to only one ACTIVE FCFS activity");
         }
     }
 

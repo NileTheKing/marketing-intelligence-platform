@@ -6,6 +6,7 @@ import com.axon.core_service.domain.dto.event.EventResponse;
 import com.axon.core_service.domain.event.TriggerType;
 import com.axon.core_service.service.EventService;
 import jakarta.validation.Valid;
+import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -38,7 +39,8 @@ public class EventController {
     //생성
     public ResponseEntity<EventResponse> createEvent(@RequestBody @Valid EventRequest eventRequest) {
         log.info("이벤트 생성 요청: {}", eventRequest);
-        return ResponseEntity.ok(eventService.createEvent(eventRequest));
+        EventResponse created = eventService.createEvent(eventRequest);
+        return ResponseEntity.created(URI.create("/api/v1/events/" + created.getId())).body(created);
     }
 
     /**

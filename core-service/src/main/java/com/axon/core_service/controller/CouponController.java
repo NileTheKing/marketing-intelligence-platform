@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -24,7 +25,7 @@ public class CouponController {
     @PostMapping
     public ResponseEntity<Long> createCoupon(@RequestBody CouponRequest request) {
         Long couponId = couponService.createCoupon(request);
-        return ResponseEntity.ok(couponId);
+        return ResponseEntity.created(URI.create("/api/v1/coupons/" + couponId)).body(couponId);
     }
 
     @PutMapping("/{id}")
@@ -36,6 +37,6 @@ public class CouponController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCoupon(@PathVariable Long id) {
         couponService.deleteCoupon(id);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 }

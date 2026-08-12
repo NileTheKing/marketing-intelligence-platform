@@ -8,6 +8,8 @@ import com.axon.core_service.domain.event.EventDefinitionAudit;
 import com.axon.core_service.domain.event.EventDefinitionAuditAction;
 import com.axon.core_service.domain.event.EventStatus;
 import com.axon.core_service.domain.event.TriggerType;
+import com.axon.core_service.exception.InvalidRequestException;
+import com.axon.core_service.exception.ResourceNotFoundException;
 import com.axon.core_service.repository.EventDefinitionAuditRepository;
 import com.axon.core_service.repository.EventRepository;
 import java.util.List;
@@ -173,7 +175,7 @@ public class EventService {
      */
     private Event getEventEntity(Long eventId) {
         return eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("event not found: %s".formatted(eventId)));
+                .orElseThrow(() -> new ResourceNotFoundException("event", eventId));
     }
 
     /**
@@ -193,14 +195,14 @@ public class EventService {
             boolean hasSelector = hasText(payload.get("selector"));
             boolean hasTrackId = hasText(payload.get("trackId"));
             if (!hasSelector && !hasTrackId) {
-                throw new IllegalArgumentException("%s event requires selector or trackId".formatted(triggerType));
+                throw new InvalidRequestException("%s event requires selector or trackId".formatted(triggerType));
             }
         }
 
         if (triggerType == TriggerType.PAGE_VIEW) {
             Object urlPattern = payload.get("urlPattern");
             if (urlPattern != null && !hasText(urlPattern)) {
-                throw new IllegalArgumentException("PAGE_VIEW urlPattern must not be blank when provided");
+                throw new InvalidRequestException("PAGE_VIEW urlPattern must not be blank when provided");
             }
         }
     }

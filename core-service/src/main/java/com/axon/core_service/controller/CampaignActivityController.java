@@ -5,6 +5,7 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRespons
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.service.CampaignActivityService;
 import jakarta.validation.Valid;
+import java.net.URI;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +37,9 @@ public class CampaignActivityController {
     @PostMapping("/api/v1/campaigns/{campaignId}/activities")
     public ResponseEntity<CampaignActivityResponse> createCampaignActivity(@PathVariable Long campaignId,
                                                                            @RequestBody @Valid CampaignActivityRequest request) {
-        return ResponseEntity.ok(campaignActivityService.createCampaignActivity(campaignId, request));
+        CampaignActivityResponse created = campaignActivityService.createCampaignActivity(campaignId, request);
+        return ResponseEntity.created(URI.create("/api/v1/campaign-activities/" + created.getId()))
+                .body(created);
     }
 
     /**

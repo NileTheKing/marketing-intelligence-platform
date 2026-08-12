@@ -6,6 +6,8 @@ import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.domain.dto.coupon.ApplicableCouponDto;
 import com.axon.core_service.domain.dto.coupon.CouponRequest;
 import com.axon.core_service.domain.dto.coupon.CouponResponse;
+import com.axon.core_service.exception.InvalidRequestException;
+import com.axon.core_service.exception.ResourceNotFoundException;
 import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.UserCouponRepository;
 import lombok.RequiredArgsConstructor;
@@ -54,38 +56,38 @@ public class CouponService {
 
     private void validateCouponRequest(CouponRequest request) {
         if (request.getCouponName() == null || request.getCouponName().trim().isEmpty()) {
-            throw new IllegalArgumentException("쿠폰 이름은 필수입니다.");
+            throw new InvalidRequestException("쿠폰 이름은 필수입니다.");
         }
         if (request.getDiscountAmount() == null && request.getDiscountRate() == null) {
-            throw new IllegalArgumentException("할인 금액 또는 할인율 중 하나는 필수입니다.");
+            throw new InvalidRequestException("할인 금액 또는 할인율 중 하나는 필수입니다.");
         }
         if (request.getDiscountAmount() != null && request.getDiscountRate() != null) {
-            throw new IllegalArgumentException("할인 금액과 할인율을 동시에 설정할 수 없습니다.");
+            throw new InvalidRequestException("할인 금액과 할인율을 동시에 설정할 수 없습니다.");
         }
         if (request.getDiscountAmount() != null
                 && request.getDiscountAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("할인 금액은 0보다 커야 합니다.");
+            throw new InvalidRequestException("할인 금액은 0보다 커야 합니다.");
         }
         if (request.getDiscountRate() != null
                 && (request.getDiscountRate() <= 0 || request.getDiscountRate() > 100)) {
-            throw new IllegalArgumentException("할인율은 1에서 100 사이여야 합니다.");
+            throw new InvalidRequestException("할인율은 1에서 100 사이여야 합니다.");
         }
         if (request.getMinOrderAmount() != null
                 && request.getMinOrderAmount().compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("최소 주문 금액은 음수일 수 없습니다.");
+            throw new InvalidRequestException("최소 주문 금액은 음수일 수 없습니다.");
         }
         if (request.getStartDate() == null || request.getEndDate() == null) {
-            throw new IllegalArgumentException("시작 날짜와 종료 날짜는 필수입니다.");
+            throw new InvalidRequestException("시작 날짜와 종료 날짜는 필수입니다.");
         }
         if (!request.getEndDate().isAfter(request.getStartDate())) {
-            throw new IllegalArgumentException("종료 날짜는 시작 날짜보다 느려야 합니다.");
+            throw new InvalidRequestException("종료 날짜는 시작 날짜보다 느려야 합니다.");
         }
     }
 
     @Transactional
     public Long updateCoupon(Long id, CouponRequest request) {
         Coupon coupon = couponRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("쿠폰을 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResourceNotFoundException("coupon", id));
 
         validateCouponRequest(request);
 
@@ -103,7 +105,9 @@ public class CouponService {
 
     @Transactional
     public void deleteCoupon(Long id) {
-        couponRepository.deleteById(id);
+        Coupon coupon = couponRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("coupon", id));
+        couponRepository.delete(coupon);
     }
 
     /**

@@ -80,7 +80,7 @@ class CampaignActivityControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(response.getId()))
                 .andExpect(jsonPath("$.name").value(request.getName()))
                 .andExpect(jsonPath("$.status").value(request.getStatus().name()));

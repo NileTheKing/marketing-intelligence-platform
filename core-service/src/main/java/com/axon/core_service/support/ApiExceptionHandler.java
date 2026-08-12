@@ -1,8 +1,13 @@
 package com.axon.core_service.support;
 
 import com.axon.core_service.exception.CampaignActivityNotFoundException;
+import com.axon.core_service.exception.BusinessConflictException;
+import com.axon.core_service.exception.InvalidRequestException;
+import com.axon.core_service.exception.ResourceNotFoundException;
 import com.axon.core_service.support.response.ApiErrorResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -24,5 +29,40 @@ public class ApiExceptionHandler {
                 .build();
         return ResponseEntity.status(ex.getStatusCode()).body(body);
 
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleResourceNotFound(ResourceNotFoundException ex) {
+        return error(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage());
+    }
+
+    @ExceptionHandler(BusinessConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleBusinessConflict(BusinessConflictException ex) {
+        return error(HttpStatus.CONFLICT, "BUSINESS_CONFLICT", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidRequest(InvalidRequestException ex) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", ex.getMessage());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .orElseGet(() -> ex.getBindingResult().getGlobalErrors().stream()
+                        .findFirst()
+                        .map(error -> error.getDefaultMessage())
+                        .orElse("request validation failed"));
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", message);
+    }
+
+    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message) {
+        ApiErrorResponse body = ApiErrorResponse.builder()
+                .error(code)
+                .message(message)
+                .build();
+        return ResponseEntity.status(status).body(body);
     }
 }
