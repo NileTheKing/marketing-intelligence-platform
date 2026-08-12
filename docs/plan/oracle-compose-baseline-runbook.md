@@ -23,6 +23,19 @@ Keep these existing scripts as historical/k8s reproduction references:
 - `scripts/load-test/check-results.sh`
 - `scripts/load-test/monitor-load-test.sh`
 
+## CI/CD Execution Policy
+
+Status: active
+
+- `.github/workflows/ci.yml` runs automatically on pushes to `main` and pull requests. It verifies tests, required Testcontainers suites, Docker Compose configuration, and image builds; it does not change the VM.
+- `.github/workflows/deploy-compose.yml` is the current Oracle VM deployment workflow. It originally ran automatically after a successful CI workflow, but that `workflow_run` trigger was disabled on 2026-07-01 to avoid unintended rebuilds during repeated load tests and frequent code changes.
+- Current Oracle deployment is manual. Run `Deploy to Oracle VM Compose` through GitHub Actions (`workflow_dispatch`) or deploy directly on the VM when an explicit deployment is intended.
+- The Actions deployment connects to the VM over SSH, pulls `origin/main`, runs `docker compose up -d --build`, restarts `axon-nginx`, and checks Core, Entry, and nginx health.
+- CI failure is a visible verification failure, but it does not technically prevent the manual deployment workflow or a direct VM deployment. Check CI before triggering either manual path.
+- `.github/workflows/deploy.yml` is the legacy KT Cloud K2P workflow. It is manual-only and is not the current Oracle deployment path.
+
+Do not re-enable automatic CI-success deployment while load-test artifacts or the running VM state must be preserved across frequent commits. Re-enable it only after automatic deployment is again the desired release policy.
+
 ## Baseline Assumptions
 
 - Axon services run on the Oracle VM Docker Compose environment.
@@ -153,10 +166,10 @@ curl -sS -o /tmp/nginx-entry.out -w "nginx_entry_http=%{http_code} time=%{time_t
 Expected unauthenticated probe result:
 
 ```text
-nginx_entry_http=403
+nginx_entry_http=401
 ```
 
-`403` means nginx reached Entry and Spring Security rejected the unauthenticated request. That is a valid path check. `502`, `499`, or `connect() failed ... upstream` means do not run the load test yet.
+`401` means nginx reached Entry and Spring Security rejected the unauthenticated request. That is a valid path check. `502`, `499`, or `connect() failed ... upstream` means do not run the load test yet.
 
 Warm-run before/after loop. Use this when comparing code or config changes and the first post-deploy cold run would hide the real signal:
 

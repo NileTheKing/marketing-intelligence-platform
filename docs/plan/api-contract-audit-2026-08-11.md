@@ -1,6 +1,6 @@
 # API 계약 감사 — 2026-08-11
 
-상태: active (감사 완료, Security·행동 identity·이미지 업로드 경계 구현 완료)
+상태: active (감사 완료, Security·행동 identity·이미지 업로드·대표 HTTP 계약 구현 완료)
 
 아래 P0/P1/P2의 `현재`는 **감사 당시 상태**다. 이후 반영 여부는 바로 아래 구현 상태 표를 기준으로 판단한다.
 
@@ -23,6 +23,11 @@ URL 모양보다 **누가 호출할 수 있는지, 언제 성공으로 확정하
 | P0-3 USER/ADMIN 미분리 | **해결** | 운영 화면·명령·조회는 ADMIN, validation은 인증 사용자, Entry 메타 조회는 SYSTEM |
 | P0-4 행동 이벤트 identity | **해결** | 로그인 userId는 JWT에서만 결정, 익명 이벤트는 필수 sessionId와 `userId=null` 사용 |
 | P1-9 파일 업로드 | **해결** | ADMIN 전용, 5MB·25MP 제한, 실제 PNG/JPEG decode 후 서버 확장자로 저장 |
+| P1-5 오류 상태 구분 | **부분 해결** | CampaignActivity·Event·Coupon의 미존재/잘못된 요청/상태 충돌을 404·400·409로 구분. Campaign·Product는 후속 범위 |
+| P1-8 입력 검증 | **부분 해결** | CampaignActivity의 수치·기간과 Coupon 업무 규칙을 HTTP 400으로 거절. Payment·Dashboard는 후속 범위 |
+| P1-10 실제 HTTP 계약 테스트 | **부분 해결** | Entry·BehaviorEvent·CampaignActivity·Event·Coupon 대표 계약을 실제 Security·MVC 체인으로 검증 |
+| P2-1 생성 응답 | **부분 해결** | CampaignActivity·Event·Coupon 생성은 201과 `Location` 반환. Campaign 생성은 유지 |
+| P2-2 Coupon 삭제 응답 | **해결** | 성공 시 204 No Content 반환 |
 
 관리자는 `AXON_ADMIN_EMAILS`에 지정한 이메일과 정확히 일치하는 OAuth 사용자를 로그인 시 승격한다. 설정에서 이메일을 지워도 기존 DB의 ADMIN을 자동 강등하지 않는다. 배포 전 운영자 이메일을 환경 변수에 넣어야 신규 환경에서 관리자 화면이 잠기지 않는다.
 
@@ -142,3 +147,26 @@ URL 모양보다 **누가 호출할 수 있는지, 언제 성공으로 확정하
 - `BehaviorEventControllerTest`: body `userId` 위조 무시, JWT userId 우선, 익명 sessionId 필수 계약 검증
 - `ImageStorageServiceTest`: 실행 가능한 SVG/HTML, 손상 이미지, 5MB 초과 파일 거절과 서버 확장자 재결정 검증
 - `FileControllerTest`, `SecurityConfigTest`: 잘못된 이미지 400과 USER 403/ADMIN 허용 검증
+
+### 3단계: 대표 HTTP 계약과 실패 시나리오
+
+전체 controller를 같은 깊이로 복제하지 않고, 프로젝트의 두 축인 Entry·BehaviorEvent와 후속 동작을 정의하는 CampaignActivity·Event·Coupon을 대표 계약으로 선택했다.
+
+| 경로 | 고정한 계약 |
+| --- | --- |
+| Entry `POST /api/v1/entries` | 익명 401, Bean Validation 400, 성공 200, 미존재 404, 중복 409, 매진 410, 예상 밖 실패 500 |
+| Entry `POST /api/v1/behavior-events` | 익명 session 필수, body userId 무시, 인증 identity 우선, validation 실패 400, 접수 202 |
+| Core `POST /api/v1/campaigns/{id}/activities` | 익명 401, USER 403, ADMIN 생성 201 + `Location`, 입력 실패 400, campaign 미존재 404 |
+| Core `PATCH /api/v1/campaign-activities/{id}/status` | 허용되지 않은 상태 전이 409 |
+| Core Event/Coupon 관리 | active Event 공개 조회, USER 변경 차단, ADMIN 생성 201, 잘못된 정의 400, 미존재 404, Coupon 삭제 204 |
+
+- Entry는 인증 실패 응답이 403으로 나오던 설정을 확인하고, 미인증 API 호출은 401을 반환하도록 수정했다.
+- CampaignActivity는 일반 `IllegalArgumentException`·`IllegalStateException` 대신 미존재와 업무 충돌을 구분해 404·409로 매핑했다.
+- `CampaignActivityRequest`는 음수 가격·수량·예산 및 `endDate <= startDate`를 controller 진입 전에 거절한다.
+- Event와 Coupon은 클라이언트 입력 오류와 리소스 미존재를 별도 예외로 구분해 400·404로 반환한다.
+- HTTP → service → MySQL 저장을 통과하는 Testcontainers 테스트 4건을 추가했다: 정상 저장, validation 실패 무저장, 미존재 campaign 무저장, 상태 전이 거절 후 기존 상태 유지.
+- CI는 FCFS Kafka→MySQL, CampaignActivity HTTP→MySQL, Entry Redis 통합 테스트 보고서가 없거나 skip되면 실패한다.
+
+로컬 검증은 Entry 47 tests(3 skipped), Core 184 tests(25 skipped), failures/errors 0이다. 로컬 Docker 부재로 HTTP→MySQL/Redis 대상은 skip됐으므로 push 후 CI에서 skip 방지 단계까지 확인해야 한다.
+
+JaCoCo는 가능한 업무 경우의 수가 아니라 실행된 line·branch 비율로만 사용했다. 이번 변경 전→후는 Entry line 40.5→42.6%, branch 33.4→36.6%, Core line 39.9→40.5%, branch 33.5→33.7%다. 전체 비율을 목표로 테스트를 양산하지 않고 위 실패 계약을 우선했다.

@@ -56,14 +56,20 @@
 - **문제:** 실제 실행 경로를 판단하기 어려웠고, 실패한 작업을 빠른 성공처럼 해석할 수 있었다.
 - **변경 후:** production에서 참조되지 않는 과거 경로와 거짓 신뢰를 주는 테스트를 제거했다. 현재 FCFS 원장 처리, 스케줄러 락, Gemini Function Calling 경로는 유지했다.
 
+### 9. API 테스트와 CI 통합 테스트 신뢰성
+
+- **변경 전:** controller 테스트 상당수가 Security·Bean Validation·전역 예외 처리를 우회했다. Testcontainers는 Docker가 없으면 suite 전체가 skip돼도 CI 명령 자체는 성공할 수 있었다.
+- **문제:** 미인증 Entry가 403을 반환하거나 관리 API의 예상 가능한 실패가 500으로 새는 계약 오류를 기존 테스트가 발견하지 못했다. CI 환경 이상으로 핵심 MySQL·Redis 검증이 실행되지 않아도 성공으로 오인할 수 있었다.
+- **변경 후:** Entry·BehaviorEvent·CampaignActivity·Event·Coupon의 대표 계약을 실제 MVC 필터 체인으로 검증한다. CI는 FCFS Kafka→MySQL, CampaignActivity HTTP→MySQL, Entry Redis suite의 JUnit XML이 없거나 skip되면 실패한다.
+
 ## 검증
 
-- Core: 143 tests, failure 0, error 0, skip 21
-- Entry: 32 tests, failure 0, error 0, skip 3
+- Core: 184 tests, failure 0, error 0, skip 25
+- Entry: 47 tests, failure 0, error 0, skip 3
 - `git diff --check` 통과
 - `docker compose -f compose.app.yml config --quiet` 통과
 
-로컬 환경에는 Docker가 없어 Testcontainers 테스트가 명시적으로 skip됐다. GitHub Actions CI는 Docker가 있는 runner에서 전체 테스트를 실행하며 최근 main 실행은 정상이다. 이번 dirty 변경은 push 또는 PR 뒤 CI에서 Cohort SQL, EntityGraph, FCFS 트랜잭션·중복 전달 테스트까지 확인해야 한다.
+로컬 환경에는 Docker가 없어 Testcontainers 테스트가 명시적으로 skip됐다. 이번 변경부터 GitHub Actions CI는 핵심 suite가 실제 실행되지 않으면 별도 검사 단계에서 실패한다. 현재 dirty 변경은 push 또는 PR 뒤 CI 결과 확인이 필요하다.
 
 ## 남은 작업
 

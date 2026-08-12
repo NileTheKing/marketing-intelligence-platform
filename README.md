@@ -95,7 +95,7 @@ graph TB
 
 - **현재 환경**: Oracle Cloud A1 Flex VM + Docker Compose. Entry/Core, Redis, Kafka, MySQL, Elasticsearch를 단일 VM에서 구성하고 k6 baseline과 APM 진단을 수행합니다.
 - **관측·검증**: OpenTelemetry Java Agent·Jaeger trace, Spring Actuator/Micrometer 지표, nginx·애플리케이션 로그, k6 결과와 DB 수렴을 함께 봅니다.
-- **배포 경로**: VM Compose 배포와 baseline 실행은 GitHub Actions 수동 workflow(`workflow_dispatch`)로 재현합니다.
+- **검증·배포 경계**: CI는 push/PR마다 자동 검증하지만 VM을 변경하지 않습니다. Oracle VM Compose CD의 CI-success 자동 트리거는 반복 부하테스트와 잦은 코드 변경 중 의도하지 않은 재배포를 막기 위해 비활성화했으며, 배포는 GitHub Actions 수동 workflow(`workflow_dispatch`) 또는 명시적인 VM 직접 실행으로만 수행합니다.
 - **과거 환경**: K2P Kubernetes 매니페스트는 역사적 배포 참고용으로 `k8s/`, `helm/`에 보존합니다. 현재 대표 수치와 혼용하지 않습니다.
 
 ---
