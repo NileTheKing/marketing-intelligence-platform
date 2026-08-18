@@ -69,14 +69,15 @@
 - `git diff --check` 통과
 - `docker compose -f compose.app.yml config --quiet` 통과
 
-로컬 환경에는 Docker가 없어 Testcontainers 테스트가 명시적으로 skip됐다. 이번 변경부터 GitHub Actions CI는 핵심 suite가 실제 실행되지 않으면 별도 검사 단계에서 실패한다. 현재 dirty 변경은 push 또는 PR 뒤 CI 결과 확인이 필요하다.
+로컬 환경에는 Docker가 없어 Testcontainers 테스트가 명시적으로 skip됐다. 이번 변경부터 GitHub Actions CI는 핵심 suite가 실제 실행되지 않으면 별도 검사 단계에서 실패한다.
+
+2026-08-12 최종 GitHub Actions CI에서 Core·Entry 전체 테스트, FCFS Kafka→MySQL·CampaignActivity HTTP→MySQL·Entry Redis 필수 suite의 skip 방지 검사, Docker Compose 설정 검증, Core·Entry 이미지 빌드까지 모두 통과했다. 이 과정에서 전체 context에 섞인 보안 테스트용 probe와 테스트 클래스별 Testcontainers 종료 문제도 수정했다. 검증 실행은 [CI run 31561058964](https://github.com/NileTheKing/marketing-intelligence-platform/actions/runs/31561058964)이다.
 
 ## 남은 작업
 
 | 우선순위 | 작업 | 현재 보류한 이유 |
 | --- | --- | --- |
 | 필수 | 과거 Git 이력에 노출된 Naver OAuth 자격증명 재발급 | 파일 수정만으로 기존 키가 무효화되지는 않음 |
-| 높음 | 이번 변경을 GitHub Actions CI에서 검증 | 로컬에서는 Docker 통합 테스트가 skip됨 |
 | 높음 | SHOP 결제 정합성·신뢰 경계 재설계 | 다른 팀원 담당 범위이며 callback·가격 권위·트랜잭션·멱등키 합의 필요 |
 | 중간 | Flyway/Liquibase 도입 후 `ddl-auto: validate` 전환 | 기준 스키마 감사와 배포 전환을 함께 설계해야 함 |
 | 중간 | 쿠폰 poison 명령의 메시지별 DLT 격리 | 실제 발생 가능성과 처리 계약을 먼저 정해야 함 |

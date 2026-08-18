@@ -167,6 +167,6 @@ URL 모양보다 **누가 호출할 수 있는지, 언제 성공으로 확정하
 - HTTP → service → MySQL 저장을 통과하는 Testcontainers 테스트 4건을 추가했다: 정상 저장, validation 실패 무저장, 미존재 campaign 무저장, 상태 전이 거절 후 기존 상태 유지.
 - CI는 FCFS Kafka→MySQL, CampaignActivity HTTP→MySQL, Entry Redis 통합 테스트 보고서가 없거나 skip되면 실패한다.
 
-로컬 검증은 Entry 47 tests(3 skipped), Core 184 tests(25 skipped), failures/errors 0이다. 로컬 Docker 부재로 HTTP→MySQL/Redis 대상은 skip됐으므로 push 후 CI에서 skip 방지 단계까지 확인해야 한다.
+감사 직후 로컬 검증은 Entry 47 tests(3 skipped), Core 184 tests(25 skipped), failures/errors 0이었다. 로컬 Docker 부재로 skip된 HTTP→MySQL/Redis 대상은 2026-08-12 GitHub Actions에서 실제 실행했다. Core·Entry 전체 테스트와 필수 Testcontainers suite의 skip 방지 검사, Compose 검증, 이미지 빌드까지 [CI run 31561058964](https://github.com/NileTheKing/marketing-intelligence-platform/actions/runs/31561058964)에서 통과했다.
 
 JaCoCo는 가능한 업무 경우의 수가 아니라 실행된 line·branch 비율로만 사용했다. 이번 변경 전→후는 Entry line 40.5→42.6%, branch 33.4→36.6%, Core line 39.9→40.5%, branch 33.5→33.7%다. 전체 비율을 목표로 테스트를 양산하지 않고 위 실패 계약을 우선했다.

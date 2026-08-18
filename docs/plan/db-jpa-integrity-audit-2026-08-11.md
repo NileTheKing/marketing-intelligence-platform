@@ -78,7 +78,7 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 - LTV 중복 키 DB 제약 테스트
 - `git diff --check` 통과
 
-로컬 Docker 부재로 Testcontainers 대상은 skip됐다. H2 기반 JPA 테스트와 단위 테스트는 통과했으며, MySQL 고유 동작과 LTV 제약 생성은 CI 및 다음 OCI 배포에서 다시 확인한다.
+로컬 Docker 부재로 Testcontainers 대상은 skip됐다. H2 기반 JPA 테스트와 단위 테스트는 통과했고, 2026-08-12 GitHub Actions에서는 MySQL·Kafka·Redis 컨테이너를 사용하는 Core 전체 suite와 필수 통합 테스트의 실제 실행까지 통과했다. 다만 LTV 유니크 제약을 기존 OCI 스키마에 반영하는 운영 마이그레이션은 아직 수행하지 않았으므로 다음 OCI 배포 검증 대상으로 유지한다.
 
 ## 별도 결정이 필요한 남은 작업
 
