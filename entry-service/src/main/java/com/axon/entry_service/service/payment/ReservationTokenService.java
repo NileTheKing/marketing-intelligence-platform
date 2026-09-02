@@ -12,7 +12,11 @@ import org.apache.commons.codec.digest.HmacAlgorithms;
 import org.apache.commons.codec.digest.HmacUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -32,6 +36,28 @@ public class ReservationTokenService {
 
     private static final long TOKEN_TTL_MINUTES = 5;
     private static final long APPROVALTOKEN_TTL_MINUTES = 30;
+    // Three 5-second broker waits plus 1- and 2-second backoffs need at most 18 seconds.
+    private static final long CONFIRMATION_LEASE_SECONDS = 30;
+    private static final String ACQUIRE_CONFIRMATION_LEASE_LUA = """
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 0
+            end
+            if not redis.call('SET', KEYS[2], '1', 'NX', 'EX', ARGV[1]) then
+                return 1
+            end
+            local ttl = redis.call('TTL', KEYS[1])
+            if ttl == -2 then
+                redis.call('DEL', KEYS[2])
+                return 0
+            end
+            if ttl >= 0 and ttl < tonumber(ARGV[1]) then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return 2
+            """;
+
+    private final RedisScript<Long> acquireConfirmationLeaseScript =
+            new DefaultRedisScript<>(ACQUIRE_CONFIRMATION_LEASE_LUA, Long.class);
 
     private String hmacSha256Hex(String data) {
         return new HmacUtils(HmacAlgorithms.HMAC_SHA_256, secretTokenKey).hmacHex(data);
@@ -72,10 +98,27 @@ public class ReservationTokenService {
         return redisTemplate.hasKey(redisKey);
     }
 
+    public ConfirmationLeaseResult tryAcquireConfirmationLease(String reservationToken) {
+        Long result = redisTemplate.execute(
+                acquireConfirmationLeaseScript,
+                List.of(reservationRedisKey(reservationToken), confirmationLeaseRedisKey(reservationToken)),
+                String.valueOf(CONFIRMATION_LEASE_SECONDS));
+        if (Long.valueOf(2L).equals(result)) {
+            return ConfirmationLeaseResult.ACQUIRED;
+        }
+        if (Long.valueOf(1L).equals(result)) {
+            return ConfirmationLeaseResult.ALREADY_PROCESSING;
+        }
+        return ConfirmationLeaseResult.MISSING;
+    }
+
+    public void releaseConfirmationLease(String reservationToken) {
+        redisTemplate.delete(confirmationLeaseRedisKey(reservationToken));
+    }
+
     // 1차 토큰 삭제
     public void removeToken(String token) {
-        String redisKey = TOKEN_PREFIX + token;
-        redisTemplate.delete(redisKey);
+        redisTemplate.delete(reservationRedisKey(token));
     }
 
     // 1차 토큰 조회
@@ -182,6 +225,7 @@ public class ReservationTokenService {
         try {
             removeToken(payload.getReservationToken());
             removeApprovalToken(payload.getUserId() + ":" + payload.getCampaignActivityId());
+            releaseConfirmationLease(payload.getReservationToken());
             log.info("토큰 정리 완료: userId={}, campaignActivityId={}", payload.getUserId(), payload.getCampaignActivityId());
         } catch (Exception e) {
             log.error("토큰 정리 중 오류 발생 (TTL로 자동 만료됨): userId={}, error={}", payload.getUserId(), e.getMessage());
@@ -190,5 +234,19 @@ public class ReservationTokenService {
 
     private String approvalRedisKey(String key) {
         return APPROVAL_PREFIX + key;
+    }
+
+    private String reservationRedisKey(String token) {
+        return TOKEN_PREFIX + token;
+    }
+
+    private String confirmationLeaseRedisKey(String reservationToken) {
+        return "PAYMENT_CONFIRMATION_LEASE:" + reservationToken;
+    }
+
+    public enum ConfirmationLeaseResult {
+        MISSING,
+        ALREADY_PROCESSING,
+        ACQUIRED
     }
 }

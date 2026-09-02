@@ -8,6 +8,7 @@ import com.axon.entry_service.dto.payment.PaymentPrepareRequest;
 import com.axon.entry_service.dto.payment.PaymentPrepareResponse;
 import com.axon.entry_service.service.payment.PaymentService;
 import com.axon.entry_service.service.payment.ReservationTokenService;
+import com.axon.entry_service.service.payment.ReservationTokenService.ConfirmationLeaseResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -85,15 +86,32 @@ public class PaymentController {
                     .body(PaymentConfirmationResponse.failure(ReservationResult.error(), "응모자와 요청자가 다릅니다."));
         }
 
+        ConfirmationLeaseResult leaseResult = reservationTokenService
+                .tryAcquireConfirmationLease(payload.getReservationToken());
+        if (leaseResult == ConfirmationLeaseResult.MISSING) {
+            log.warn("1차 토큰 만료 또는 없음: userId={}, campaignActivityId={}",
+                    currentUserId, payload.getCampaignActivityId());
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .body(PaymentConfirmationResponse.failure(ReservationResult.error(),
+                            "결제 시간이 만료되었습니다. 처음부터 다시 응모해주세요."));
+        }
+        if (leaseResult == ConfirmationLeaseResult.ALREADY_PROCESSING) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(PaymentConfirmationResponse.failure(ReservationResult.error(),
+                            "결제 확인 처리 중입니다. 잠시 후 다시 시도해주세요."));
+        }
+
         boolean success = paymentService.sendToKafkaWithRetry(payload, 3);
 
         if (success) {
             reservationTokenService.cleanup(payload);
             return ResponseEntity.ok(PaymentConfirmationResponse.success(null));
         } else {
+            reservationTokenService.releaseConfirmationLease(payload.getReservationToken());
             log.warn("Kafka 전송 최종 실패: userId={}, campaignActivityId={}", currentUserId, payload.getCampaignActivityId());
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(PaymentConfirmationResponse.failure(ReservationResult.error(), "일시적인 오류로 결제가 취소되었습니다. 처음부터 다시 응모해주세요."));
+                    .body(PaymentConfirmationResponse.failure(ReservationResult.error(),
+                            "일시적인 오류가 발생했습니다. 잠시 후 같은 결제 요청을 다시 시도해주세요."));
         }
     }
 }
