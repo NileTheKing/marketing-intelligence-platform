@@ -7,7 +7,6 @@ import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.service.RfmSegmentationService;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,8 +35,8 @@ class RfmSegmentationSchedulerTest {
         UserSummary summary = mock(UserSummary.class);
         when(summary.getUserId()).thenReturn(10L);
         when(summary.getLastPurchaseAt()).thenReturn(LocalDateTime.now().minusDays(10));
-        when(userSummaryRepository.findAll(PageRequest.of(0, 100)))
-                .thenReturn(new PageImpl<>(List.of(summary), PageRequest.of(0, 100), 1));
+        when(userSummaryRepository.findByUserIdGreaterThanOrderByUserIdAsc(
+                Long.MIN_VALUE, PageRequest.of(0, 100))).thenReturn(List.of(summary));
         when(purchaseRepository.findRfmMetricsByUserIdIn(List.of(10L)))
                 .thenReturn(List.of(new UserRfmMetricsDto(10L, 3, BigDecimal.valueOf(100_000))));
 
@@ -46,6 +45,8 @@ class RfmSegmentationSchedulerTest {
         verify(purchaseRepository).findRfmMetricsByUserIdIn(List.of(10L));
         verify(summary).updateRfmSegment(RfmSegment.VIP);
         verify(userSummaryRepository).saveAll(List.of(summary));
+        verify(userSummaryRepository).findByUserIdGreaterThanOrderByUserIdAsc(
+                Long.MIN_VALUE, PageRequest.of(0, 100));
     }
 
     @Test

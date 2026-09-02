@@ -5,6 +5,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRequest;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityResponse;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
+import com.axon.core_service.domain.dto.campaignactivityentry.CampaignActivityEntryCount;
 import com.axon.core_service.domain.product.Product;
 import com.axon.core_service.exception.BusinessConflictException;
 import com.axon.core_service.exception.ResourceNotFoundException;
@@ -14,6 +15,8 @@ import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.ProductRepository;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -180,13 +183,7 @@ public class CampaignActivityService {
      *         belonging to the campaign
      */
     public List<CampaignActivityResponse> getCampaignActivities(Long campaignId) {
-        return campaignActivityRepository.findAllByCampaign_Id(campaignId).stream()
-                .map(activity -> {
-                    long participantCount = campaignActivityEntryRepository
-                            .countByCampaignActivity_Id(activity.getId());
-                    return CampaignActivityResponse.from(activity, participantCount);
-                })
-                .toList();
+        return toResponsesWithParticipantCounts(campaignActivityRepository.findAllByCampaign_Id(campaignId));
     }
 
     /**
@@ -209,12 +206,24 @@ public class CampaignActivityService {
      *         activity and its participant count
      */
     public List<CampaignActivityResponse> getAllCampaignActivities() {
-        return campaignActivityRepository.findAll().stream()
-                .map(activity -> {
-                    long participantCount = campaignActivityEntryRepository
-                            .countByCampaignActivity_Id(activity.getId());
-                    return CampaignActivityResponse.from(activity, participantCount);
-                })
+        return toResponsesWithParticipantCounts(campaignActivityRepository.findAllWithProductAndCoupon());
+    }
+
+    private List<CampaignActivityResponse> toResponsesWithParticipantCounts(List<CampaignActivity> activities) {
+        if (activities.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Long> participantCountByActivity = campaignActivityEntryRepository
+                .countByCampaignActivityIds(activities.stream().map(CampaignActivity::getId).toList()).stream()
+                .collect(Collectors.toMap(
+                        CampaignActivityEntryCount::campaignActivityId,
+                        CampaignActivityEntryCount::participantCount));
+
+        return activities.stream()
+                .map(activity -> CampaignActivityResponse.from(
+                        activity,
+                        participantCountByActivity.getOrDefault(activity.getId(), 0L)))
                 .toList();
     }
 

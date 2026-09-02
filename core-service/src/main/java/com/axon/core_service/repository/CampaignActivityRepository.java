@@ -21,7 +21,12 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
      * @return a List of CampaignActivity belonging to the Campaign with the
      *         specified id; an empty list if none are found
      */
+    @EntityGraph(attributePaths = {"product", "coupon"})
     List<CampaignActivity> findAllByCampaign_Id(Long campaignId);
+
+    @EntityGraph(attributePaths = {"product", "coupon"})
+    @Query("SELECT ca FROM CampaignActivity ca")
+    List<CampaignActivity> findAllWithProductAndCoupon();
 
     @EntityGraph(attributePaths = {"product", "coupon"})
     List<CampaignActivity> findAllByStatus(CampaignActivityStatus status);

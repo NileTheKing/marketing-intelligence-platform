@@ -2,6 +2,7 @@ package com.axon.core_service.repository;
 
 import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntry;
 import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntryStatus;
+import com.axon.core_service.domain.dto.campaignactivityentry.CampaignActivityEntryCount;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,6 +52,15 @@ public interface CampaignActivityEntryRepository extends JpaRepository<CampaignA
      * @return the number of CampaignActivityEntry records linked to the specified campaign activity ID
      */
     Long countByCampaignActivity_Id(Long campaignActivityId);
+
+    @Query("SELECT new com.axon.core_service.domain.dto.campaignactivityentry.CampaignActivityEntryCount(" +
+            "e.campaignActivity.id, COUNT(e)) " +
+            "FROM CampaignActivityEntry e " +
+            "WHERE e.campaignActivity.id IN :activityIds " +
+            "GROUP BY e.campaignActivity.id")
+    List<CampaignActivityEntryCount> countByCampaignActivityIds(
+            @Param("activityIds") List<Long> activityIds);
+
     Long countByCampaignActivity_IdAndStatusAndCreatedAtBetween(
             Long campaignActivityId,
             CampaignActivityEntryStatus status,

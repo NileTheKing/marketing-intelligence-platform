@@ -12,8 +12,11 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 
 public interface UserSummaryRepository extends JpaRepository<UserSummary, Long> {
+
+    List<UserSummary> findByUserIdGreaterThanOrderByUserIdAsc(Long userId, Pageable pageable);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE UserSummary summary SET summary.lastPurchaseAt = :occurredAt " +

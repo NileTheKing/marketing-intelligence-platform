@@ -1,13 +1,16 @@
 package com.axon.core_service.service;
 
+import com.axon.core_service.domain.campaign.Campaign;
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dashboard.DashboardPeriod;
 import com.axon.core_service.domain.dashboard.FunnelStep;
 import com.axon.core_service.domain.dto.dashboard.DashboardResponse;
+import com.axon.core_service.domain.dto.dashboard.GlobalDashboardResponse;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.domain.dto.dashboard.PurchaseAggregate;
+import com.axon.core_service.domain.dto.dashboard.PurchaseAggregateByActivity;
 import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
 import org.junit.jupiter.api.DisplayName;
@@ -17,18 +20,61 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
+
+    @Test
+    @DisplayName("Global Dashboard는 캠페인이 여러 개여도 Purchase 집계를 한 번만 조회한다")
+    void getGlobalDashboardAggregatesPurchasesOnce() throws Exception {
+        RealtimeMetricsService realtimeMetricsService = mock(RealtimeMetricsService.class);
+        BehaviorEventService behaviorEventService = mock(BehaviorEventService.class);
+        CampaignRepository campaignRepository = mock(CampaignRepository.class);
+        CampaignActivityRepository campaignActivityRepository = mock(CampaignActivityRepository.class);
+        PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
+        DashboardService dashboardService = new DashboardService(
+                realtimeMetricsService,
+                behaviorEventService,
+                campaignRepository,
+                campaignActivityRepository,
+                purchaseRepository,
+                new DashboardMetricCalculator());
+
+        Campaign firstCampaign = campaign(1L, "first", BigDecimal.TEN);
+        Campaign secondCampaign = campaign(2L, "second", BigDecimal.valueOf(20));
+        firstCampaign.getCampaignActivities().add(activity(11L, firstCampaign));
+        secondCampaign.getCampaignActivities().add(activity(21L, secondCampaign));
+
+        when(campaignRepository.findAllWithActivities()).thenReturn(List.of(firstCampaign, secondCampaign));
+        when(behaviorEventService.getAllCampaignStats(any(), any())).thenReturn(Map.of());
+        when(behaviorEventService.getHourlyTraffic(any(), any(), any())).thenReturn(Map.of());
+        when(purchaseRepository.findConfirmedAggregatesByActivityIdsAndPeriod(any(), any(), any()))
+                .thenReturn(List.of(
+                        new PurchaseAggregateByActivity(11L, 2L, BigDecimal.valueOf(200)),
+                        new PurchaseAggregateByActivity(21L, 3L, BigDecimal.valueOf(300))));
+
+        GlobalDashboardResponse response = dashboardService.getGlobalDashboard();
+
+        assertThat(response.overview().purchaseCount()).isEqualTo(5L);
+        assertThat(response.overview().gmv()).isEqualByComparingTo("500");
+        verify(campaignRepository).findAllWithActivities();
+        verify(campaignRepository, never()).findAll();
+        verify(purchaseRepository, times(1))
+                .findConfirmedAggregatesByActivityIdsAndPeriod(any(), any(), any());
+    }
 
     @Test
     @DisplayName("CUSTOM Activity Dashboard는 지정한 종료 시각과 같은 길이의 이전 구간을 사용한다")
@@ -64,7 +110,7 @@ class DashboardServiceTest {
         dashboardService.getDashboardByActivity(activityId, DashboardPeriod.CUSTOM, start, end);
 
         verify(behaviorEventService).getHourlyTraffic(java.util.List.of(activityId), start, end);
-        verify(purchaseRepository, atLeastOnce())
+        verify(purchaseRepository, times(1))
                 .findConfirmedAggregateByActivityIdAndPeriod(activityId, start, end);
         verify(purchaseRepository)
                 .findConfirmedAggregateByActivityIdAndPeriod(activityId, previousStart, start);
@@ -170,5 +216,21 @@ class DashboardServiceTest {
                 .containsExactly(0L, 0L, 0L, 0L);
         verify(behaviorEventService, org.mockito.Mockito.never()).getFunnelStepCount(
                 eq(activityId), eq(CampaignActivityType.FIRST_COME_FIRST_SERVE), any(), any(), any());
+    }
+
+    private Campaign campaign(Long id, String name, BigDecimal budget) {
+        Campaign campaign = Campaign.builder().name(name).budget(budget).build();
+        ReflectionTestUtils.setField(campaign, "id", id);
+        return campaign;
+    }
+
+    private CampaignActivity activity(Long id, Campaign campaign) {
+        CampaignActivity activity = CampaignActivity.builder()
+                .campaign(campaign)
+                .name("activity-" + id)
+                .activityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .build();
+        ReflectionTestUtils.setField(activity, "id", id);
+        return activity;
     }
 }

@@ -4,7 +4,7 @@
 
 ## 결론
 
-현재 OCI 데이터에서 중복·고아·음수 값은 발견되지 않았다. 다만 정상 데이터가 유지된 이유 일부가 DB 제약이 아니라 단일 실행 순서와 애플리케이션 코드에 의존하고 있었다. 이번 작업은 재현 가능한 정합성 위험만 수정했으며, 스키마 마이그레이션과 결제 정책처럼 별도 합의가 필요한 작업은 분리했다.
+현재 OCI 데이터에서 중복·고아·음수 값은 발견되지 않았다. 다만 정상 데이터가 유지된 이유 일부가 DB 제약이 아니라 단일 실행 순서와 애플리케이션 코드에 의존하고 있었다. 이번 작업은 재현 가능한 정합성 위험을 수정했고, 2026-08-19 후속 작업에서 캠페인 수나 Activity 수에 따라 증가하던 Purchase·Entry 조회, SSE 중복 집계, RFM offset pagination을 정리했다. 운영 경로가 월 배치 결과 조회로 확정된 코호트의 과거 실시간 JVM 집계도 제거했다. 스키마 마이그레이션과 결제 정책처럼 별도 합의가 필요한 작업은 분리했다.
 
 ## 확인 범위
 
@@ -68,17 +68,54 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 - **변경 전:** 분산락과 `마지막 offset + 1` 계산만으로 중복을 피했고 DB에는 `(activity, monthOffset)` 제약이 없었다.
 - **변경 후:** 엔티티 스키마에 복합 유니크 제약을 추가하고 중복 저장 실패 테스트를 추가했다. OCI에는 아직 배포하지 않았으므로 실제 제약 반영은 다음 배포 검증 대상이다.
 
+### 7. Global Dashboard Purchase 집계
+
+- **변경 전:** 전체 Campaign을 읽은 뒤 Campaign마다 LAZY Activity 목록을 조회하고, 각 Campaign의 Activity ID로 confirmed Purchase 건수와 GMV를 다시 집계했다. Campaign이 `N`개이면 MySQL 조회가 구조적으로 `1 + N + N`까지 증가했다.
+- **위험:** 행동 통계의 Elasticsearch N+1은 제거되어 있었지만 MySQL Purchase 집계는 Campaign 수에 비례해 반복되어, Global Dashboard와 LLM 전역 조회에서 같은 종류의 확장 문제가 남아 있었다.
+- **변경 후:** Campaign과 Activity를 fetch join으로 한 번에 읽고, 모든 Activity의 Purchase 집계를 한 번의 `GROUP BY campaign_activity_id` 쿼리로 가져온 뒤 메모리에서 Campaign별로 합산한다. Campaign 수와 무관하게 이 범위의 MySQL 조회는 2회로 고정된다.
+
+### 8. Activity 목록 참여자 수
+
+- **변경 전:** Activity 목록을 읽은 뒤 각 Activity마다 `CampaignActivityEntry COUNT`를 호출했고, 응답 변환 중 Product/Coupon LAZY 조회도 발생할 수 있었다.
+- **위험:** Activity가 `N`개이면 참여자 수 조회만으로 N개의 추가 쿼리가 발생했다. 현재 OCI에는 Campaign/Activity가 각 1건이라 지연은 없었지만, 목록 조회 구조 자체에는 N+1이 남아 있었다.
+- **변경 후:** Activity와 Product/Coupon을 한 번에 조회하고, 대상 Activity 전체의 참여자 수를 `GROUP BY campaign_activity_id` 한 번으로 가져온다. Entry가 없는 Activity는 응답에서 0명으로 유지한다.
+- **인덱스 판단:** 참여자 집계는 기존 Entry 유니크 키 `(campaign_activity_id, user_id)`의 선두 컬럼을 활용할 수 있어 새 인덱스를 추가하지 않았다.
+
+### 9. Activity SSE Purchase 중복 집계
+
+- **변경 전:** Activity Dashboard 한 번의 계산에서 현재 기간 confirmed Purchase 집계를 overview와 funnel이 각각 호출했고, 이전 기간 집계까지 합쳐 Purchase 집계가 3회 발생했다. Activity SSE는 같은 계산을 2초마다 반복한다.
+- **위험:** 현재 기간의 동일 조건 집계가 SSE 연결 수와 갱신 횟수만큼 중복 실행됐다.
+- **변경 후:** 현재 기간과 이전 기간 Purchase 집계를 각각 한 번만 수행하고, 현재 기간 결과를 overview와 funnel이 공유한다. Activity 메타데이터도 한 번 읽어 overview, funnel, realtime 계산에 전달한다.
+
+### 10. RFM UserSummary 순회
+
+- **변경 전:** `Page<UserSummary>`와 page number 기반 offset pagination으로 100명씩 순회했다. 뒤 페이지로 갈수록 offset scan이 커지고, `Page` 생성을 위한 전체 COUNT가 반복될 수 있었다.
+- **위험:** 사용자 수가 증가하면 Purchase 집계 자체와 무관한 offset·COUNT 비용이 배치 페이지 수에 따라 증가한다.
+- **변경 후:** UserSummary PK인 `user_id`를 cursor로 사용해 `WHERE user_id > :lastSeenUserId ORDER BY user_id LIMIT 100` 형태로 순회한다. Purchase RFM 집계, 산식, 100명 단위 처리와 기존 분산 실행 잠금은 유지한다.
+
+### 11. 사용하지 않는 실시간 코호트 계산
+
+- **변경 전:** 운영 API는 `cohort_ltv_monthly_stats`에 저장된 월 배치 결과만 반환하고 결과가 없으면 202를 반환하지만, 서비스에는 코호트 사용자의 Purchase 전체 엔티티를 읽어 JVM에서 LTV와 재구매율을 계산하는 과거 public 메서드가 남아 있었다.
+- **위험:** 실제 운영 경로와 호출되지 않는 과거 경로가 함께 보여 SQL 오프로딩의 현재 경계가 불명확했고, 사용하지 않는 Purchase Repository 쿼리도 유지됐다.
+- **변경 후:** 실시간 JVM 집계 메서드와 전용 helper 및 미사용 기간/재구매 조회 쿼리를 제거했다. 월 배치가 사용하는 첫 구매 코호트 조회와 SQL 집계, 저장된 배치 결과 응답은 보존했다.
+
 ## 검증
 
-- Core 전체: 56 suites, 167 tests, failures/errors 0, skipped 21
+- 2026-08-19 Core 전체: 61 suites, 190 tests, failures/errors 0, skipped 25
 - UserSummary 조건부 갱신 JPA 테스트
 - 재고 동기화 액티비티별 실패 격리 테스트
 - 쿠폰 잠금 경로 테스트
 - Product/Purchase 불변식 테스트
 - LTV 중복 키 DB 제약 테스트
+- Campaign 수가 늘어도 Global Purchase 집계 Repository 호출이 1회인지 확인하는 서비스 테스트
+- Activity 수가 늘어도 Entry 참여자 집계 Repository 호출이 1회인지 확인하는 서비스 테스트
+- Campaign–Activity fetch join과 Entry `GROUP BY` projection JPA 테스트
+- Activity Dashboard의 동일 현재 기간 Purchase 집계 호출이 1회인지 확인하는 서비스 테스트
+- UserSummary PK cursor 조회 JPA 테스트와 RFM scheduler 회귀 테스트
+- Cohort API 응답이 저장된 월 배치 결과만 사용하는 단위 테스트
 - `git diff --check` 통과
 
-로컬 Docker 부재로 Testcontainers 대상은 skip됐다. H2 기반 JPA 테스트와 단위 테스트는 통과했고, 2026-08-12 GitHub Actions에서는 MySQL·Kafka·Redis 컨테이너를 사용하는 Core 전체 suite와 필수 통합 테스트의 실제 실행까지 통과했다. 다만 LTV 유니크 제약을 기존 OCI 스키마에 반영하는 운영 마이그레이션은 아직 수행하지 않았으므로 다음 OCI 배포 검증 대상으로 유지한다.
+2026-08-19 로컬 전체 테스트와 새 H2 기반 JPA projection 테스트가 통과했다. 2026-08-12 GitHub Actions에서는 MySQL·Kafka·Redis 컨테이너를 사용하는 Core 전체 suite와 필수 통합 테스트의 실제 실행까지 통과했지만, 이번 조회 최적화 diff의 GitHub Actions 검증은 push 이후 대상이다. LTV 유니크 제약을 기존 OCI 스키마에 반영하는 운영 마이그레이션도 아직 수행하지 않았으므로 다음 OCI 배포 검증 대상으로 유지한다.
 
 ## 별도 결정이 필요한 남은 작업
 
@@ -88,12 +125,12 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 | 높음 | SHOP 결제 기록 경계 재설계 | GET 성공 콜백, 클라이언트 가격, Purchase·Coupon 원자성은 다른 담당자의 결제 계약과 함께 정해야 함 |
 | 중간 | 재고 부족 시 동기화 정책 결정 | 현재는 보유 재고까지만 차감한다. 실패·대사 이력·활성화 차단 중 제품 정책 선택이 필요 |
 | 중간 | Product/Purchase/CampaignActivity 금액 precision 통일 | 실제 DB가 Product `decimal(38,2)`, Purchase·Activity `decimal(10,2)`로 달라 기존 값 범위 확인이 필요 |
-| 낮음 | 관리자 Campaign 목록의 participant count N+1 제거 | 현재 OCI Campaign/Activity가 각 1건이고 hot path가 아니므로 측정 없이 구조를 늘리지 않음 |
 | 후속 | DTO 변환 완료 후 OSIV 비활성화 | 아직 일부 SSR 조회가 LAZY 연관관계에 의존하므로 선행 정리가 필요 |
 
 ## 의도적으로 하지 않은 것
 
 - 모든 엔티티에 범용 `@Version`을 붙이지 않았다.
 - 성능 근거 없이 인덱스를 대량 추가하지 않았다.
+- OCI 데이터 규모가 작으므로 이번 쿼리 수 개선을 응답시간 단축 수치로 표현하지 않았다.
 - FK가 없는 scalar ID를 일괄 연관관계로 바꾸지 않았다. 이벤트 원장과 삭제 정책을 먼저 정해야 한다.
 - 현재 실패 사례가 없는 범용 Repository·도메인 이벤트·Inbox/Outbox 계층을 추가하지 않았다.

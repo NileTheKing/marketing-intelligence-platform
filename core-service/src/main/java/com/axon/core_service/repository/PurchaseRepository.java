@@ -42,20 +42,6 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         /**
-         * 특정 Activity의 특정 기간 내 모든 구매 조회
-         */
-        @Query("SELECT p FROM Purchase p " +
-                        "WHERE p.campaignActivityId = :activityId " +
-                        "AND p.status = 'CONFIRMED' " +
-                        "AND p.purchaseAt >= :startDate " +
-                        "AND p.purchaseAt < :endDate " +
-                        "ORDER BY p.purchaseAt ASC")
-        List<Purchase> findByCampaignActivityIdAndPeriod(
-                        @Param("activityId") Long activityId,
-                        @Param("startDate") LocalDateTime startDate,
-                        @Param("endDate") LocalDateTime endDate);
-
-        /**
          * 특정 Activity의 첫 구매 고객만 조회 (Cohort 정의)
          * 해당 기간 내 구매 중, 유저의 생애 첫 구매인 경우만 조회
          */
@@ -75,46 +61,10 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
                         @Param("startDate") LocalDateTime startDate,
                         @Param("endDate") LocalDateTime endDate);
 
-        /**
-         * 특정 userId 목록의 모든 구매 이력 조회 (재구매 추적용)
-         */
-        @Query("SELECT p FROM Purchase p " +
-                        "WHERE p.userId IN :userIds " +
-                        "AND p.status = 'CONFIRMED' " +
-                        "ORDER BY p.userId, p.purchaseAt ASC")
-        List<Purchase> findByUserIdIn(@Param("userIds") List<Long> userIds);
-
-        /**
-         * 특정 유저 목록의 특정 기간 내 구매 이력 조회 (LTV 증분 계산용)
-         */
-        @Query("SELECT p FROM Purchase p " +
-                        "WHERE p.userId IN :userIds " +
-                        "AND p.status = 'CONFIRMED' " +
-                        "AND p.purchaseAt >= :startDate " +
-                        "AND p.purchaseAt < :endDate " +
-                        "ORDER BY p.purchaseAt ASC")
-        List<Purchase> findByUserIdInAndPeriod(
-                        @Param("userIds") List<Long> userIds,
-                        @Param("startDate") LocalDateTime startDate,
-                        @Param("endDate") LocalDateTime endDate);
-
         @Query("SELECT new com.axon.core_service.domain.dto.user.UserRfmMetricsDto(" +
                         "p.userId, COUNT(p), COALESCE(SUM(p.price * p.quantity), 0)) " +
                         "FROM Purchase p WHERE p.userId IN :userIds AND p.status = 'CONFIRMED' GROUP BY p.userId")
         List<UserRfmMetricsDto> findRfmMetricsByUserIdIn(@Param("userIds") List<Long> userIds);
-
-        /**
-         * 특정 Activity에서 재구매한 고객 수 조회
-         */
-        @Query("SELECT COUNT(DISTINCT p.userId) FROM Purchase p " +
-                        "WHERE p.campaignActivityId = :activityId " +
-                        "AND p.status = 'CONFIRMED' " +
-                        "AND p.userId IN :cohortUserIds " +
-                        "GROUP BY p.userId " +
-                        "HAVING COUNT(p.id) > 1")
-        Long countRepeatCustomers(
-                        @Param("activityId") Long activityId,
-                        @Param("cohortUserIds") List<Long> cohortUserIds);
 
         /**
          * 특정 유저가 구매(참여)한 모든 CampaignActivity ID 조회

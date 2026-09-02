@@ -147,7 +147,7 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
                 .atMost(Duration.ofSeconds(10))
                 .pollInterval(Duration.ofMillis(500))
                 .untilAsserted(() -> {
-                    List<Purchase> purchases = purchaseRepository.findByUserIdIn(List.of(userId));
+                    List<Purchase> purchases = purchaseRepository.findByUserId(userId);
                     assertThat(purchases).isNotEmpty();
                     assertThat(purchases.get(0).getUserId()).isEqualTo(userId);
                     assertThat(purchases.get(0).getProductId()).isEqualTo(productId);

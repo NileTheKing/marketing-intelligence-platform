@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.axon.core_service.domain.user.Role;
 import com.axon.core_service.domain.user.User;
 import java.time.LocalDateTime;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -37,5 +38,24 @@ class UserSummaryRepositoryTest {
                 .get()
                 .extracting(summary -> summary.getLastPurchaseAt())
                 .isEqualTo(newer);
+    }
+
+    @Test
+    void readsTheNextSummaryPageByUserIdWithoutOffsetOrCount() {
+        User first = userRepository.save(User.builder()
+                .name("first")
+                .email("first-keyset@example.com")
+                .role(Role.USER)
+                .build());
+        User second = userRepository.saveAndFlush(User.builder()
+                .name("second")
+                .email("second-keyset@example.com")
+                .role(Role.USER)
+                .build());
+
+        var summaries = userSummaryRepository.findByUserIdGreaterThanOrderByUserIdAsc(
+                first.getId(), PageRequest.of(0, 1));
+
+        assertThat(summaries).extracting("userId").containsExactly(second.getId());
     }
 }

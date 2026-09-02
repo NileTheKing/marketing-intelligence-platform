@@ -8,13 +8,13 @@ import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.service.RfmSegmentationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -40,22 +40,23 @@ public class RfmSegmentationScheduler {
     private void runRfmSegmentationBatchLocked() {
         log.info("========== RFM Segmentation Batch Started ==========");
 
-        int pageNum = 0;
         int pageSize = 100;
+        long lastSeenUserId = Long.MIN_VALUE;
         LocalDateTime now = LocalDateTime.now();
 
         while (true) {
-            Page<UserSummary> page = userSummaryRepository.findAll(PageRequest.of(pageNum, pageSize));
-            if (page.isEmpty()) {
+            List<UserSummary> summaries = userSummaryRepository
+                    .findByUserIdGreaterThanOrderByUserIdAsc(lastSeenUserId, PageRequest.of(0, pageSize));
+            if (summaries.isEmpty()) {
                 break;
             }
 
             Map<Long, UserRfmMetricsDto> metricsByUserId = purchaseRepository
-                    .findRfmMetricsByUserIdIn(page.getContent().stream().map(UserSummary::getUserId).toList())
+                    .findRfmMetricsByUserIdIn(summaries.stream().map(UserSummary::getUserId).toList())
                     .stream()
                     .collect(Collectors.toMap(UserRfmMetricsDto::userId, Function.identity()));
 
-            for (UserSummary summary : page.getContent()) {
+            for (UserSummary summary : summaries) {
                 Long userId = summary.getUserId();
 
                 UserRfmMetricsDto metrics = metricsByUserId.get(userId);
@@ -72,12 +73,12 @@ public class RfmSegmentationScheduler {
             }
 
             // JPA 더티 체킹/saveAll을 통한 벌크 업데이트 진행
-            userSummaryRepository.saveAll(page.getContent());
+            userSummaryRepository.saveAll(summaries);
+            lastSeenUserId = summaries.getLast().getUserId();
 
-            if (page.isLast()) {
+            if (summaries.size() < pageSize) {
                 break;
             }
-            pageNum++;
         }
 
         log.info("========== RFM Segmentation Batch Completed ==========");

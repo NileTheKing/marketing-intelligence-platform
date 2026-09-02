@@ -47,20 +47,27 @@ public class DashboardService {
         LocalDateTime start = window.start();
         LocalDateTime end = window.end();
 
-        OverviewData overview = buildOverviewDataByActivity(activityId, start, end);
+        CampaignActivity activity = campaignActivityRepository.findById(activityId).orElse(null);
+        PurchaseAggregate currentPurchases = confirmedPurchases(activityId, start, end);
+        PurchaseAggregate previousPurchases = confirmedPurchases(
+                activityId, window.previousStart(), window.previousEnd());
+
+        OverviewData overview = buildOverviewDataByActivity(
+                activityId, activity, currentPurchases, start, end);
 
         OverviewData previousOverview = buildOverviewDataByActivity(
-                activityId, window.previousStart(), window.previousEnd());
+                activityId, activity, previousPurchases, window.previousStart(), window.previousEnd());
 
         List<FunnelStep> funnelSteps = List.of(
                 FunnelStep.VISIT,
                 FunnelStep.ENGAGE,
                 FunnelStep.QUALIFY,
                 FunnelStep.PURCHASE);
-        List<FunnelStepData> funnel = buildFunnelByActivity(activityId, funnelSteps, start, end);
+        List<FunnelStepData> funnel = buildFunnelByActivity(
+                activityId, activity, currentPurchases, funnelSteps, start, end);
 
         List<TimeSeriesData> trafficTrend = getTrafficTrend(activityId, start, end);
-        RealtimeData realtime = buildRealtimeDataByActivity(activityId);
+        RealtimeData realtime = buildRealtimeDataByActivity(activityId, activity);
 
         return new DashboardResponse(
                 activityId,
@@ -73,15 +80,16 @@ public class DashboardService {
                 realtime);
     }
 
-    private OverviewData buildOverviewDataByActivity(Long activityId, LocalDateTime start, LocalDateTime end) {
-        CampaignActivity activity = campaignActivityRepository
-                .findById(activityId).orElse(null);
+    private OverviewData buildOverviewDataByActivity(Long activityId,
+            CampaignActivity activity,
+            PurchaseAggregate confirmedPurchases,
+            LocalDateTime start,
+            LocalDateTime end) {
         CampaignActivityType activityType = activity != null ? activity.getActivityType() : null;
 
         Long visits = getStepCount(activityId, activityType, FunnelStep.VISIT, start, end);
         Long engages = getStepCount(activityId, activityType, FunnelStep.ENGAGE, start, end);
         Long qualifies = getStepCount(activityId, activityType, FunnelStep.QUALIFY, start, end);
-        PurchaseAggregate confirmedPurchases = confirmedPurchases(activityId, start, end);
         Long purchases = confirmedPurchases.purchaseCount();
 
         java.math.BigDecimal budget = activity != null && activity.getBudget() != null
@@ -114,16 +122,16 @@ public class DashboardService {
     }
 
     private List<FunnelStepData> buildFunnelByActivity(Long activityId,
+            CampaignActivity activity,
+            PurchaseAggregate confirmedPurchases,
             List<FunnelStep> funnelSteps,
             LocalDateTime start,
             LocalDateTime end) {
-        CampaignActivityType activityType = campaignActivityRepository.findById(activityId)
-                .map(CampaignActivity::getActivityType)
-                .orElse(null);
+        CampaignActivityType activityType = activity != null ? activity.getActivityType() : null;
         return funnelSteps.stream()
                 .map(step -> new FunnelStepData(step,
                         step == FunnelStep.PURCHASE
-                                ? confirmedPurchases(activityId, start, end).purchaseCount()
+                                ? confirmedPurchases.purchaseCount()
                                 : getStepCount(activityId, activityType, step, start, end)))
                 .toList();
     }
@@ -144,13 +152,12 @@ public class DashboardService {
         }
     }
 
-    private RealtimeData buildRealtimeDataByActivity(Long activityId) {
+    private RealtimeData buildRealtimeDataByActivity(Long activityId, CampaignActivity activity) {
         Long participantCount = realtimeMetricsService.getParticipantCount(activityId);
 
-        Long totalStock = campaignActivityRepository.findById(activityId)
-                .map(com.axon.core_service.domain.campaignactivity.CampaignActivity::getLimitCount)
-                .map(Long::valueOf)
-                .orElse(100L);
+        Long totalStock = activity != null && activity.getLimitCount() != null
+                ? activity.getLimitCount().longValue()
+                : 100L;
 
         Long remainingStock = realtimeMetricsService.getRemainingStock(participantCount, totalStock);
 
@@ -364,7 +371,7 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public GlobalDashboardResponse getGlobalDashboard() {
-        List<com.axon.core_service.domain.campaign.Campaign> campaigns = campaignRepository.findAll();
+        List<com.axon.core_service.domain.campaign.Campaign> campaigns = campaignRepository.findAllWithActivities();
         LocalDateTime start = LocalDateTime.now().minusDays(30);
         LocalDateTime end = LocalDateTime.now();
 
@@ -385,15 +392,27 @@ public class DashboardService {
         List<CampaignRankData> visitRanking = new ArrayList<>();
         List<CampaignEfficiencyData> efficiencyData = new ArrayList<>();
 
+        List<Long> allActivityIds = campaigns.stream()
+                .flatMap(campaign -> campaign.getCampaignActivities().stream())
+                .map(CampaignActivity::getId)
+                .toList();
+        Map<Long, PurchaseAggregateByActivity> confirmedPurchaseByActivity = allActivityIds.isEmpty()
+                ? Map.of()
+                : purchaseRepository.findConfirmedAggregatesByActivityIdsAndPeriod(allActivityIds, start, end).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                PurchaseAggregateByActivity::activityId,
+                                aggregate -> aggregate));
+
         for (com.axon.core_service.domain.campaign.Campaign campaign : campaigns) {
             Long campaignId = campaign.getId();
             Map<String, Long> stats = allStats.getOrDefault(campaignId, Collections.emptyMap());
 
             Long visits = stats.getOrDefault("PAGE_VIEW", 0L);
             List<Long> activityIds = campaign.getCampaignActivities().stream().map(CampaignActivity::getId).toList();
-            PurchaseAggregate campaignPurchases = activityIds.isEmpty()
-                    ? PurchaseAggregate.empty()
-                    : sumAggregates(purchaseRepository.findConfirmedAggregatesByActivityIdsAndPeriod(activityIds, start, end));
+            PurchaseAggregate campaignPurchases = sumAggregates(activityIds.stream()
+                    .map(confirmedPurchaseByActivity::get)
+                    .filter(aggregate -> aggregate != null)
+                    .toList());
             Long purchases = campaignPurchases.purchaseCount();
             java.math.BigDecimal campaignGmv = campaignPurchases.gmv();
 
@@ -432,10 +451,6 @@ public class DashboardService {
             // Pass empty list to signify "All Activities" or implement getAllHourlyTraffic
             // For now, let's aggregate traffic from all campaigns we iterated
             // Or better, let behaviorEventService handle "all" query
-            List<Long> allActivityIds = new ArrayList<>();
-            for (com.axon.core_service.domain.campaign.Campaign c : campaigns) {
-                c.getCampaignActivities().forEach(a -> allActivityIds.add(a.getId()));
-            }
             Map<Integer, Long> hourlyTraffic = behaviorEventService.getHourlyTraffic(allActivityIds, start, end);
             globalHeatmap = new HeatmapData(hourlyTraffic);
         } catch (IOException e) {
