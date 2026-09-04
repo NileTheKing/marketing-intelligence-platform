@@ -117,6 +117,16 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 
 2026-08-19 로컬 전체 테스트와 새 H2 기반 JPA projection 테스트가 통과했다. 2026-08-12 GitHub Actions에서는 MySQL·Kafka·Redis 컨테이너를 사용하는 Core 전체 suite와 필수 통합 테스트의 실제 실행까지 통과했지만, 이번 조회 최적화 diff의 GitHub Actions 검증은 push 이후 대상이다. LTV 유니크 제약을 기존 OCI 스키마에 반영하는 운영 마이그레이션도 아직 수행하지 않았으므로 다음 OCI 배포 검증 대상으로 유지한다.
 
+## 후속 측정 계획: RFM keyset pagination
+
+상태: planned. 현재 변경은 query shape 개선이며, 아직 응답시간 또는 배치 시간 개선 수치를 주장하지 않는다.
+
+- **목적:** offset pagination과 PK cursor(keyset)의 비용 차이, 그리고 전체 RFM 배치 시간을 같은 조건에서 분리해 확인한다.
+- **환경:** 로컬 MySQL에 `UserSummary` 100,000건과 confirmed `Purchase` 약 500,000건을 고정 seed한다. page size는 현재 구현과 같은 100건으로 둔다.
+- **비교:** 이전 offset query와 현재 keyset query를 같은 데이터에서 비교한다. offset은 0, 50,000, 90,000 지점, keyset은 동일 위치의 cursor를 사용한다.
+- **측정:** `EXPLAIN ANALYZE`의 실제 scan/examined rows와 SQL 실행시간, 전체 scheduler 실행시간 및 처리 건수를 기록한다. 전체 시간에는 Purchase 집계와 UserSummary 갱신 비용도 포함됨을 함께 명시한다.
+- **표현 원칙:** 반복 측정으로 같은 경향이 확인되기 전에는 포트폴리오 성능 수치로 사용하지 않는다. 수치가 없으면 대량 배치의 offset/COUNT 비용을 제거한 예방적 query-shape 개선으로만 기록한다.
+
 ## 별도 결정이 필요한 남은 작업
 
 | 우선순위 | 작업 | 지금 합치지 않은 이유 |
