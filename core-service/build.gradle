@@ -98,6 +98,35 @@ dependencyManagement {
 tasks.named('test') {
 	useJUnitPlatform()
 
+    [
+        'cohort.sql.benchmark',
+        'cohort.benchmark.artifact-dir',
+        'cohort.benchmark.profile',
+        'cohort.benchmark.cohort-users',
+        'cohort.benchmark.purchases-per-cohort-user',
+        'cohort.benchmark.unrelated-purchases',
+        'cohort.benchmark.iterations',
+        'purchase.index.write.benchmark',
+        'purchase.index.write.artifact-dir',
+        'purchase.index.write.background-rows',
+        'purchase.index.write.background-users',
+        'purchase.index.write.rows',
+        'purchase.index.write.transaction-batch-size',
+        'purchase.index.write.iterations'
+    ].each { propertyName ->
+        if (System.getProperty(propertyName) != null) {
+            systemProperty propertyName, System.getProperty(propertyName)
+        }
+    }
+
+    if (System.getProperty('cohort.sql.benchmark') == 'true'
+            || System.getProperty('purchase.index.write.benchmark') == 'true') {
+        def dockerApiVersion = System.getProperty('cohort.benchmark.docker-api-version', '1.40')
+        environment 'DOCKER_API_VERSION', dockerApiVersion
+        systemProperty 'api.version', dockerApiVersion
+        maxHeapSize = System.getProperty('cohort.benchmark.max-heap', '2g')
+    }
+
     // Intelligent Colima Auto-Detection
     // Only apply the socket override if we detect a Colima-based Docker environment.
     def dockerHostEnv = System.getenv("DOCKER_HOST") ?: ""

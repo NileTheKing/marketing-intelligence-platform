@@ -127,6 +127,29 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 - **측정:** `EXPLAIN ANALYZE`의 실제 scan/examined rows와 SQL 실행시간, 전체 scheduler 실행시간 및 처리 건수를 기록한다. 전체 시간에는 Purchase 집계와 UserSummary 갱신 비용도 포함됨을 함께 명시한다.
 - **표현 원칙:** 반복 측정으로 같은 경향이 확인되기 전에는 포트폴리오 성능 수치로 사용하지 않는다. 수치가 없으면 대량 배치의 offset/COUNT 비용을 제거한 예방적 query-shape 개선으로만 기록한다.
 
+### 코호트 SQL 오프로딩 재현 harness
+
+과거 JVM 집계와 현재 SQL 오프로딩의 포트폴리오 근거는 별도 테스트 harness로 재측정한다. `core-service/src/test/java/com/axon/core_service/benchmark/CohortSqlOffloadingBenchmarkIT.java`는 과거의 Purchase 엔티티 적재 + Java 집계와 현재 SQL 집계만 비교하며, 전체 scheduler/HTTP 성능을 주장하지 않는다. 같은 Testcontainers MySQL 데이터에서 결과 일치, 반복 실행시간, `EXPLAIN ANALYZE`, 마지막 실행의 JFR allocation/GC 기록을 남긴다.
+
+```bash
+./scripts/benchmark/run-cohort-sql-offloading-benchmark.sh smoke
+./scripts/benchmark/run-cohort-sql-offloading-benchmark.sh index-selectivity
+./scripts/benchmark/run-cohort-sql-offloading-benchmark.sh hydration-jfr
+./scripts/benchmark/run-cohort-sql-offloading-benchmark.sh index-write-cost
+```
+
+`smoke`는 harness 검증용이고 포트폴리오 수치에 사용하지 않는다. `index-selectivity`는 FCFS 당첨자 800명과 user당 구매 이력 10건을 기준으로 8,000 cohort purchases(전체 1,000,000건의 0.8%)를 생성해 실행계획을 확인한다. `hydration-jfr`는 10,000 cohort users, cohort user당 50 purchases, unrelated 500,000 purchases로 cohort 비중 50%를 만들며, JPA entity hydration의 JVM allocation/GC 관찰용이다. 두 profile의 목적을 섞어 성능 수치나 인덱스 효과를 주장하지 않는다. 실행 당시의 Java/MySQL/Docker 환경과 artifact를 함께 저장한 뒤에만 수치를 갱신한다.
+
+2026-09-04 로컬 Testcontainers MySQL에서 `hydration-jfr` 조건(기존 `portfolio` alias)을 세 번 실행했다. 5회 반복 중앙값은 이전 entity hydration + Java 집계가 1,866ms/1,876ms/1,837ms, 현재 SQL 집계가 1,615ms/1,647ms/1,868ms였다. 두 번은 SQL이 약 12~13% 빨랐지만, 메타데이터를 남긴 세 번째 실행에서는 SQL이 약 2% 느렸다. 따라서 이 환경의 실행시간 퍼센트는 포트폴리오 성과로 쓰지 않는다.
+
+반면 마지막 JFR 기록에서는 entity hydration 쪽이 allocation event 2,137개와 GC 5회를 남겼고, SQL 쪽은 27개와 GC 0회였다. JFR event의 `allocationSize` 합계도 약 41MiB 대 약 300KiB였다. 이는 전체 할당량이 아니라 JFR이 기록한 이벤트 합계지만, 대량 엔티티 hydration을 없앤 구조적 차이를 뒷받침한다. 이 결과는 query-shape 비교의 로컬 증거이며 전체 scheduler/운영 성능 수치는 아니다.
+
+`hydration-jfr`의 `EXPLAIN ANALYZE`에서는 코호트 대상이 전체 1,000,000건 중 500,000건으로 넓어 두 방식 모두 table scan을 선택했다. 따라서 이 조건에서 `(user_id, purchase_at)` 인덱스가 scanned rows를 `456 -> 1`로 줄였다고 주장할 수 없다.
+
+별도 `index-selectivity` 조건에서는 FCFS 당첨자 800명 x 구매 이력 10건, 즉 8,000건(전체 1,000,000건의 0.8%)을 생성했다. 2026-09-04 로컬 Testcontainers MySQL에서 독립 실행을 세 번 반복했고, 각 실행의 5회 반복 중앙값은 legacy 149ms/122ms/81ms, SQL 23ms/30ms/37ms였다. 실행 단위 중앙값의 중앙값은 legacy 122ms, SQL 30ms다. 이는 과거 entity hydration + Java 집계 대비 SQL 집계가 이 microbenchmark에서 약 75% 낮은 실행시간을 보였다는 로컬 측정값이다. 전체 scheduler/HTTP/운영 처리량 성과로 일반화하지 않는다. `EXPLAIN ANALYZE`에서는 legacy lookup이 8,000 rows, SQL monthly aggregate가 620 rows를 읽으며 두 쿼리 모두 `idx_purchase_user_history` index range scan을 선택했다. 낮은 선택도에서 복합 인덱스가 날짜 조건까지 활용될 수 있다는 직접 근거로 사용한다.
+
+`idx_purchase_user_history`의 읽기 이득만 보고 쓰기 우세 Purchase 원장에 인덱스를 정당화하지 않기 위해, 별도 `index-write-cost` harness를 추가했다. 1,000,000건의 background Purchase가 있는 임시 MySQL에서 현재 Core와 같은 20건 트랜잭션 단위로 800건을 JPA `IDENTITY` insert하고, 해당 복합 인덱스만 drop/add해 비교한다. 2026-09-04 독립 실행 세 번의 실행 단위 중앙값은 인덱스 없음 325ms, 인덱스 있음 320ms였고, 20건 batch p95의 중앙값은 12ms, 11ms였다. 이 차이는 측정 잡음 범위이므로 인덱스가 쓰기를 빠르게 하거나 쓰기 비용이 없다고 주장하지 않는다. 다만 이 프로젝트의 FCFS 목표 쓰기 형태에서는 측정 가능한 insert 성능 저하가 관측되지 않았다는 근거로만 사용한다. Kafka·Entry·UserSummary·HTTP는 의도적으로 제외한 microbenchmark이며, E2E payment 부하의 DB 수렴 결과와 혼동하지 않는다.
+
 ## 별도 결정이 필요한 남은 작업
 
 | 우선순위 | 작업 | 지금 합치지 않은 이유 |
