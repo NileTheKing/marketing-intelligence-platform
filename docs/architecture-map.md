@@ -44,6 +44,7 @@
           최종 실패 메시지만 command DLT
       → UserSummary 별도 projection 트랜잭션
           실패: USER_SUMMARY_PROJECTION_FAILED에 기록
+      → 매일 03:00 DB 대사: Purchase 원장과 UserSummary 비교 후 불일치 자동 rebuild
       → 새 Purchase의 행동 로그 발행
   → 필수 DB 처리/실패 기록 완료 후 listener 반환 → batch offset commit
 ```

@@ -29,6 +29,24 @@ public interface UserSummaryRepository extends JpaRepository<UserSummary, Long> 
     @Query("SELECT summary FROM UserSummary summary WHERE summary.userId = :userId")
     Optional<UserSummary> findByIdForUpdate(@Param("userId") Long userId);
 
+    /**
+     * Returns only users whose summary differs from the latest confirmed purchase.
+     * The left join also finds summaries that retain a value after all purchases
+     * have been cancelled or refunded.
+     */
+    @Query(value = """
+            SELECT summary.user_id AS userId,
+                   MAX(purchase.purchase_at) AS expectedLastPurchaseAt,
+                   summary.last_purchase_at AS observedLastPurchaseAt
+            FROM user_summary summary
+            LEFT JOIN purchases purchase
+              ON purchase.user_id = summary.user_id
+             AND purchase.status = 'CONFIRMED'
+            GROUP BY summary.user_id, summary.last_purchase_at
+            HAVING NOT (MAX(purchase.purchase_at) <=> summary.last_purchase_at)
+            """, nativeQuery = true)
+    List<UserSummaryPurchaseMismatch> findPurchaseSummaryMismatches();
+
     @Query("SELECT summary.userId FROM UserSummary summary " +
             "WHERE summary.userId IN :userIds AND summary.rfmSegment = :rfmSegment")
     List<Long> findUserIdsByUserIdInAndRfmSegment(

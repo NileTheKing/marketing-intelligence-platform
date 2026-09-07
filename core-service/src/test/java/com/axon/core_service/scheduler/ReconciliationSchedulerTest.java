@@ -3,8 +3,11 @@ package com.axon.core_service.scheduler;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.repository.UserSummaryPurchaseMismatch;
+import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
+import com.axon.core_service.service.UserSummaryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,10 +33,16 @@ class ReconciliationSchedulerTest {
     private PurchaseRepository purchaseRepository;
 
     @Mock
+    private UserSummaryRepository userSummaryRepository;
+
+    @Mock
     private CorePipelineMetrics pipelineMetrics;
 
     @Mock
     private ReconciliationIssueService reconciliationIssueService;
+
+    @Mock
+    private UserSummaryService userSummaryService;
 
     @Mock
     private SchedulerExecutionLock schedulerExecutionLock;
@@ -88,6 +97,54 @@ class ReconciliationSchedulerTest {
         verify(pipelineMetrics).recordReconciliationResult(1);
         verify(reconciliationIssueService).detectGhostPurchase(ghostPurchase);
         // 로깅 로직 수행 중 NPE 등 크러시가 발생하지 않는지 검증합니다.
+    }
+
+    @Test
+    @DisplayName("UserSummary 불일치를 발견하면 원장 기준으로 복구하고 issue를 남기지 않는다")
+    void reconcileUserSummaries_RepairsMismatch() {
+        UserSummaryPurchaseMismatch mismatch = mismatchWithUserId(7L);
+        runSchedulerTask();
+        when(userSummaryRepository.findPurchaseSummaryMismatches()).thenReturn(List.of(mismatch));
+
+        reconciliationScheduler.detectGhostPurchases();
+
+        verify(userSummaryService).rebuildPurchaseSummary(7L);
+        verify(reconciliationIssueService).resolveUserSummaryMismatch(7L);
+        verify(reconciliationIssueService, never()).detectUserSummaryMismatch(any(), any(), any());
+        verify(pipelineMetrics).recordUserSummaryReconciliationResult(1);
+        verify(pipelineMetrics).recordUserSummaryRepair(true);
+    }
+
+    @Test
+    @DisplayName("UserSummary 복구 실패 시 사용자별 reconciliation issue를 upsert한다")
+    void reconcileUserSummaries_RecordsIssueWhenRepairFails() {
+        LocalDateTime expected = LocalDateTime.of(2026, 9, 1, 12, 0);
+        LocalDateTime observed = null;
+        UserSummaryPurchaseMismatch mismatch = mismatch(8L, expected, observed);
+        runSchedulerTask();
+        when(userSummaryRepository.findPurchaseSummaryMismatches()).thenReturn(List.of(mismatch));
+        doThrow(new IllegalStateException("summary unavailable"))
+                .when(userSummaryService).rebuildPurchaseSummary(8L);
+
+        reconciliationScheduler.detectGhostPurchases();
+
+        verify(reconciliationIssueService).detectUserSummaryMismatch(8L, expected, observed);
+        verify(reconciliationIssueService, never()).resolveUserSummaryMismatch(any());
+        verify(pipelineMetrics).recordUserSummaryRepair(false);
+    }
+
+    private UserSummaryPurchaseMismatch mismatch(Long userId, LocalDateTime expected, LocalDateTime observed) {
+        UserSummaryPurchaseMismatch mismatch = mock(UserSummaryPurchaseMismatch.class);
+        when(mismatch.getUserId()).thenReturn(userId);
+        when(mismatch.getExpectedLastPurchaseAt()).thenReturn(expected);
+        when(mismatch.getObservedLastPurchaseAt()).thenReturn(observed);
+        return mismatch;
+    }
+
+    private UserSummaryPurchaseMismatch mismatchWithUserId(Long userId) {
+        UserSummaryPurchaseMismatch mismatch = mock(UserSummaryPurchaseMismatch.class);
+        when(mismatch.getUserId()).thenReturn(userId);
+        return mismatch;
     }
 
     private void runSchedulerTask() {

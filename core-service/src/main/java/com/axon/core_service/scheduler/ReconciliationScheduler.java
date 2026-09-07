@@ -3,7 +3,10 @@ package com.axon.core_service.scheduler;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.repository.UserSummaryPurchaseMismatch;
+import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
+import com.axon.core_service.service.UserSummaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,6 +23,8 @@ import java.util.List;
 public class ReconciliationScheduler {
 
     private final PurchaseRepository purchaseRepository;
+    private final UserSummaryRepository userSummaryRepository;
+    private final UserSummaryService userSummaryService;
     private final CorePipelineMetrics pipelineMetrics;
     private final ReconciliationIssueService reconciliationIssueService;
     private final SchedulerExecutionLock schedulerExecutionLock;
@@ -34,8 +39,10 @@ public class ReconciliationScheduler {
     @Scheduled(cron = "0 0 3 * * ?")
     public void detectGhostPurchases() {
         schedulerExecutionLock.runIfAcquired("reconciliation",
-                () -> transactionTemplate.executeWithoutResult(status ->
-                        pipelineMetrics.recordReconciliationScan(this::detectGhostPurchasesInTransaction)));
+                () -> pipelineMetrics.recordReconciliationScan(() -> {
+                    transactionTemplate.executeWithoutResult(status -> detectGhostPurchasesInTransaction());
+                    reconcileUserSummaries();
+                }));
     }
 
     private void detectGhostPurchasesInTransaction() {
@@ -77,5 +84,40 @@ public class ReconciliationScheduler {
         }
 
         log.warn("[Reconciliation] 종료: 총 {}건의 수동 처리 필요.", ghostPurchases.size());
+    }
+
+    private void reconcileUserSummaries() {
+        List<UserSummaryPurchaseMismatch> mismatches;
+        try {
+            mismatches = userSummaryRepository.findPurchaseSummaryMismatches();
+        } catch (RuntimeException e) {
+            pipelineMetrics.recordReconciliationFailure();
+            throw e;
+        }
+
+        pipelineMetrics.recordUserSummaryReconciliationResult(mismatches.size());
+        if (mismatches.isEmpty()) {
+            log.info("[Reconciliation] 정상: UserSummary 불일치가 없습니다.");
+            return;
+        }
+
+        log.warn("[Reconciliation] UserSummary 불일치 {}건을 점검합니다.", mismatches.size());
+        for (UserSummaryPurchaseMismatch mismatch : mismatches) {
+            try {
+                userSummaryService.rebuildPurchaseSummary(mismatch.getUserId());
+                reconciliationIssueService.resolveUserSummaryMismatch(mismatch.getUserId());
+                pipelineMetrics.recordUserSummaryRepair(true);
+                log.info("[Reconciliation] UserSummary 복구 완료: userId={}", mismatch.getUserId());
+            } catch (RuntimeException e) {
+                pipelineMetrics.recordUserSummaryRepair(false);
+                reconciliationIssueService.detectUserSummaryMismatch(
+                        mismatch.getUserId(),
+                        mismatch.getExpectedLastPurchaseAt(),
+                        mismatch.getObservedLastPurchaseAt());
+                log.error("[Reconciliation] UserSummary 복구 실패: userId={}, expected={}, observed={}",
+                        mismatch.getUserId(), mismatch.getExpectedLastPurchaseAt(),
+                        mismatch.getObservedLastPurchaseAt(), e);
+            }
+        }
     }
 }

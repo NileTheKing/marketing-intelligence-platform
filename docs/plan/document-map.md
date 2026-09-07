@@ -33,7 +33,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/rfm-audience-segment-v1-plan.md` | active (implemented) | RFM repair and RFM-only AudienceSegment filter for MarketingRule; excludes generic segment DSL and membership pre-computation |
 | `docs/plan/behavior-event-schema-v1.md` | active (implemented, ES cutover pending) | Behavior-event property contract, Entry normalization, MarketingRule condition boundary, and ES strict/flattened mapping |
 | `docs/plan/purchase-cancellation-and-campaign-product-v1-plan.md` | active (implemented) | campaign-only product policy, post-payment cancellation state, and MySQL commercial projection correction |
-| `docs/plan/reconciliation-issue-v1-plan.md` | active (implemented) | durable FCFS reconciliation issue history and operator review flow; no automatic repair |
+| `docs/plan/reconciliation-issue-v1-plan.md` | active (implemented) | durable FCFS reconciliation issue history; daily UserSummary projection repair from the Purchase ledger, with failed repairs retained for operator review |
 | `docs/portfolio-evidence-writing.md` | active | T-file evidence-writing protocol and portfolio claim boundaries |
 
 ## Active / Current Implementation References
@@ -53,7 +53,7 @@ These are still useful, but code must win if there is a conflict.
 |---|---|---|
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/프로젝트_전체그림.md` | active | neutral project overview and portfolio interpretation boundary |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T1_*.md` | active | FCFS Redis Lua consistency story |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T2_*.md` | active | Kafka transaction pipeline and batch contamination story |
+| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T2_*.md` | historical | 2025-12~2026-04 queue/BEFORE_COMMIT Kafka pipeline and batch-contamination evidence; not the current FCFS implementation |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T3_*.md` | active | JS SDK, Kafka, Elasticsearch behavior pipeline |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T6_*.md` | active | MarketingRule behavior trigger campaign |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T8_*.md` | active | bounded LLM Function Calling and tool metadata |
@@ -63,6 +63,7 @@ These are still useful, but code must win if there is a conflict.
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T25_*.md` | active | webhook failure isolation |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T26_*.md` | active | common funnel modeling and unsupported-type boundary |
 | `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T27_*.md` | active | OTel/Jaeger/Actuator based FCFS/nginx bottleneck diagnosis and Docker Compose payment load-test results |
+| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T28_*.md` | active | current Entry+Purchase ledger transaction, UserSummary projection reconciliation, and repair boundary |
 
 ## Reference Documents
 

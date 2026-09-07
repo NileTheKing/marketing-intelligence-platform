@@ -272,6 +272,9 @@ mock 테스트만 추가하고 끝내지 않는다. 실제 Spring 트랜잭션 �
   사용한다.
 - projection-failure 전송 실패는 listener 경계까지 전파된다.
 - 재전달 시 기존 Purchase여도 UserSummary 갱신을 다시 시도한다.
+- projection-failure 토픽은 실패 증거와 관측 경로이며 별도 recovery consumer가
+  아니다. 매일 03:00 DB 대사가 Purchase 원장과 UserSummary를 비교해
+  UserSummary를 재계산하는 자동 복구 안전망이다.
 - 행동 로그 이벤트는 원장 커밋 이후에만 발행된다.
 - 기존 Purchase의 단순 재전달에서는 행동 로그를 다시 발행하지 않는다.
 
@@ -351,8 +354,8 @@ Status: completed on 2026-08-03
 - bounded in-memory queue, pause/resume backpressure
 - Inbox
 - Outbox
-- 자동 UserSummary 복구 worker
-- 역방향 자동 대사/수정
+- projection-failure 토픽 recovery consumer/worker
+- Purchase 원장이나 Entry를 수정하는 역방향 자동 대사
 - Webhook 전달 구조 변경
 - unsupported campaign type 전반의 정책 변경
 - k3s 전환

@@ -17,6 +17,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -97,5 +98,47 @@ class ReconciliationIssueServiceTest {
         assertThat(issue.getEvidence()).isEqualTo("missing entry");
         verify(pipelineMetrics, times(2)).setOpenReconciliationIssueCount(
                 ReconciliationIssueType.GHOST_PURCHASE, 0L);
+    }
+
+    @Test
+    void userSummaryMismatchesUseDistinctUserFingerprints() {
+        when(issueRepository.findByFingerprint(anyString())).thenReturn(Optional.empty());
+        when(issueRepository.save(any(ReconciliationIssue.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(issueRepository.countByStatusAndIssueType(
+                ReconciliationIssueStatus.OPEN, ReconciliationIssueType.USER_SUMMARY_MISMATCH))
+                .thenReturn(0L);
+
+        ReconciliationIssue first = issueService.detectUserSummaryMismatch(
+                1L, LocalDateTime.of(2026, 9, 1, 12, 0), null);
+        ReconciliationIssue second = issueService.detectUserSummaryMismatch(
+                2L, LocalDateTime.of(2026, 9, 1, 12, 0), null);
+
+        assertThat(first.getFingerprint()).isEqualTo("USER_SUMMARY_MISMATCH:user:1");
+        assertThat(second.getFingerprint()).isEqualTo("USER_SUMMARY_MISMATCH:user:2");
+        assertThat(first.getFingerprint()).isNotEqualTo(second.getFingerprint());
+    }
+
+    @Test
+    void resolvingOneUserSummaryMismatchDoesNotResolveAnotherUser() {
+        ReconciliationIssue userOne = ReconciliationIssue.open(
+                ReconciliationIssueType.USER_SUMMARY_MISMATCH,
+                "USER_SUMMARY_MISMATCH:user:1", null, null, 1L,
+                100L, null, "user one mismatch", LocalDateTime.now());
+        ReconciliationIssue userTwo = ReconciliationIssue.open(
+                ReconciliationIssueType.USER_SUMMARY_MISMATCH,
+                "USER_SUMMARY_MISMATCH:user:2", null, null, 2L,
+                100L, null, "user two mismatch", LocalDateTime.now());
+        when(issueRepository.findByFingerprint("USER_SUMMARY_MISMATCH:user:1"))
+                .thenReturn(Optional.of(userOne));
+        when(issueRepository.countByStatusAndIssueType(
+                ReconciliationIssueStatus.OPEN, ReconciliationIssueType.USER_SUMMARY_MISMATCH))
+                .thenReturn(1L);
+
+        issueService.resolveUserSummaryMismatch(1L);
+
+        assertThat(userOne.getStatus()).isEqualTo(ReconciliationIssueStatus.RESOLVED);
+        assertThat(userTwo.getStatus()).isEqualTo(ReconciliationIssueStatus.OPEN);
+        verify(issueRepository).findByFingerprint("USER_SUMMARY_MISMATCH:user:1");
     }
 }

@@ -16,12 +16,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReconciliationIssueService {
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Seoul");
 
     private final ReconciliationIssueRepository issueRepository;
     private final CorePipelineMetrics pipelineMetrics;
@@ -61,6 +64,37 @@ public class ReconciliationIssueService {
         );
     }
 
+    @Transactional
+    public ReconciliationIssue detectUserSummaryMismatch(Long userId,
+                                                          LocalDateTime expectedLastPurchaseAt,
+                                                          LocalDateTime observedLastPurchaseAt) {
+        String evidence = "Latest confirmed Purchase.purchaseAt=" + expectedLastPurchaseAt
+                + "; UserSummary.lastPurchaseAt=" + observedLastPurchaseAt;
+        return upsert(
+                ReconciliationIssueType.USER_SUMMARY_MISMATCH,
+                null,
+                null,
+                userId,
+                toEpochMillis(expectedLastPurchaseAt),
+                toEpochMillis(observedLastPurchaseAt),
+                evidence
+        );
+    }
+
+    @Transactional
+    public void resolveUserSummaryMismatch(Long userId) {
+        issueRepository.findByFingerprint(fingerprint(
+                        ReconciliationIssueType.USER_SUMMARY_MISMATCH, null, null, userId))
+                .ifPresent(issue -> {
+                    if (issue.getStatus() != ReconciliationIssueStatus.RESOLVED) {
+                        issue.resolve("UserSummary rebuilt from confirmed Purchase ledger", LocalDateTime.now());
+                        refreshOpenIssueCount(ReconciliationIssueType.USER_SUMMARY_MISMATCH);
+                        log.info("[ReconciliationIssue] resolved: type={}, issueId={}, userId={}",
+                                issue.getIssueType(), issue.getId(), userId);
+                    }
+                });
+    }
+
     @Transactional(readOnly = true)
     public List<ReconciliationIssue> getOpenIssues() {
         return issueRepository.findAllByStatusOrderByLastDetectedAtDesc(ReconciliationIssueStatus.OPEN);
@@ -85,7 +119,7 @@ public class ReconciliationIssueService {
     private ReconciliationIssue upsert(ReconciliationIssueType issueType, Long campaignActivityId,
                                        Long purchaseId, Long userId, Long expectedValue,
                                        Long observedValue, String evidence) {
-        String fingerprint = fingerprint(issueType, campaignActivityId, purchaseId);
+        String fingerprint = fingerprint(issueType, campaignActivityId, purchaseId, userId);
         LocalDateTime now = LocalDateTime.now();
 
         ReconciliationIssue issue = issueRepository.findByFingerprint(fingerprint)
@@ -120,7 +154,19 @@ public class ReconciliationIssueService {
     }
 
     private String fingerprint(ReconciliationIssueType issueType, Long campaignActivityId, Long purchaseId) {
+        return fingerprint(issueType, campaignActivityId, purchaseId, null);
+    }
+
+    private String fingerprint(ReconciliationIssueType issueType, Long campaignActivityId,
+                               Long purchaseId, Long userId) {
+        if (issueType == ReconciliationIssueType.USER_SUMMARY_MISMATCH) {
+            return issueType.name() + ":user:" + userId;
+        }
         return issueType.name() + ":" + campaignActivityId + ":" + (purchaseId != null ? purchaseId : "-");
+    }
+
+    private Long toEpochMillis(LocalDateTime value) {
+        return value == null ? null : value.atZone(BUSINESS_ZONE).toInstant().toEpochMilli();
     }
 
     private String requireNote(String note) {

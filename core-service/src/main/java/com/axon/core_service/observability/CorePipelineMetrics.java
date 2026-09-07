@@ -19,6 +19,7 @@ public class CorePipelineMetrics {
     private final DistributionSummary purchaseFlushBatchSize;
     private final Counter purchaseIndividualRetry;
     private final AtomicInteger reconciliationMismatchCount = new AtomicInteger();
+    private final AtomicInteger userSummaryMismatchCount = new AtomicInteger();
     private final EnumMap<ReconciliationIssueType, AtomicInteger> openReconciliationIssueCounts =
             new EnumMap<>(ReconciliationIssueType.class);
     private final Timer reconciliationScanTimer;
@@ -39,6 +40,11 @@ public class CorePipelineMetrics {
 
         Gauge.builder("axon.reconciliation.mismatch.count", reconciliationMismatchCount, AtomicInteger::get)
                 .description("Mismatch count found by the most recent reconciliation run")
+                .register(meterRegistry);
+
+        Gauge.builder("axon.reconciliation.user_summary.mismatch.count", userSummaryMismatchCount,
+                        AtomicInteger::get)
+                .description("UserSummary mismatches found by the most recent reconciliation run")
                 .register(meterRegistry);
 
         for (ReconciliationIssueType issueType : ReconciliationIssueType.values()) {
@@ -83,6 +89,21 @@ public class CorePipelineMetrics {
     public void recordReconciliationFailure() {
         Counter.builder("axon.reconciliation.run")
                 .tag("outcome", "failure")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordUserSummaryReconciliationResult(int mismatchCount) {
+        userSummaryMismatchCount.set(mismatchCount);
+        Counter.builder("axon.reconciliation.user_summary.run")
+                .tag("outcome", mismatchCount == 0 ? "clean" : "mismatch")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordUserSummaryRepair(boolean success) {
+        Counter.builder("axon.reconciliation.user_summary.repair")
+                .tag("outcome", success ? "success" : "failure")
                 .register(meterRegistry)
                 .increment();
     }

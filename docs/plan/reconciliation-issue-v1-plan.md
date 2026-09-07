@@ -5,7 +5,8 @@ Status: `active (implemented)`
 ## Goal
 
 Turn FCFS consistency mismatches from transient logs into reviewable operational
-records without introducing automatic data repair.
+records, while automatically repairing the derived UserSummary projection from
+the Purchase ledger during the daily reconciliation run.
 
 ```text
 Redis FCFS admission count
@@ -16,6 +17,12 @@ persisted Purchase count
 
 Ghost Purchase (missing Entry)
           -> ReconciliationIssue
+
+Purchase latest CONFIRMED timestamp
+          vs
+UserSummary.lastPurchaseAt
+          -> rebuild UserSummary
+          -> ReconciliationIssue only if repair fails
 
 confirmed Purchase count
           -> existing Product stock sync (outside V1 issue scope)
@@ -30,6 +37,9 @@ confirmed Purchase count
   concepts.
 - `ReconciliationScheduler` can detect ghost purchases, but its output is log
   and metric oriented rather than an operator-visible issue history.
+- `UserSummary` is a derived projection. Its projection-failure Kafka topic is
+  failure evidence and observation; the daily DB comparison is the final
+  automatic repair safety net.
 
 ## V1 Scope
 
@@ -43,10 +53,11 @@ Add `ReconciliationIssue` with:
 - first detected, last detected, acknowledged, resolved timestamps
 - resolution note
 
-Issue types initially cover only:
+Issue types initially cover:
 
 - `REDIS_PURCHASE_COUNT_MISMATCH`
 - `GHOST_PURCHASE`
+- `USER_SUMMARY_MISMATCH` (repair failure or an unrepaired mismatch)
 
 `STOCK_SYNC_MISMATCH` is intentionally excluded from V1. The current stock
 sync job immediately applies its confirmed-Purchase delta to Product stock, so
@@ -62,13 +73,18 @@ separate detector exists would create an empty operational category.
   scheduler run.
 - A resolved issue may be reopened only when the mismatch is observed again.
 
-### 3. Operator workflow, no automatic repair
+### 3. Operator workflow and bounded automatic repair
 
 - Add an internal/admin query for OPEN issues and a command to acknowledge or
   resolve one with a note.
 - Retain existing scheduler detection, but replace bare mismatch logs with
   issue upsert plus structured logs and metrics.
-- Do not mutate Redis, Purchase, Product, or UserSummary automatically.
+- The daily scheduler compares database-level summary facts, rebuilds a
+  mismatched UserSummary from confirmed Purchase rows, and resolves an existing
+  matching issue after successful repair.
+- A failed rebuild creates or refreshes `USER_SUMMARY_MISMATCH`; no UI, DLQ, or
+  Kafka recovery consumer is introduced.
+- Redis, Purchase, and Product are never mutated by this repair.
 
 ### 4. Observability
 
@@ -82,7 +98,8 @@ Expose counters/gauges for:
 ## Non-Goals
 
 - No Slack/PagerDuty integration in V1.
-- No AI diagnosis or automatic repair.
+- No AI diagnosis or generic automatic repair outside the bounded UserSummary
+  rebuild described above.
 - No generic reconciliation framework for every table.
 - No FCFS slot reopening.
 
@@ -95,17 +112,20 @@ Expose counters/gauges for:
    with all persisted Purchase rows for admission reconciliation.
 4. Ghost Purchase detection creates an issue with the affected purchase scope.
 5. Acknowledge/resolve commands preserve the original evidence and audit times.
+6. A UserSummary mismatch is repaired from the confirmed Purchase ledger.
+7. A failed UserSummary repair creates or refreshes one user-scoped issue.
 
 ## Completion Criteria
 
 - Operators can see one durable record per unresolved consistency problem.
 - Scheduler repetition does not create duplicate records.
-- Detection never makes an unapproved data correction.
+- The only automatic correction is idempotent UserSummary rebuild from the
+  Purchase ledger; Redis, Purchase, Product, and Purchase rows are untouched.
 
 ## Implementation Record
 
 - `ReconciliationIssue` persists one fingerprinted record for a Redis-Purchase
-  count mismatch or an affected Ghost Purchase.
+  count mismatch, an affected Ghost Purchase, or a failed UserSummary repair.
 - Detection refreshes unresolved records, and a resolved record reopens only
   when the same fingerprint recurs.
 - `GET /core/api/v1/reconciliation-issues` returns OPEN issues. Authenticated
@@ -114,5 +134,9 @@ Expose counters/gauges for:
 - Both the daily reconciliation scan and the five-minute campaign stock sync
   job use `SchedulerExecutionLock`, preventing duplicate runners across Core
   instances.
+- The daily scan keeps the historical Ghost Purchase check and additionally
+  compares `UserSummary.lastPurchaseAt` with the latest `CONFIRMED Purchase`.
+  Successful mismatches are rebuilt and do not leave an open issue; failed
+  rebuilds are recorded as `USER_SUMMARY_MISMATCH`.
 - Apply `scripts/migrations/2026-07-28-add-reconciliation-issues.sql` before
   deploying to an existing MySQL database.
