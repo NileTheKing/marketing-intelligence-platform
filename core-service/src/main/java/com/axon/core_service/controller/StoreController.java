@@ -1,7 +1,6 @@
 package com.axon.core_service.controller;
 
 import com.axon.core_service.config.auth.JwtTokenProvider;
-import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.domain.user.CustomOAuth2User;
 import com.axon.core_service.service.StoreViewService;
 import java.math.BigDecimal;
@@ -130,7 +129,7 @@ public class StoreController {
             @CookieValue(value = "accessToken", required = false) String accessToken,
             Model model) {
         AuthenticatedStoreUser user = extractUser(accessToken);
-        List<UserCoupon> userCoupons = storeViewService.getValidUserCoupons(user.userId());
+        List<StoreViewService.UserCouponDisplayDto> userCoupons = storeViewService.getValidUserCoupons(user.userId());
 
         model.addAttribute("username", user.username());
         model.addAttribute("userCoupons", userCoupons);

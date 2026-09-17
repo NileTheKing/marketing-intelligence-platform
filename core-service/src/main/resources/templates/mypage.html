@@ -151,19 +151,19 @@
                                     <div>
                                         <span
                                             class="text-xs font-bold text-accent uppercase tracking-wider mb-1 block">COUPON</span>
-                                        <h4 class="font-black text-xl" th:text="${uc.coupon.couponName}">Coupon Name
+                                        <h4 class="font-black text-xl" th:text="${uc.couponName}">Coupon Name
                                         </h4>
                                     </div>
                                 </div>
 
                                 <div class="flex items-end gap-2 mb-4">
-                                    <span th:if="${uc.coupon.discountRate != null}"
+                                    <span th:if="${uc.discountRate != null}"
                                         class="text-4xl font-black text-accent"
-                                        th:text="${uc.coupon.discountRate} + '%'">20%</span>
-                                    <span th:if="${uc.coupon.discountAmount != null}"
+                                        th:text="${uc.discountRate} + '%'">20%</span>
+                                    <span th:if="${uc.discountAmount != null}"
                                         class="text-4xl font-black text-accent"
-                                        th:text="${#numbers.formatInteger(uc.coupon.discountAmount, 0, 'COMMA')}">5000</span>
-                                    <span th:if="${uc.coupon.discountAmount != null}"
+                                        th:text="${#numbers.formatInteger(uc.discountAmount, 0, 'COMMA')}">5000</span>
+                                    <span th:if="${uc.discountAmount != null}"
                                         class="text-lg font-bold text-accent mb-1">원</span>
                                     <span class="text-sm text-gray-500 mb-1.5 ml-1">할인</span>
                                 </div>
@@ -171,16 +171,16 @@
                                 <div
                                     class="flex justify-between items-center text-xs text-gray-500 border-t border-accent/20 pt-4">
                                     <span
-                                        th:text="|사용기간: ${#temporals.format(uc.coupon.endDate, 'yyyy.MM.dd')}까지|">사용기간:
+                                        th:text="|사용기간: ${#temporals.format(uc.endDate, 'yyyy.MM.dd')}까지|">사용기간:
                                         2024.12.31까지</span>
                                     <span class="font-bold text-accent">사용 가능</span>
                                 </div>
                                 <div class="mt-2 text-xs text-gray-400 space-y-1">
-                                    <p th:if="${uc.coupon.minOrderAmount != null}"
-                                        th:text="|최소 주문금액: ${#numbers.formatInteger(uc.coupon.minOrderAmount, 0, 'COMMA')}원|">
+                                    <p th:if="${uc.minOrderAmount != null}"
+                                        th:text="|최소 주문금액: ${#numbers.formatInteger(uc.minOrderAmount, 0, 'COMMA')}원|">
                                         최소주문금액</p>
-                                    <p th:if="${uc.coupon.targetCategory != null}"
-                                        th:text="|적용 카테고리: ${uc.coupon.targetCategory}|">카테고리</p>
+                                    <p th:if="${uc.targetCategory != null}"
+                                        th:text="|적용 카테고리: ${uc.targetCategory}|">카테고리</p>
                                 </div>
                             </div>
                         </div>

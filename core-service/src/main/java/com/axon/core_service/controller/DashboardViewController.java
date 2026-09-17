@@ -1,6 +1,7 @@
 package com.axon.core_service.controller;
 
 import lombok.RequiredArgsConstructor;
+import com.axon.core_service.service.DashboardPageService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,54 +11,34 @@ import org.springframework.web.bind.annotation.PathVariable;
 @RequiredArgsConstructor
 public class DashboardViewController {
 
-    private final com.axon.core_service.repository.CampaignActivityRepository campaignActivityRepository;
-    private final com.axon.core_service.repository.CampaignRepository campaignRepository;
+    private final DashboardPageService dashboardPageService;
 
     @GetMapping("/admin/dashboard/{activityId}")
     public String dashboardView(@PathVariable Long activityId, Model model) {
-        // Fetch activity to get parent campaign info
-        var activity = campaignActivityRepository.findWithCampaignById(activityId).orElse(null);
-        
-        model.addAttribute("campaignId", activityId); // Keeping as campaignId for existing JS compatibility (this is actually activityId)
-        model.addAttribute("activityId", activityId); // Explicitly adding activityId
-        
-        if (activity != null) {
-            model.addAttribute("campaignName", activity.getName()); // Current Activity Name
-            
-            // Parent Campaign Info
-            if (activity.getCampaign() != null) {
-                model.addAttribute("parentCampaignId", activity.getCampaign().getId());
-                model.addAttribute("parentCampaignName", activity.getCampaign().getName());
-            }
-        } else {
-            model.addAttribute("campaignName", "Activity #" + activityId);
-        }
-        
+        DashboardPageService.ActivityDashboardPageData pageData =
+                dashboardPageService.getActivityDashboardPageData(activityId);
+        model.addAttribute("campaignId", activityId);
+        model.addAttribute("activityId", activityId);
+        model.addAttribute("campaignName", pageData.activityName());
+        model.addAttribute("parentCampaignId", pageData.parentCampaignId());
+        model.addAttribute("parentCampaignName", pageData.parentCampaignName());
         return "dashboard";
     }
 
     @GetMapping("/admin/dashboard/cohort/{activityId}")
     public String cohortDashboardView(@PathVariable Long activityId, Model model) {
+        DashboardPageService.CohortDashboardPageData pageData =
+                dashboardPageService.getCohortDashboardPageData(activityId);
         model.addAttribute("activityId", activityId);
-        var activity = campaignActivityRepository.findWithCampaignById(activityId).orElse(null);
-        if (activity != null) {
-            model.addAttribute("activityName", activity.getName());
-            model.addAttribute("campaignId", activity.getCampaign().getId()); // Add campaignId for chatbot context
-        } else {
-            model.addAttribute("activityName", "Activity #" + activityId);
-        }
+        model.addAttribute("activityName", pageData.activityName());
+        model.addAttribute("campaignId", pageData.campaignId());
         return "cohort-dashboard";
     }
 
     @GetMapping("/admin/dashboard/campaign/{campaignId}")
     public String campaignDashboardView(@PathVariable Long campaignId, Model model) {
         model.addAttribute("campaignId", campaignId);
-        var campaign = campaignRepository.findById(campaignId).orElse(null);
-        if (campaign != null) {
-            model.addAttribute("campaignName", campaign.getName());
-        } else {
-            model.addAttribute("campaignName", "Campaign #" + campaignId);
-        }
+        model.addAttribute("campaignName", dashboardPageService.getCampaignDashboardName(campaignId));
         return "campaign-dashboard";
     }
 

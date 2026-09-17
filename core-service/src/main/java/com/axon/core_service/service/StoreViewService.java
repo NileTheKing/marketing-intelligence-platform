@@ -28,6 +28,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +43,7 @@ public class StoreViewService {
     private final PurchaseRepository purchaseRepository;
     private final CouponService couponService;
 
+    @Transactional(readOnly = true)
     public MainShopViewData getMainShopViewData(String category) {
         List<ProductDisplayDto> allProducts = productRepository.findAllByCampaignOnlyFalse().stream()
                 .map(this::convertToProductDto)
@@ -71,12 +73,14 @@ public class StoreViewService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public ProductDisplayDto getProductDisplay(Long productId) {
         Product product = productRepository.findByIdAndCampaignOnlyFalse(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
         return convertToProductDto(product);
     }
 
+    @Transactional(readOnly = true)
     public CheckoutViewData getCheckoutViewData(Long userId, Long productId) {
         Product product = productRepository.findByIdAndCampaignOnlyFalse(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -96,6 +100,7 @@ public class StoreViewService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public CampaignActivitiesViewData getCampaignActivitiesViewData(Long userId) {
         List<CampaignActivityDisplayDto> allActivities = campaignActivityRepository
                 .findAllByStatus(CampaignActivityStatus.ACTIVE)
@@ -124,6 +129,7 @@ public class StoreViewService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public CampaignActivityDisplayDto getActiveCampaignActivity(Long id) {
         CampaignActivity campaignActivity = campaignActivityRepository.findWithProductAndCouponById(id)
                 .orElseThrow(() -> new CampaignActivityNotFoundException(id));
@@ -158,7 +164,8 @@ public class StoreViewService {
         }
     }
 
-    public List<UserCoupon> getValidUserCoupons(Long userId) {
+    @Transactional(readOnly = true)
+    public List<UserCouponDisplayDto> getValidUserCoupons(Long userId) {
         if (userId == null) {
             return List.of();
         }
@@ -170,7 +177,20 @@ public class StoreViewService {
                     var coupon = userCoupon.getCoupon();
                     return now.isAfter(coupon.getStartDate()) && now.isBefore(coupon.getEndDate());
                 })
+                .map(this::convertToUserCouponDto)
                 .collect(Collectors.toList());
+    }
+
+    private UserCouponDisplayDto convertToUserCouponDto(UserCoupon userCoupon) {
+        var coupon = userCoupon.getCoupon();
+        return UserCouponDisplayDto.builder()
+                .couponName(coupon.getCouponName())
+                .discountAmount(coupon.getDiscountAmount())
+                .discountRate(coupon.getDiscountRate())
+                .minOrderAmount(coupon.getMinOrderAmount())
+                .targetCategory(coupon.getTargetCategory())
+                .endDate(coupon.getEndDate())
+                .build();
     }
 
     private CampaignActivityDisplayDto safeConvertToCampaignActivityDto(CampaignActivity activity) {
@@ -321,5 +341,16 @@ public class StoreViewService {
         private String imageUrl;
         private String category;
         private int reviewCount;
+    }
+
+    @Getter
+    @Builder
+    public static class UserCouponDisplayDto {
+        private String couponName;
+        private BigDecimal discountAmount;
+        private Integer discountRate;
+        private BigDecimal minOrderAmount;
+        private String targetCategory;
+        private LocalDateTime endDate;
     }
 }

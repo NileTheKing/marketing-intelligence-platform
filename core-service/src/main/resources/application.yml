@@ -13,6 +13,7 @@ spring:
       connection-timeout: 10000  # 10s - Fail fast instead of waiting 30s
       max-lifetime: 600000  # 10 minutes
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: update # Use 'validate' in production
     properties:

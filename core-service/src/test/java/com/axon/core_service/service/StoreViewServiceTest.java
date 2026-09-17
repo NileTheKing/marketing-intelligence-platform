@@ -7,11 +7,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.repository.UserCouponRepository;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -42,6 +45,31 @@ class StoreViewServiceTest {
         assertThatThrownBy(() -> service.getCheckoutViewData(10L, 1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Product not found");
+    }
+
+    @Test
+    void mypageConvertsCouponEntitiesToDisplayDtosBeforeReturning() {
+        UserCouponRepository userCouponRepository = mock(UserCouponRepository.class);
+        Coupon coupon = Coupon.builder()
+                .name("Welcome")
+                .discountAmount(BigDecimal.valueOf(3_000))
+                .startDate(LocalDateTime.now().minusDays(1))
+                .endDate(LocalDateTime.now().plusDays(1))
+                .build();
+        when(userCouponRepository.findAllByUserId(10L)).thenReturn(List.of(UserCoupon.builder()
+                .userId(10L)
+                .coupon(coupon)
+                .build()));
+        StoreViewService service = new StoreViewService(mock(CampaignActivityRepository.class),
+                mock(ProductRepository.class), userCouponRepository, mock(PurchaseRepository.class),
+                mock(CouponService.class));
+
+        List<StoreViewService.UserCouponDisplayDto> result = service.getValidUserCoupons(10L);
+
+        assertThat(result).singleElement().satisfies(display -> {
+            assertThat(display.getCouponName()).isEqualTo("Welcome");
+            assertThat(display.getDiscountAmount()).isEqualByComparingTo("3000");
+        });
     }
 
     private StoreViewService service(ProductRepository productRepository) {
