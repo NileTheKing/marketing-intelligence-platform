@@ -3,10 +3,10 @@ package com.axon.core_service.commandprocessing;
 import com.axon.core_service.client.WebhookClient;
 import com.axon.core_service.client.dto.WebhookRequest;
 import com.axon.core_service.observability.CorePipelineMetrics;
+import com.axon.core_service.service.MarketingActionExecutionService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.http.HttpStatus;
@@ -17,10 +17,10 @@ import org.springframework.web.client.ResourceAccessException;
 
 import java.util.concurrent.CompletionException;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class WebhookStrategy implements BatchStrategy {
 
     private static final int MAX_ATTEMPTS = 3;
@@ -29,6 +29,28 @@ public class WebhookStrategy implements BatchStrategy {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final CorePipelineMetrics pipelineMetrics;
     private final WebhookRetryBackoff retryBackoff;
+    private final MarketingActionExecutionService executionService;
+
+    @Autowired
+    public WebhookStrategy(WebhookClient webhookClient,
+                           KafkaTemplate<String, Object> kafkaTemplate,
+                           CorePipelineMetrics pipelineMetrics,
+                           WebhookRetryBackoff retryBackoff,
+                           MarketingActionExecutionService executionService) {
+        this.webhookClient = webhookClient;
+        this.kafkaTemplate = kafkaTemplate;
+        this.pipelineMetrics = pipelineMetrics;
+        this.retryBackoff = retryBackoff;
+        this.executionService = executionService;
+    }
+
+    /** Backward-compatible constructor for focused strategy tests. */
+    public WebhookStrategy(WebhookClient webhookClient,
+                           KafkaTemplate<String, Object> kafkaTemplate,
+                           CorePipelineMetrics pipelineMetrics,
+                           WebhookRetryBackoff retryBackoff) {
+        this(webhookClient, kafkaTemplate, pipelineMetrics, retryBackoff, null);
+    }
 
     @Override
     public CampaignActivityType getType() {
@@ -43,7 +65,6 @@ public class WebhookStrategy implements BatchStrategy {
     @Override
     public void processBatch(List<CampaignActivityKafkaProducerDto> messages) {
         messages.stream()
-                .map(this::toRequest)
                 .forEach(this::sendWithRetry);
     }
 
@@ -65,13 +86,22 @@ public class WebhookStrategy implements BatchStrategy {
                 .build();
     }
 
-    private void sendWithRetry(WebhookRequest request) {
+    private void sendWithRetry(CampaignActivityKafkaProducerDto message) {
+        WebhookRequest request = toRequest(message);
         Exception lastFailure = null;
+        int attemptsMade = 0;
 
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            attemptsMade = attempt;
             try {
+                if (executionService != null) {
+                    executionService.recordAttempt(message.getExecutionId(), message.getExecutionDispatchVersion());
+                }
                 webhookClient.send(request);
                 log.info("Webhook sent: idempotencyKey={}, attempt={}", request.getIdempotencyKey(), attempt);
+                if (executionService != null) {
+                    executionService.markSucceeded(message.getExecutionId(), message.getExecutionDispatchVersion());
+                }
                 return;
             } catch (Exception e) {
                 lastFailure = e;
@@ -87,7 +117,13 @@ public class WebhookStrategy implements BatchStrategy {
         log.error("Webhook permanently failed. Sending to DLT: idempotencyKey={}",
                 request.getIdempotencyKey(), lastFailure);
         try {
-            kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, request).join();
+            kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, WebhookFailedDelivery.builder()
+                    .executionId(message.getExecutionId())
+                    .dispatchVersion(message.getExecutionDispatchVersion())
+                    .request(request)
+                    .attemptCount(attemptsMade)
+                    .failureReason(lastFailure == null ? "Webhook delivery failed" : lastFailure.getMessage())
+                    .build()).join();
             pipelineMetrics.recordDltRouted("webhook", 1);
         } catch (CompletionException e) {
             throw new OffsetCommitBlockedException("Webhook DLT publish failed", e);
@@ -101,4 +137,5 @@ public class WebhookStrategy implements BatchStrategy {
         return failure instanceof HttpClientErrorException clientError
                 && clientError.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS;
     }
+
 }

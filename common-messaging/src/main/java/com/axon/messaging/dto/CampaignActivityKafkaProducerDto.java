@@ -25,6 +25,9 @@ public class CampaignActivityKafkaProducerDto {
     private Long marketingRuleId;
     private Long marketingActionId;
     private Long actionReferenceId;
+    private Long executionId;
+    private Long executionDispatchVersion;
+    private String failureReason;
     /**
      * Get the event time as an Instant.
      *

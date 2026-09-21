@@ -1,22 +1,24 @@
 package com.axon.core_service.scheduler;
 
 import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.MarketingActionExecution;
 import com.axon.core_service.domain.marketing.AudienceSegment;
 import com.axon.core_service.domain.marketing.MarketingRule;
 import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.MarketingRuleRepository;
 import com.axon.core_service.repository.UserSummaryRepository;
+import com.axon.core_service.service.MarketingActionExecutionService;
 import com.axon.core_service.service.BehaviorEventService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,7 +29,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class BehaviorTriggerScheduler {
 
     private final BehaviorEventService behaviorEventService;
@@ -37,6 +38,38 @@ public class BehaviorTriggerScheduler {
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final SchedulerExecutionLock schedulerExecutionLock;
+    private final MarketingActionExecutionService executionService;
+
+    @Autowired
+    public BehaviorTriggerScheduler(BehaviorEventService behaviorEventService,
+                                    MarketingRuleRepository marketingRuleRepository,
+                                    MarketingActionRepository marketingActionRepository,
+                                    UserSummaryRepository userSummaryRepository,
+                                    RedisTemplate<String, String> redisTemplate,
+                                    KafkaTemplate<String, Object> kafkaTemplate,
+                                    SchedulerExecutionLock schedulerExecutionLock,
+                                    MarketingActionExecutionService executionService) {
+        this.behaviorEventService = behaviorEventService;
+        this.marketingRuleRepository = marketingRuleRepository;
+        this.marketingActionRepository = marketingActionRepository;
+        this.userSummaryRepository = userSummaryRepository;
+        this.redisTemplate = redisTemplate;
+        this.kafkaTemplate = kafkaTemplate;
+        this.schedulerExecutionLock = schedulerExecutionLock;
+        this.executionService = executionService;
+    }
+
+    /** Backward-compatible constructor for focused scheduler tests without persistence. */
+    public BehaviorTriggerScheduler(BehaviorEventService behaviorEventService,
+                                    MarketingRuleRepository marketingRuleRepository,
+                                    MarketingActionRepository marketingActionRepository,
+                                    UserSummaryRepository userSummaryRepository,
+                                    RedisTemplate<String, String> redisTemplate,
+                                    KafkaTemplate<String, Object> kafkaTemplate,
+                                    SchedulerExecutionLock schedulerExecutionLock) {
+        this(behaviorEventService, marketingRuleRepository, marketingActionRepository, userSummaryRepository,
+                redisTemplate, kafkaTemplate, schedulerExecutionLock, null);
+    }
 
     /**
      * 매 시간 0분에 실행.
@@ -132,7 +165,17 @@ public class BehaviorTriggerScheduler {
         log.info("Triggering action: type={}, ruleId={}, actionId={}, userId={}, productId={}, referenceId={}",
                 action.getActionType(), rule.getId(), action.getId(), userId, productId, action.getReferenceId());
 
-        CampaignActivityKafkaProducerDto message = buildRewardMessage(rule, action, userId, productId);
+        MarketingActionExecution execution = executionService == null ? null : executionService.createPending(
+                action.getId(), rule.getId(), action.getReferenceId(), userId, productId, action.getActionType());
+        Long executionId = execution == null ? null : execution.getId();
+        Long dispatchVersion = execution == null ? null : execution.getDispatchVersion();
+        if (executionService != null && !executionService.markDispatching(executionId, dispatchVersion)) {
+            log.warn("Execution was not available for dispatch: executionId={}", executionId);
+            redisTemplate.delete(redisKey);
+            return;
+        }
+        CampaignActivityKafkaProducerDto message = buildRewardMessage(
+                rule, action, userId, productId, executionId, dispatchVersion);
 
         try {
             kafkaTemplate.send(commandTopic(action), message)
@@ -141,12 +184,20 @@ public class BehaviorTriggerScheduler {
                             log.error("Kafka send failed, releasing dedup key: actionId={}, userId={}, productId={}",
                                     action.getId(), userId, productId, ex);
                             redisTemplate.delete(redisKey);
+                            if (executionService != null) {
+                                executionService.markDispatchFailed(executionId, dispatchVersion, ex.getMessage());
+                            }
+                        } else if (executionService != null) {
+                            executionService.markDispatched(executionId, dispatchVersion);
                         }
                     });
         } catch (Exception ex) {
             log.error("Kafka send threw synchronously, releasing dedup key: actionId={}, userId={}, productId={}",
                     action.getId(), userId, productId, ex);
             redisTemplate.delete(redisKey);
+            if (executionService != null) {
+                executionService.markDispatchFailed(executionId, dispatchVersion, ex.getMessage());
+            }
         }
     }
 
@@ -165,7 +216,8 @@ public class BehaviorTriggerScheduler {
     }
 
     private CampaignActivityKafkaProducerDto buildRewardMessage(MarketingRule rule, MarketingAction action,
-                                                                  Long userId, Long productId) {
+                                                                  Long userId, Long productId, Long executionId,
+                                                                  Long dispatchVersion) {
         CampaignActivityType type = action.getActionType() == RewardType.WEBHOOK
                 ? CampaignActivityType.WEBHOOK
                 : CampaignActivityType.COUPON;
@@ -177,6 +229,8 @@ public class BehaviorTriggerScheduler {
                 .marketingRuleId(rule.getId())
                 .marketingActionId(action.getId())
                 .actionReferenceId(action.getReferenceId())
+                .executionId(executionId)
+                .executionDispatchVersion(dispatchVersion)
                 .timestamp(System.currentTimeMillis())
                 .build();
     }

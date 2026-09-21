@@ -40,7 +40,7 @@ public class CampaignActivityCommandDispatcher {
                 .toList();
         if (!missingType.isEmpty()) {
             log.warn("Campaign activity type is missing: count={}", missingType.size());
-            routeToDlt(missingType);
+            routeToDlt(missingType, "Campaign activity type is missing");
         }
 
         Map<CampaignActivityType, List<CampaignActivityKafkaProducerDto>> groupedByType =
@@ -62,7 +62,7 @@ public class CampaignActivityCommandDispatcher {
 
         if (strategy == null) {
             log.warn("Unsupported campaign activity type: type={}, count={}", type, batch.size());
-            routeToDlt(batch);
+            routeToDlt(batch, "Unsupported campaign activity type: " + type);
             return;
         }
 
@@ -80,16 +80,17 @@ public class CampaignActivityCommandDispatcher {
             throw e;
         } catch (Exception e) {
             log.error("Error processing batch for type {}: {}", type, e.getMessage(), e);
-            routeToDlt(batch);
+            routeToDlt(batch, e.getMessage() == null ? "Campaign command processing failed" : e.getMessage());
         }
     }
 
-    private void routeToDlt(List<CampaignActivityKafkaProducerDto> batch) {
+    private void routeToDlt(List<CampaignActivityKafkaProducerDto> batch, String failureReason) {
         log.warn("Sending {} command messages to DLT: {}",
                 batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
-        batch.forEach(message -> kafkaTemplate
-                .send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message)
-                .join());
+        batch.forEach(message -> {
+            message.setFailureReason(failureReason);
+            kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message).join();
+        });
         pipelineMetrics.recordDltRouted("campaign-command", batch.size());
     }
 }

@@ -449,8 +449,9 @@ I did not stop at sending poison messages to DLQ. I stored failed events as oper
 
 Implementation note:
 
-- Current DLT handling isolates failed messages, but it does not yet provide operator-facing audit state.
-- The failure table should be the source for status, retry count, failure stage, and AI summary.
+- The concrete Axon V1 now collects marketing-action DLT messages into the execution history; the
+  generic failed-event table and AI summary remain future extraction work.
+- The marketing execution table is the source for status, retry count, failure stage, and operator replay.
 - Kafka DLT remains the transport-level isolation path. The DB audit row is the operational recovery view.
 - For Axon, this generic model is a later extraction from a concrete webhook delivery/recovery
   workflow, not the next implementation target.
@@ -527,6 +528,36 @@ Boundary:
 - Redis dedup continues to prevent duplicate action dispatch. The execution row is the durable audit and result-join boundary.
 - The first UI is a small admin result card/table. The LLM may later call the same read-only aggregation service; it must not calculate a separate result.
 - Statistical significance, generic experiment management, and multi-tenant isolation are out of scope for the first version.
+
+### V1 Execution History Implementation (2026-09-18)
+
+Status: `implemented`
+
+`marketing_action_executions` now records the durable action-level lifecycle for the supported
+`COUPON` and `WEBHOOK` channels: `PENDING`, `DISPATCHING`, `DISPATCHED`, `PROCESSING`,
+`RETRYING`, `SUCCEEDED`, and `FAILED_FINAL`, including cumulative attempts, dispatch/completion/DLT
+timestamps, and the last failure reason. The scheduler creates one row per Redis-deduplicated
+dispatch and sends its generated `executionId` plus a dispatch generation in the Kafka envelope.
+The execution ID is deliberately separate from
+`(actionId,userId,productId)` and that tuple is not unique: Redis remains the TTL-scoped trigger
+boundary, so a valid later re-trigger creates a new execution row.
+
+Webhook attempts update the same row before each real HTTP call; a successful retry ends in
+`SUCCEEDED`, while a successfully acknowledged `WEBHOOK_FAILED_DLT` publish ends in
+`FAILED_FINAL` with `dltAt`. DLT topics are consumed by a separate DB-updating consumer; the
+producer worker never marks a DLT execution directly. Coupon completion is recorded after the
+existing duplicate-safe `UserCoupon` write, while invalid coupon/user commands are isolated to
+the campaign-command DLT. DLT consumer exceptions propagate out of the listener, so the offset is
+not committed when DB recording fails.
+
+An ADMIN-only read/replay API exposes final failures. Approved replay atomically claims only a
+`FAILED_FINAL` row, republishes the stored action/rule/target payload using the same execution row,
+and accumulates later attempts; the `dltAt` value is reset for the new dispatch generation and set
+again only by that generation's DLT consumer event. DLT messages are not automatically replayed. This V1 does not add
+an outbox or claim DB/Kafka distributed atomicity; the migration
+`scripts/migrations/2026-09-18-add-marketing-action-executions.sql` must be applied manually to
+an existing production/VM database. If that earlier V1 table was already created, apply
+`scripts/migrations/2026-09-18-add-marketing-action-execution-dispatch-version.sql` instead.
 
 Portfolio message:
 
@@ -960,10 +991,10 @@ Current next sequence:
    complete.
 3. If a numeric portfolio claim is needed, run a mixed-command before/after experiment and record
    group lag plus coupon/FCFS completion time.
-4. Add durable webhook delivery/execution history only if operator recovery or process-crash
-   recovery becomes a real requirement.
-5. Add operator-approved replay only for ambiguous or terminal delivery outcomes. Deterministic
-   safe retries stay automatic; AI summarization remains optional and comes last.
+4. Durable action execution history and operator-approved terminal replay V1 are implemented for
+   coupon/webhook actions; an outbox or process-crash recovery guarantee remains deferred.
+5. Extend replay only for explicitly approved terminal outcomes. Deterministic safe retries stay
+   automatic; AI summarization remains optional and comes last.
 6. Build pre-event scale-out and hot-path warm-up after the external delivery story, unless a
    target application values infrastructure automation more than CRM-operation depth.
 
