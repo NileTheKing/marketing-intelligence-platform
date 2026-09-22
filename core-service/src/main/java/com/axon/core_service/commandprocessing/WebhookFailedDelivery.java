@@ -11,8 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WebhookFailedDelivery {
-    private Long executionId;
-    private Long dispatchVersion;
+    private Long dispatchId;
     private WebhookRequest request;
     private int attemptCount;
     private String failureReason;

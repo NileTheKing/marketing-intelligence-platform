@@ -95,12 +95,12 @@ public class WebhookStrategy implements BatchStrategy {
             attemptsMade = attempt;
             try {
                 if (executionService != null) {
-                    executionService.recordAttempt(message.getExecutionId(), message.getExecutionDispatchVersion());
+                    executionService.recordAttempt(message.getDispatchId());
                 }
                 webhookClient.send(request);
                 log.info("Webhook sent: idempotencyKey={}, attempt={}", request.getIdempotencyKey(), attempt);
                 if (executionService != null) {
-                    executionService.markSucceeded(message.getExecutionId(), message.getExecutionDispatchVersion());
+                    executionService.markSucceeded(message.getDispatchId());
                 }
                 return;
             } catch (Exception e) {
@@ -118,8 +118,7 @@ public class WebhookStrategy implements BatchStrategy {
                 request.getIdempotencyKey(), lastFailure);
         try {
             kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, WebhookFailedDelivery.builder()
-                    .executionId(message.getExecutionId())
-                    .dispatchVersion(message.getExecutionDispatchVersion())
+                    .dispatchId(message.getDispatchId())
                     .request(request)
                     .attemptCount(attemptsMade)
                     .failureReason(lastFailure == null ? "Webhook delivery failed" : lastFailure.getMessage())

@@ -1,10 +1,11 @@
 package com.axon.core_service.service;
 
+import com.axon.core_service.domain.marketing.MarketingActionDispatch;
+import com.axon.core_service.domain.marketing.MarketingActionDispatchInitiatedBy;
 import com.axon.core_service.domain.marketing.MarketingActionExecution;
 import com.axon.core_service.domain.marketing.MarketingActionExecutionStatus;
 import com.axon.core_service.domain.marketing.RewardType;
-import com.axon.core_service.exception.BusinessConflictException;
-import com.axon.core_service.exception.ResourceNotFoundException;
+import com.axon.core_service.repository.MarketingActionDispatchRepository;
 import com.axon.core_service.repository.MarketingActionExecutionRepository;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
@@ -22,12 +23,14 @@ import java.util.List;
 public class MarketingActionExecutionService {
 
     private final MarketingActionExecutionRepository executionRepository;
+    private final MarketingActionDispatchRepository dispatchRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final MarketingActionExecutionRetryClaimService retryClaimService;
 
     @Transactional
-    public MarketingActionExecution createPending(Long actionId, Long ruleId, Long actionReferenceId,
-                                                    Long userId, Long productId, RewardType channel) {
-        return executionRepository.save(MarketingActionExecution.builder()
+    public MarketingActionDispatch createPending(Long actionId, Long ruleId, Long actionReferenceId,
+                                                  Long userId, Long productId, RewardType channel) {
+        MarketingActionExecution execution = executionRepository.save(MarketingActionExecution.builder()
                 .actionId(actionId)
                 .ruleId(ruleId)
                 .actionReferenceId(actionReferenceId)
@@ -35,32 +38,34 @@ public class MarketingActionExecutionService {
                 .productId(productId)
                 .channel(channel)
                 .build());
+        return dispatchRepository.saveAndFlush(MarketingActionDispatch.builder()
+                .execution(execution)
+                .sequence(1L)
+                .initiatedBy(MarketingActionDispatchInitiatedBy.SYSTEM)
+                .build());
     }
 
     @Transactional
-    public boolean markDispatching(Long executionId, Long dispatchVersion) {
-        return executionRepository.markDispatching(
-                executionId, dispatchVersion,
+    public boolean markDispatching(Long dispatchId) {
+        return dispatchRepository.markDispatching(dispatchId,
                 MarketingActionExecutionStatus.PENDING,
                 MarketingActionExecutionStatus.DISPATCHING) == 1;
     }
 
     @Transactional
-    public boolean markDispatched(Long executionId, Long dispatchVersion) {
-        return executionRepository.markDispatched(
-                executionId, dispatchVersion,
+    public boolean markDispatched(Long dispatchId) {
+        return dispatchRepository.markDispatched(dispatchId,
                 MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED,
                 LocalDateTime.now()) == 1;
     }
 
     @Transactional
-    public boolean recordAttempt(Long executionId, Long dispatchVersion) {
-        if (executionId == null || dispatchVersion == null) {
+    public boolean recordAttempt(Long dispatchId) {
+        if (dispatchId == null) {
             return false;
         }
-        return executionRepository.recordAttempt(
-                executionId, dispatchVersion,
+        return dispatchRepository.recordAttempt(dispatchId,
                 MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED,
                 MarketingActionExecutionStatus.PROCESSING,
@@ -68,12 +73,11 @@ public class MarketingActionExecutionService {
     }
 
     @Transactional
-    public boolean markSucceeded(Long executionId, Long dispatchVersion) {
-        if (executionId == null || dispatchVersion == null) {
+    public boolean markSucceeded(Long dispatchId) {
+        if (dispatchId == null) {
             return false;
         }
-        return executionRepository.markSucceeded(
-                executionId, dispatchVersion,
+        return dispatchRepository.markSucceeded(dispatchId,
                 MarketingActionExecutionStatus.PROCESSING,
                 MarketingActionExecutionStatus.RETRYING,
                 MarketingActionExecutionStatus.SUCCEEDED,
@@ -81,12 +85,11 @@ public class MarketingActionExecutionService {
     }
 
     @Transactional
-    public boolean markDispatchFailed(Long executionId, Long dispatchVersion, String reason) {
-        if (executionId == null || dispatchVersion == null) {
+    public boolean markDispatchFailed(Long dispatchId, String reason) {
+        if (dispatchId == null) {
             return false;
         }
-        return executionRepository.markDispatchFailed(
-                executionId, dispatchVersion,
+        return dispatchRepository.markDispatchFailed(dispatchId,
                 MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.FAILED_FINAL,
                 reason,
@@ -94,13 +97,12 @@ public class MarketingActionExecutionService {
     }
 
     @Transactional
-    public boolean markDltFinal(Long executionId, Long dispatchVersion, String reason) {
-        if (executionId == null || dispatchVersion == null) {
+    public boolean markDltFinal(Long dispatchId, String reason) {
+        if (dispatchId == null) {
             return false;
         }
         LocalDateTime now = LocalDateTime.now();
-        return executionRepository.markDltFinal(
-                executionId, dispatchVersion,
+        return dispatchRepository.markDltFinal(dispatchId,
                 MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED,
                 MarketingActionExecutionStatus.PROCESSING,
@@ -112,24 +114,14 @@ public class MarketingActionExecutionService {
     }
 
     @Transactional(readOnly = true)
-    public List<MarketingActionExecution> findFinalFailures() {
-        return executionRepository.findAllByStatusOrderByDltAtDesc(MarketingActionExecutionStatus.FAILED_FINAL);
+    public List<MarketingActionDispatch> findFinalFailures() {
+        return dispatchRepository.findLatestFinalFailures(MarketingActionExecutionStatus.FAILED_FINAL);
     }
 
-    @Transactional
-    public MarketingActionExecution retryApproved(Long executionId) {
-        int claimed = executionRepository.claimFinalFailureForRetry(
-                executionId,
-                MarketingActionExecutionStatus.FAILED_FINAL,
-                MarketingActionExecutionStatus.DISPATCHING);
-        if (claimed == 0) {
-            MarketingActionExecution existing = executionRepository.findById(executionId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Marketing action execution", executionId));
-            throw new BusinessConflictException(
-                    "Execution is not a final failure or is already being retried: " + existing.getStatus());
-        }
+    public MarketingActionDispatch retryApproved(Long executionId) {
+        MarketingActionDispatch dispatchToPublish = retryClaimService.claim(executionId);
+        MarketingActionExecution execution = dispatchToPublish.getExecution();
 
-        MarketingActionExecution execution = find(executionId);
         CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
                 .campaignActivityType(toCampaignActivityType(execution.getChannel()))
                 .userId(execution.getUserId())
@@ -138,7 +130,7 @@ public class MarketingActionExecutionService {
                 .marketingActionId(execution.getActionId())
                 .actionReferenceId(execution.getActionReferenceId())
                 .executionId(execution.getId())
-                .executionDispatchVersion(execution.getDispatchVersion())
+                .dispatchId(dispatchToPublish.getId())
                 .timestamp(System.currentTimeMillis())
                 .build();
 
@@ -146,21 +138,16 @@ public class MarketingActionExecutionService {
             kafkaTemplate.send(commandTopic(execution.getChannel()), message)
                     .whenComplete((result, failure) -> {
                         if (failure == null) {
-                            markDispatched(executionId, execution.getDispatchVersion());
+                            markDispatched(dispatchToPublish.getId());
                         } else {
-                            markDispatchFailed(executionId, execution.getDispatchVersion(), failure.getMessage());
+                            markDispatchFailed(dispatchToPublish.getId(), failure.getMessage());
                         }
                     });
-            return execution;
+            return dispatchToPublish;
         } catch (Exception failure) {
-            markDispatchFailed(executionId, execution.getDispatchVersion(), failure.getMessage());
+            markDispatchFailed(dispatchToPublish.getId(), failure.getMessage());
             throw failure;
         }
-    }
-
-    private MarketingActionExecution find(Long executionId) {
-        return executionRepository.findById(executionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Marketing action execution", executionId));
     }
 
     private String commandTopic(RewardType channel) {

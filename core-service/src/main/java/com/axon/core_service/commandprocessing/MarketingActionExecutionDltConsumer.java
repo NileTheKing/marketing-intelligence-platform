@@ -21,8 +21,7 @@ public class MarketingActionExecutionDltConsumer {
             groupId = "axon-marketing-action-campaign-dlt-group")
     public void consumeCampaignCommandDlt(List<CampaignActivityKafkaProducerDto> messages) {
         messages.forEach(message -> executionService.markDltFinal(
-                message.getExecutionId(),
-                message.getExecutionDispatchVersion(),
+                message.getDispatchId(),
                 message.getFailureReason()));
     }
 
@@ -30,8 +29,7 @@ public class MarketingActionExecutionDltConsumer {
             groupId = "axon-marketing-action-webhook-dlt-group")
     public void consumeWebhookDlt(List<WebhookFailedDelivery> messages) {
         messages.forEach(message -> executionService.markDltFinal(
-                message.getExecutionId(),
-                message.getDispatchVersion(),
+                message.getDispatchId(),
                 message.getFailureReason()));
     }
 }

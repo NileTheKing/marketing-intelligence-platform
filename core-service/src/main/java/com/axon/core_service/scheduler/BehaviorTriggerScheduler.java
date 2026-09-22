@@ -1,7 +1,7 @@
 package com.axon.core_service.scheduler;
 
 import com.axon.core_service.domain.marketing.MarketingAction;
-import com.axon.core_service.domain.marketing.MarketingActionExecution;
+import com.axon.core_service.domain.marketing.MarketingActionDispatch;
 import com.axon.core_service.domain.marketing.AudienceSegment;
 import com.axon.core_service.domain.marketing.MarketingRule;
 import com.axon.core_service.domain.marketing.RewardType;
@@ -165,17 +165,17 @@ public class BehaviorTriggerScheduler {
         log.info("Triggering action: type={}, ruleId={}, actionId={}, userId={}, productId={}, referenceId={}",
                 action.getActionType(), rule.getId(), action.getId(), userId, productId, action.getReferenceId());
 
-        MarketingActionExecution execution = executionService == null ? null : executionService.createPending(
+        MarketingActionDispatch dispatch = executionService == null ? null : executionService.createPending(
                 action.getId(), rule.getId(), action.getReferenceId(), userId, productId, action.getActionType());
-        Long executionId = execution == null ? null : execution.getId();
-        Long dispatchVersion = execution == null ? null : execution.getDispatchVersion();
-        if (executionService != null && !executionService.markDispatching(executionId, dispatchVersion)) {
+        Long executionId = dispatch == null ? null : dispatch.getExecution().getId();
+        Long dispatchId = dispatch == null ? null : dispatch.getId();
+        if (executionService != null && !executionService.markDispatching(dispatchId)) {
             log.warn("Execution was not available for dispatch: executionId={}", executionId);
             redisTemplate.delete(redisKey);
             return;
         }
         CampaignActivityKafkaProducerDto message = buildRewardMessage(
-                rule, action, userId, productId, executionId, dispatchVersion);
+                rule, action, userId, productId, executionId, dispatchId);
 
         try {
             kafkaTemplate.send(commandTopic(action), message)
@@ -185,10 +185,10 @@ public class BehaviorTriggerScheduler {
                                     action.getId(), userId, productId, ex);
                             redisTemplate.delete(redisKey);
                             if (executionService != null) {
-                                executionService.markDispatchFailed(executionId, dispatchVersion, ex.getMessage());
+                                executionService.markDispatchFailed(dispatchId, ex.getMessage());
                             }
                         } else if (executionService != null) {
-                            executionService.markDispatched(executionId, dispatchVersion);
+                            executionService.markDispatched(dispatchId);
                         }
                     });
         } catch (Exception ex) {
@@ -196,7 +196,7 @@ public class BehaviorTriggerScheduler {
                     action.getId(), userId, productId, ex);
             redisTemplate.delete(redisKey);
             if (executionService != null) {
-                executionService.markDispatchFailed(executionId, dispatchVersion, ex.getMessage());
+                executionService.markDispatchFailed(dispatchId, ex.getMessage());
             }
         }
     }
@@ -217,7 +217,7 @@ public class BehaviorTriggerScheduler {
 
     private CampaignActivityKafkaProducerDto buildRewardMessage(MarketingRule rule, MarketingAction action,
                                                                   Long userId, Long productId, Long executionId,
-                                                                  Long dispatchVersion) {
+                                                                  Long dispatchId) {
         CampaignActivityType type = action.getActionType() == RewardType.WEBHOOK
                 ? CampaignActivityType.WEBHOOK
                 : CampaignActivityType.COUPON;
@@ -230,7 +230,7 @@ public class BehaviorTriggerScheduler {
                 .marketingActionId(action.getId())
                 .actionReferenceId(action.getReferenceId())
                 .executionId(executionId)
-                .executionDispatchVersion(dispatchVersion)
+                .dispatchId(dispatchId)
                 .timestamp(System.currentTimeMillis())
                 .build();
     }

@@ -55,8 +55,8 @@ class MarketingActionExecutionLifecycleTest {
 
         strategy.processBatch(List.of(message));
 
-        verify(executionService, org.mockito.Mockito.times(2)).recordAttempt(42L, 1L);
-        verify(executionService).markSucceeded(42L, 1L);
+        verify(executionService, org.mockito.Mockito.times(2)).recordAttempt(11L);
+        verify(executionService).markSucceeded(11L);
         verify(kafkaTemplate, never()).send(anyString(), any());
     }
 
@@ -71,12 +71,12 @@ class MarketingActionExecutionLifecycleTest {
 
         strategy.processBatch(List.of(webhookMessage()));
 
-        verify(executionService, org.mockito.Mockito.times(3)).recordAttempt(42L, 1L);
+        verify(executionService, org.mockito.Mockito.times(3)).recordAttempt(11L);
         ArgumentCaptor<Object> dltCaptor = ArgumentCaptor.forClass(Object.class);
         verify(kafkaTemplate).send(eq(KafkaTopics.WEBHOOK_FAILED_DLT), dltCaptor.capture());
         WebhookFailedDelivery envelope = (WebhookFailedDelivery) dltCaptor.getValue();
         new MarketingActionExecutionDltConsumer(executionService).consumeWebhookDlt(List.of(envelope));
-        verify(executionService).markDltFinal(42L, 1L, envelope.getFailureReason());
+        verify(executionService).markDltFinal(11L, envelope.getFailureReason());
         verify(pipelineMetrics).recordDltRouted("webhook", 1);
     }
 
@@ -93,12 +93,12 @@ class MarketingActionExecutionLifecycleTest {
                 .campaignActivityType(CampaignActivityType.COUPON)
                 .userId(1L)
                 .actionReferenceId(10L)
-                .executionId(42L)
-                .executionDispatchVersion(1L)
+                .dispatchId(11L)
+                .dispatchId(11L)
                 .build()));
 
-        verify(executionService).recordAttempt(42L, 1L);
-        verify(executionService).markSucceeded(42L, 1L);
+        verify(executionService).recordAttempt(11L);
+        verify(executionService).markSucceeded(11L);
     }
 
     @Test
@@ -119,7 +119,7 @@ class MarketingActionExecutionLifecycleTest {
                 .userId(1L)
                 .actionReferenceId(10L)
                 .executionId(42L)
-                .executionDispatchVersion(1L)
+                .dispatchId(11L)
                 .build();
         when(kafkaTemplate.send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
@@ -132,7 +132,7 @@ class MarketingActionExecutionLifecycleTest {
         CampaignActivityKafkaProducerDto dltMessage = dltCaptor.getValue();
         new MarketingActionExecutionDltConsumer(executionService)
                 .consumeCampaignCommandDlt(List.of(dltMessage));
-        verify(executionService).markDltFinal(42L, 1L, "coupon persistence failed");
+        verify(executionService).markDltFinal(11L, "coupon persistence failed");
     }
 
     @Test
@@ -147,10 +147,10 @@ class MarketingActionExecutionLifecycleTest {
                         .userId(1L)
                         .actionReferenceId(999L)
                         .executionId(42L)
-                        .executionDispatchVersion(1L)
+                        .dispatchId(11L)
                         .build()));
 
-        verify(executionService, never()).markSucceeded(any(), any());
+        verify(executionService, never()).markSucceeded(any());
         verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), any());
     }
 
@@ -167,20 +167,19 @@ class MarketingActionExecutionLifecycleTest {
                         .campaignActivityType(CampaignActivityType.COUPON)
                         .actionReferenceId(10L)
                         .executionId(42L)
-                        .executionDispatchVersion(1L)
+                        .dispatchId(11L)
                         .build()));
 
-        verify(executionService, never()).markSucceeded(any(), any());
+        verify(executionService, never()).markSucceeded(any());
         verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), any());
     }
 
     @Test
     void dltConsumerFailureEscapesListenerBoundary() {
         org.mockito.Mockito.doThrow(new IllegalStateException("db unavailable"))
-                .when(executionService).markDltFinal(42L, 1L, "failure");
+                .when(executionService).markDltFinal(11L, "failure");
         WebhookFailedDelivery envelope = WebhookFailedDelivery.builder()
-                .executionId(42L)
-                .dispatchVersion(1L)
+                .dispatchId(11L)
                 .failureReason("failure")
                 .build();
 
@@ -199,7 +198,7 @@ class MarketingActionExecutionLifecycleTest {
                 .userId(1L)
                 .productId(100L)
                 .executionId(42L)
-                .executionDispatchVersion(1L)
+                .dispatchId(11L)
                 .timestamp(1234L)
                 .build();
     }

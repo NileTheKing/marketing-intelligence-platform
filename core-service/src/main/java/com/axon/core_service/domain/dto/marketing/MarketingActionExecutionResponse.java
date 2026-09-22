@@ -1,5 +1,7 @@
 package com.axon.core_service.domain.dto.marketing;
 
+import com.axon.core_service.domain.marketing.MarketingActionDispatch;
+import com.axon.core_service.domain.marketing.MarketingActionDispatchInitiatedBy;
 import com.axon.core_service.domain.marketing.MarketingActionExecution;
 import com.axon.core_service.domain.marketing.MarketingActionExecutionStatus;
 import com.axon.core_service.domain.marketing.RewardType;
@@ -14,9 +16,11 @@ public record MarketingActionExecutionResponse(
         Long userId,
         Long productId,
         RewardType channel,
+        Long dispatchId,
+        long sequence,
+        MarketingActionDispatchInitiatedBy initiatedBy,
         MarketingActionExecutionStatus status,
         int attemptCount,
-        long dispatchVersion,
         String lastFailureReason,
         LocalDateTime dispatchedAt,
         LocalDateTime completedAt,
@@ -24,11 +28,13 @@ public record MarketingActionExecutionResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
-    public static MarketingActionExecutionResponse from(MarketingActionExecution execution) {
+    public static MarketingActionExecutionResponse from(MarketingActionDispatch dispatch) {
+        MarketingActionExecution execution = dispatch.getExecution();
         return new MarketingActionExecutionResponse(
                 execution.getId(), execution.getActionId(), execution.getRuleId(), execution.getActionReferenceId(),
-                execution.getUserId(), execution.getProductId(), execution.getChannel(), execution.getStatus(),
-                execution.getAttemptCount(), execution.getDispatchVersion(), execution.getLastFailureReason(), execution.getDispatchedAt(),
-                execution.getCompletedAt(), execution.getDltAt(), execution.getCreatedAt(), execution.getUpdatedAt());
+                execution.getUserId(), execution.getProductId(), execution.getChannel(),
+                dispatch.getId(), dispatch.getSequence(), dispatch.getInitiatedBy(), dispatch.getStatus(),
+                dispatch.getAttemptCount(), dispatch.getLastFailureReason(), dispatch.getDispatchedAt(),
+                dispatch.getCompletedAt(), dispatch.getDltAt(), execution.getCreatedAt(), execution.getUpdatedAt());
     }
 }

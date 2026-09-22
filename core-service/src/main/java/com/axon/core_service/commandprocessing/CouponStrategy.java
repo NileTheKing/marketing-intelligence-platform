@@ -161,13 +161,13 @@ public class CouponStrategy implements BatchStrategy {
 
     private void executionServiceRecordAttempt(CampaignActivityKafkaProducerDto message) {
         if (executionService != null) {
-            executionService.recordAttempt(message.getExecutionId(), message.getExecutionDispatchVersion());
+            executionService.recordAttempt(message.getDispatchId());
         }
     }
 
     private void executionServiceMarkSucceeded(CampaignActivityKafkaProducerDto message) {
         if (executionService != null) {
-            executionService.markSucceeded(message.getExecutionId(), message.getExecutionDispatchVersion());
+            executionService.markSucceeded(message.getDispatchId());
         }
     }
 

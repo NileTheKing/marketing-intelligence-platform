@@ -1,5 +1,7 @@
 package com.axon.core_service.repository;
 
+import com.axon.core_service.domain.marketing.MarketingActionDispatch;
+import com.axon.core_service.domain.marketing.MarketingActionDispatchInitiatedBy;
 import com.axon.core_service.domain.marketing.MarketingActionExecution;
 import com.axon.core_service.domain.marketing.MarketingActionExecutionStatus;
 import com.axon.core_service.domain.marketing.RewardType;
@@ -19,115 +21,107 @@ class MarketingActionExecutionRepositoryTest {
     private MarketingActionExecutionRepository executionRepository;
 
     @Autowired
+    private MarketingActionDispatchRepository dispatchRepository;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Test
-    void lateDispatchCallbackCannotOverwriteSucceededExecution() {
+    void lateDispatchCallbackCannotOverwriteSucceededDispatch() {
         MarketingActionExecution execution = executionRepository.saveAndFlush(execution());
-        Long id = execution.getId();
+        MarketingActionDispatch dispatch = dispatchRepository.saveAndFlush(dispatch(execution, 1L));
+        Long id = dispatch.getId();
 
-        assertThat(executionRepository.markDispatching(id, 1L,
-                MarketingActionExecutionStatus.PENDING, MarketingActionExecutionStatus.DISPATCHING)).isEqualTo(1);
-        assertThat(executionRepository.markDispatched(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED,
-                LocalDateTime.now())).isEqualTo(1);
-        assertThat(executionRepository.recordAttempt(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING,
+        assertThat(dispatchRepository.markDispatching(id, MarketingActionExecutionStatus.PENDING,
+                MarketingActionExecutionStatus.DISPATCHING)).isEqualTo(1);
+        assertThat(dispatchRepository.markDispatched(id, MarketingActionExecutionStatus.DISPATCHING,
+                MarketingActionExecutionStatus.DISPATCHED, LocalDateTime.now())).isEqualTo(1);
+        assertThat(dispatchRepository.recordAttempt(id, MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED, MarketingActionExecutionStatus.PROCESSING,
                 MarketingActionExecutionStatus.RETRYING)).isEqualTo(1);
-        assertThat(executionRepository.markSucceeded(id, 1L,
-                MarketingActionExecutionStatus.PROCESSING, MarketingActionExecutionStatus.RETRYING,
-                MarketingActionExecutionStatus.SUCCEEDED, LocalDateTime.now())).isEqualTo(1);
+        assertThat(dispatchRepository.markSucceeded(id, MarketingActionExecutionStatus.PROCESSING,
+                MarketingActionExecutionStatus.RETRYING, MarketingActionExecutionStatus.SUCCEEDED,
+                LocalDateTime.now())).isEqualTo(1);
 
-        assertThat(executionRepository.markDispatched(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED,
-                LocalDateTime.now())).isZero();
+        assertThat(dispatchRepository.markDispatched(id, MarketingActionExecutionStatus.DISPATCHING,
+                MarketingActionExecutionStatus.DISPATCHED, LocalDateTime.now())).isZero();
 
         entityManager.clear();
-        assertThat(executionRepository.findById(id).orElseThrow().getStatus())
+        assertThat(dispatchRepository.findById(id).orElseThrow().getStatus())
                 .isEqualTo(MarketingActionExecutionStatus.SUCCEEDED);
     }
 
     @Test
-    void dltUpdateIsIdempotentAndDoesNotChangeTerminalFailureAgain() {
+    void oldFinalFailureRemainsWhenNewDispatchIsCreated() {
         MarketingActionExecution execution = executionRepository.saveAndFlush(execution());
-        Long id = execution.getId();
+        MarketingActionDispatch first = dispatchRepository.saveAndFlush(dispatch(execution, 1L));
         LocalDateTime dltAt = LocalDateTime.now();
-
-        executionRepository.markDispatching(id, 1L,
-                MarketingActionExecutionStatus.PENDING, MarketingActionExecutionStatus.DISPATCHING);
-        executionRepository.markDispatched(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED, dltAt);
-        executionRepository.recordAttempt(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING,
-                MarketingActionExecutionStatus.DISPATCHED, MarketingActionExecutionStatus.PROCESSING,
-                MarketingActionExecutionStatus.RETRYING);
-
-        assertThat(executionRepository.markDltFinal(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING,
+        dispatchRepository.markDispatching(first.getId(), MarketingActionExecutionStatus.PENDING,
+                MarketingActionExecutionStatus.DISPATCHING);
+        dispatchRepository.markDltFinal(first.getId(), MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED, MarketingActionExecutionStatus.PROCESSING,
                 MarketingActionExecutionStatus.RETRYING, MarketingActionExecutionStatus.FAILED_FINAL,
-                "timeout", dltAt, dltAt)).isEqualTo(1);
-        assertThat(executionRepository.markDltFinal(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING,
+                "timeout", dltAt, dltAt);
+
+        MarketingActionDispatch second = dispatchRepository.saveAndFlush(dispatch(execution, 2L));
+        assertThat(dispatchRepository.findTopByExecution_IdOrderBySequenceDesc(execution.getId()).orElseThrow().getId())
+                .isEqualTo(second.getId());
+        entityManager.clear();
+        assertThat(dispatchRepository.findById(first.getId()).orElseThrow().getLastFailureReason())
+                .isEqualTo("timeout");
+    }
+
+    @Test
+    void latestFinalFailureQueryExcludesExecutionWithLaterDispatch() {
+        MarketingActionExecution execution = executionRepository.saveAndFlush(execution());
+        MarketingActionDispatch first = dispatchRepository.saveAndFlush(dispatch(execution, 1L));
+        dispatchRepository.markDispatching(first.getId(), MarketingActionExecutionStatus.PENDING,
+                MarketingActionExecutionStatus.DISPATCHING);
+        dispatchRepository.markDltFinal(first.getId(), MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED, MarketingActionExecutionStatus.PROCESSING,
                 MarketingActionExecutionStatus.RETRYING, MarketingActionExecutionStatus.FAILED_FINAL,
-                "timeout", dltAt.plusSeconds(1), dltAt.plusSeconds(1))).isZero();
+                "failure", LocalDateTime.now(), LocalDateTime.now());
+        dispatchRepository.saveAndFlush(dispatch(execution, 2L));
+
+        assertThat(dispatchRepository.findLatestFinalFailures(MarketingActionExecutionStatus.FAILED_FINAL))
+                .isEmpty();
+    }
+
+    @Test
+    void duplicateOldDltCannotChangeNewDispatch() {
+        MarketingActionExecution execution = executionRepository.saveAndFlush(execution());
+        MarketingActionDispatch first = dispatchRepository.saveAndFlush(dispatch(execution, 1L));
+        dispatchRepository.markDispatching(first.getId(), MarketingActionExecutionStatus.PENDING,
+                MarketingActionExecutionStatus.DISPATCHING);
+        dispatchRepository.markDltFinal(first.getId(), MarketingActionExecutionStatus.DISPATCHING,
+                MarketingActionExecutionStatus.DISPATCHED, MarketingActionExecutionStatus.PROCESSING,
+                MarketingActionExecutionStatus.RETRYING, MarketingActionExecutionStatus.FAILED_FINAL,
+                "old failure", LocalDateTime.now(), LocalDateTime.now());
+
+        MarketingActionDispatch second = dispatchRepository.saveAndFlush(dispatch(execution, 2L));
+        dispatchRepository.markDispatching(second.getId(), MarketingActionExecutionStatus.PENDING,
+                MarketingActionExecutionStatus.DISPATCHING);
+
+        assertThat(dispatchRepository.markDltFinal(first.getId(), MarketingActionExecutionStatus.DISPATCHING,
+                MarketingActionExecutionStatus.DISPATCHED, MarketingActionExecutionStatus.PROCESSING,
+                MarketingActionExecutionStatus.RETRYING, MarketingActionExecutionStatus.FAILED_FINAL,
+                "duplicate old failure", LocalDateTime.now(), LocalDateTime.now())).isZero();
+
+        entityManager.clear();
+        assertThat(dispatchRepository.findById(second.getId()).orElseThrow().getStatus())
+                .isEqualTo(MarketingActionExecutionStatus.DISPATCHING);
     }
 
     private MarketingActionExecution execution() {
         return MarketingActionExecution.builder()
-                .actionId(5L)
-                .ruleId(10L)
-                .actionReferenceId(99L)
-                .userId(1L)
-                .productId(100L)
-                .channel(RewardType.WEBHOOK)
+                .actionId(5L).ruleId(10L).actionReferenceId(99L).userId(1L).productId(100L)
+                .channel(RewardType.WEBHOOK).build();
+    }
+
+    private MarketingActionDispatch dispatch(MarketingActionExecution execution, long sequence) {
+        return MarketingActionDispatch.builder()
+                .execution(execution).sequence(sequence).initiatedBy(
+                        sequence == 1 ? MarketingActionDispatchInitiatedBy.SYSTEM : MarketingActionDispatchInitiatedBy.ADMIN)
                 .build();
-    }
-
-    @Test
-    void consumerCanFinishWhileKafkaCallbackIsStillInDispatching() {
-        MarketingActionExecution execution = executionRepository.saveAndFlush(execution());
-        Long id = execution.getId();
-
-        assertThat(executionRepository.markDispatching(id, 1L,
-                MarketingActionExecutionStatus.PENDING, MarketingActionExecutionStatus.DISPATCHING)).isEqualTo(1);
-        assertThat(executionRepository.recordAttempt(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED,
-                MarketingActionExecutionStatus.PROCESSING, MarketingActionExecutionStatus.RETRYING)).isEqualTo(1);
-        assertThat(executionRepository.markSucceeded(id, 1L,
-                MarketingActionExecutionStatus.PROCESSING, MarketingActionExecutionStatus.RETRYING,
-                MarketingActionExecutionStatus.SUCCEEDED, LocalDateTime.now())).isEqualTo(1);
-
-        assertThat(executionRepository.markDispatched(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED,
-                LocalDateTime.now())).isZero();
-
-        entityManager.clear();
-        assertThat(executionRepository.findById(id).orElseThrow().getStatus())
-                .isEqualTo(MarketingActionExecutionStatus.SUCCEEDED);
-    }
-
-    @Test
-    void dltConsumerCanFinishWhileKafkaCallbackIsStillInDispatching() {
-        MarketingActionExecution execution = executionRepository.saveAndFlush(execution());
-        Long id = execution.getId();
-        LocalDateTime now = LocalDateTime.now();
-
-        assertThat(executionRepository.markDispatching(id, 1L,
-                MarketingActionExecutionStatus.PENDING, MarketingActionExecutionStatus.DISPATCHING)).isEqualTo(1);
-        assertThat(executionRepository.markDltFinal(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED,
-                MarketingActionExecutionStatus.PROCESSING, MarketingActionExecutionStatus.RETRYING,
-                MarketingActionExecutionStatus.FAILED_FINAL, "terminal failure", now, now)).isEqualTo(1);
-
-        assertThat(executionRepository.markDispatched(id, 1L,
-                MarketingActionExecutionStatus.DISPATCHING, MarketingActionExecutionStatus.DISPATCHED,
-                LocalDateTime.now())).isZero();
-
-        entityManager.clear();
-        assertThat(executionRepository.findById(id).orElseThrow().getStatus())
-                .isEqualTo(MarketingActionExecutionStatus.FAILED_FINAL);
     }
 }

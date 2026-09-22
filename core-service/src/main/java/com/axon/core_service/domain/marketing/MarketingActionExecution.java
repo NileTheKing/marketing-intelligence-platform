@@ -22,7 +22,6 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "marketing_action_executions", indexes = {
-        @Index(name = "idx_marketing_execution_status_dlt", columnList = "status,dlt_at"),
         @Index(name = "idx_marketing_execution_action_target", columnList = "marketing_action_id,user_id,product_id")
 })
 @Getter
@@ -53,28 +52,6 @@ public class MarketingActionExecution {
     @Column(nullable = false, length = 20)
     private RewardType channel;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private MarketingActionExecutionStatus status;
-
-    @Column(nullable = false)
-    private int attemptCount;
-
-    @Column(name = "dispatch_version", nullable = false)
-    private long dispatchVersion;
-
-    @Column(name = "last_failure_reason", length = 1000)
-    private String lastFailureReason;
-
-    @Column(name = "dispatched_at")
-    private LocalDateTime dispatchedAt;
-
-    @Column(name = "completed_at")
-    private LocalDateTime completedAt;
-
-    @Column(name = "dlt_at")
-    private LocalDateTime dltAt;
-
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -91,8 +68,5 @@ public class MarketingActionExecution {
         this.userId = userId;
         this.productId = productId;
         this.channel = channel;
-        this.status = MarketingActionExecutionStatus.PENDING;
-        this.attemptCount = 0;
-        this.dispatchVersion = 1L;
     }
 }
