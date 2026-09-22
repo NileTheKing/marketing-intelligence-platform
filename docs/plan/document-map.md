@@ -30,6 +30,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/oracle-compose-baseline-runbook.md` | active | current Oracle VM Compose FCFS baseline execution steps and artifact boundary |
 | `docs/plan/rest-api-route-clean-cutover-plan.md` | active (implemented) | current SSR/API route contract and 2026-07-14 clean-cutover record |
 | `docs/plan/marketing-rule-multi-action-handoff.md` | active (implemented) | implemented MarketingRule 1:N action expansion; records the bounded scope, acceptance tests, and required VM schema cutover |
+| `docs/plan/dlq-failure-triage-agent-v1-plan.md` | active | Core-owned marketing action final-failure triage case, FastAPI/LangGraph read-only analysis, Slack human approval, and no automatic replay boundary |
 | `docs/plan/rfm-audience-segment-v1-plan.md` | active (implemented) | RFM repair and RFM-only AudienceSegment filter for MarketingRule; excludes generic segment DSL and membership pre-computation |
 | `docs/plan/behavior-event-schema-v1.md` | active (implemented, ES cutover pending) | Behavior-event property contract, Entry normalization, MarketingRule condition boundary, and ES strict/flattened mapping |
 | `docs/plan/purchase-cancellation-and-campaign-product-v1-plan.md` | active (implemented) | campaign-only product policy, post-payment cancellation state, and MySQL commercial projection correction |
