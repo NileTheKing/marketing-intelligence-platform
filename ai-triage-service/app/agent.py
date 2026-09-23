@@ -237,12 +237,12 @@ class TriageRuntime:
         return result
 
 
-def create_checkpointer(database_url: str):
+async def create_checkpointer(database_url: str):
     try:
-        from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+        from langgraph.checkpoint.mysql.aio import AIOMySQLSaver
     except ImportError as error:  # pragma: no cover - exercised only by a broken deployment
         raise RuntimeError("langgraph-checkpoint-mysql is required") from error
-    resource = PyMySQLSaver.from_conn_string(database_url)
-    saver = resource.__enter__() if hasattr(resource, "__enter__") else resource
-    saver.setup()
-    return saver
+    resource = AIOMySQLSaver.from_conn_string(database_url)
+    saver = await resource.__aenter__()
+    await saver.setup()
+    return saver, resource

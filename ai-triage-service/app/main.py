@@ -23,12 +23,20 @@ class ServiceRuntime:
         self.settings = settings
         self.core = CoreClient(settings)
         self.notifier = SlackNotifier(settings)
-        self.checkpointer = create_checkpointer(settings.langgraph_checkpoint_mysql_url)
-        self.triage = TriageRuntime(settings, self.core, self.notifier, self.checkpointer)
+        self.checkpointer = None
+        self.checkpointer_resource = None
+        self.triage: TriageRuntime | None = None
         self.stop = asyncio.Event()
         self.worker: asyncio.Task | None = None
         self.background_tasks: set[asyncio.Task] = set()
         self.interaction_keys: OrderedDict[str, None] = OrderedDict()
+
+    async def start(self) -> None:
+        self.checkpointer, self.checkpointer_resource = await create_checkpointer(
+            self.settings.langgraph_checkpoint_mysql_url
+        )
+        self.triage = TriageRuntime(self.settings, self.core, self.notifier, self.checkpointer)
+        self.worker = asyncio.create_task(self.poll())
 
     def submit_interaction(self, dedupe_key: str | None, work: Any) -> bool:
         if dedupe_key:
@@ -63,6 +71,7 @@ class ServiceRuntime:
             try:
                 case = await self.core.claim()
                 if case is not None:
+                    assert self.triage is not None
                     await self.triage.process(case)
             except Exception:
                 # A failed case is recorded by TriageRuntime; the worker must remain available for the next case.
@@ -80,9 +89,8 @@ class ServiceRuntime:
             await asyncio.gather(*self.background_tasks, return_exceptions=True)
         await self.core.client.aclose()
         await self.notifier.client.aclose()
-        close = getattr(self.checkpointer, "close", None)
-        if close:
-            close()
+        if self.checkpointer_resource:
+            await self.checkpointer_resource.__aexit__(None, None, None)
 
 
 def _payload_from_body(raw: bytes, content_type: str) -> dict:
@@ -102,7 +110,7 @@ def create_app(settings: Settings | None = None, runtime: ServiceRuntime | None 
         owns_runtime = service_runtime is None
         if service_runtime is None:
             service_runtime = ServiceRuntime(service_settings)
-            service_runtime.worker = asyncio.create_task(service_runtime.poll())
+            await service_runtime.start()
         yield
         if owns_runtime:
             await service_runtime.close()
