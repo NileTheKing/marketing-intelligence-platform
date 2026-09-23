@@ -1,6 +1,7 @@
 import asyncio
 
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import AIMessage
 
 from app.agent import TriageRuntime, build_read_only_tools
 from app.config import Settings
@@ -73,7 +74,7 @@ def test_only_declared_read_only_tools_are_exposed():
 def test_invalid_target_uses_deterministic_route_without_llm():
     core = FakeCore()
     notifier = FakeNotifier()
-    runtime = TriageRuntime(Settings(llm_api_key=""), core, notifier, MemorySaver())
+    runtime = TriageRuntime(Settings(groq_api_key=""), core, notifier, MemorySaver())
 
     asyncio.run(runtime.process(claimed_case()))
 
@@ -86,7 +87,7 @@ def test_reanalysis_resumes_the_existing_thread_checkpoint_and_updates_message()
     async def scenario():
         core = FakeCore()
         notifier = FakeNotifier()
-        runtime = TriageRuntime(Settings(llm_api_key=""), core, notifier, MemorySaver())
+        runtime = TriageRuntime(Settings(groq_api_key=""), core, notifier, MemorySaver())
         config = {"configurable": {"thread_id": "1"}}
 
         await runtime.process(claimed_case())
@@ -111,7 +112,7 @@ def test_reanalysis_resumes_the_existing_thread_checkpoint_and_updates_message()
 def test_approve_and_close_resume_the_interrupt_to_end_on_the_same_thread():
     async def scenario(decision):
         core = FakeCore()
-        runtime = TriageRuntime(Settings(llm_api_key=""), core, FakeNotifier(), MemorySaver())
+        runtime = TriageRuntime(Settings(groq_api_key=""), core, FakeNotifier(), MemorySaver())
         config = {"configurable": {"thread_id": "1"}}
 
         await runtime.process(claimed_case())
@@ -124,3 +125,44 @@ def test_approve_and_close_resume_the_interrupt_to_end_on_the_same_thread():
 
     asyncio.run(scenario("APPROVE"))
     asyncio.run(scenario("CLOSE"))
+
+
+def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch):
+    captured = {}
+
+    class FakeModel:
+        def bind_tools(self, tools):
+            captured["tools"] = {tool.name for tool in tools}
+            return self
+
+        async def ainvoke(self, messages):
+            return AIMessage(content=(
+                '{"recommendation":"MANUAL_INVESTIGATION","confidence":0.7,'
+                '"summary":"외부 전송 실패를 확인해야 합니다.",'
+                '"evidence":["Coupon not found"],'
+                '"operator_next_step":"대상 설정을 확인하세요."}'
+            ))
+
+    def fake_chat_openai(**kwargs):
+        captured["kwargs"] = kwargs
+        return FakeModel()
+
+    monkeypatch.setattr("app.agent.ChatOpenAI", fake_chat_openai)
+    core = FakeCore()
+    case = claimed_case()
+    case.failureCategory = "TRANSIENT_DELIVERY_FAILURE"
+    runtime = TriageRuntime(Settings(groq_api_key="test-key"), core, FakeNotifier(), MemorySaver())
+
+    asyncio.run(runtime.process(case))
+
+    assert captured["kwargs"] == {
+        "api_key": "test-key",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "openai/gpt-oss-20b",
+        "temperature": 0,
+    }
+    assert captured["tools"] == {
+        "get_dispatch_context",
+        "get_action_failure_history",
+        "get_execution_dispatch_history",
+    }

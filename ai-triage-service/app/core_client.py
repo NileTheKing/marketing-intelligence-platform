@@ -58,7 +58,7 @@ class CoreClient:
                 "summary": output.summary,
                 "evidence": output.evidence,
                 "operatorNextStep": output.operator_next_step,
-                "llmModel": self.settings.llm_model,
+                "llmModel": self.settings.groq_model,
             },
         )
         response.raise_for_status()

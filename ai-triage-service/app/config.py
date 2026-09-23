@@ -12,8 +12,9 @@ class Settings(BaseSettings):
         default="mysql+pymysql://ai_triage:change-me@mysql:3306/axon_ai_triage",
         repr=False,
     )
-    llm_api_key: str = Field(default="", repr=False)
-    llm_model: str = "gpt-4o-mini"
+    groq_api_key: str = Field(default="", repr=False)
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "openai/gpt-oss-20b"
     slack_bot_token: str = Field(default="", repr=False)
     slack_channel_id: str = ""
     slack_signing_secret: str = Field(default="", repr=False)

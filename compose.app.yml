@@ -160,8 +160,9 @@ services:
       TRIAGE_POLL_SECONDS: ${TRIAGE_POLL_SECONDS:-5}
       LANGGRAPH_CHECKPOINT_MYSQL_URL: >-
         mysql+pymysql://${AI_TRIAGE_DB_USERNAME:-ai_triage}:${AI_TRIAGE_DB_PASSWORD:-change-me}@ai-triage-mysql:3306/${AI_TRIAGE_DB_NAME:-axon_ai_triage}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}

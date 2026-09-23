@@ -94,10 +94,10 @@ class TriageRuntime:
             ).model_dump()}
 
         async def llm(state: GraphState) -> GraphState:
-            if not self.settings.llm_api_key:
-                raise RuntimeError("LLM_API_KEY is not configured")
-            model = ChatOpenAI(api_key=self.settings.llm_api_key, model=self.settings.llm_model,
-                               temperature=0).bind_tools(tools)
+            if not self.settings.groq_api_key:
+                raise RuntimeError("GROQ_API_KEY is not configured")
+            model = ChatOpenAI(api_key=self.settings.groq_api_key, base_url=self.settings.groq_base_url,
+                               model=self.settings.groq_model, temperature=0).bind_tools(tools)
             system = ("You are the Axon DLQ failure triage agent. Use only the three provided read-only "
                        "Core tools. Do not invent IDs, counts, or facts. Return only JSON matching this schema: "
                        '{"recommendation":"RETRY_RECOMMENDED|MANUAL_INVESTIGATION|NO_RETRY",'
