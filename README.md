@@ -215,3 +215,13 @@ JS SDK 행동 이벤트를 Elasticsearch에 적재해 대시보드·세그먼트
 - APM 진단(OpenTelemetry/Jaeger): `docker compose -f compose.app.yml -f compose.resources.yml -f compose.otel.yml up -d --build`
 - Compose baseline 부하 테스트: `./scripts/load-test/run-baseline-compose.sh 1000 1`
 - K2P/Kubernetes 배포 파일: `k8s/`, `helm/`, `.github/workflows/deploy.yml`에 보존되어 있습니다. 최신 코드로 재배포하려면 현재 멀티모듈 Docker build context와 런타임 profile을 환경에 맞게 점검해야 합니다.
+
+관리 포트(Prometheus, Grafana, Jaeger, Kafka, Redis, MySQL, Elasticsearch, Kibana, Kafka Connect)는 모두 VM의 `127.0.0.1`에만 바인딩한다. 원격 확인이 필요하면 SSH 터널을 사용한다.
+
+```bash
+ssh -N \
+  -L 3000:127.0.0.1:3000 \
+  -L 9090:127.0.0.1:9090 \
+  -L 16686:127.0.0.1:16686 \
+  "$OCI_USER@$OCI_HOST"
+```

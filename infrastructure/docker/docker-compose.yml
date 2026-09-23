@@ -27,7 +27,7 @@ services:
     networks:
       - axon-network
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     environment:
       KAFKA_PROCESS_ROLES: broker
       KAFKA_NODE_ID: 2
@@ -66,7 +66,7 @@ services:
     container_name: axon-mysql
     restart: always
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: axon_db
@@ -87,7 +87,7 @@ services:
     image: redis:alpine
     container_name: axon-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --requirepass axon1234 --save ""
@@ -106,7 +106,7 @@ services:
         - ES_JAVA_OPTS=-Xms1g -Xmx1g
         - xpack.security.enabled=false
     ports:
-        - "9200:9200"
+        - "127.0.0.1:9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
@@ -116,7 +116,7 @@ services:
     image: docker.elastic.co/kibana/kibana:8.15.0
     container_name: axon-kibana
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=http://axon-es:9200
     depends_on:
@@ -138,7 +138,7 @@ services:
     networks:
       - axon-network
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     environment:
       CONNECT_BOOTSTRAP_SERVERS: broker_1:29092
       CONNECT_REST_PORT: 8083

@@ -10,7 +10,7 @@ services:
       - xpack.security.enabled=false # 개발용: 보안 끄기
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     networks:
       - axon-net
 
@@ -21,7 +21,7 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     depends_on:
       - elasticsearch
     networks:
@@ -34,7 +34,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     networks:
       - axon-net
 
@@ -45,7 +45,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin # 접속 비번
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - prometheus
     networks:
