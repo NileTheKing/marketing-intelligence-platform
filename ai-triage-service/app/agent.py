@@ -246,8 +246,9 @@ async def create_checkpointer(database_url: str):
     connection = await aiomysql.connect(
         **AIOMySQLSaver.parse_conn_string(database_url),
         autocommit=True,
-        init_command="SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
     )
+    async with connection.cursor() as cursor:
+        await cursor.execute("SET collation_connection = 'utf8mb4_unicode_ci'")
     saver = AIOMySQLSaver(conn=connection)
     await saver.setup()
     return saver, connection
