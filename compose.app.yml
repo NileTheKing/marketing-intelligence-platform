@@ -109,7 +109,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-axon1234}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: broker_1:29092
       AXON_ENTRY_SERVICE_URL: http://entry-service:8081
-      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
+      JWT_SECRET: ${JWT_SECRET:-local-compose-development-jwt-secret-32-bytes-minimum}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-local-client-id}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-local-client-secret}
       AXON_ADMIN_EMAILS: ${AXON_ADMIN_EMAILS:-}
@@ -178,7 +178,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: broker_1:29092
       AXON_CORE_SERVICE_BASE_URL: http://core-service:8080
       AXON_CORS_ALLOWED_ORIGINS: ${AXON_CORS_ALLOWED_ORIGINS:-https://axon.opicnic.xyz}
-      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret}
+      JWT_SECRET: ${JWT_SECRET:-local-compose-development-jwt-secret-32-bytes-minimum}
       PAYMENT_TOKEN_SECRET: ${PAYMENT_TOKEN_SECRET:-change-this-payment-secret}
 
   axon-nginx:
