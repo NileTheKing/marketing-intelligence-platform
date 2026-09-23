@@ -17,7 +17,7 @@ def test_view_submission_extracts_case_id_and_feedback_from_nested_state():
         "user": {"id": "U_ADMIN"},
         "view": {
             "id": "V123",
-            "callback_id": "reanalysis_modal",
+            "callback_id": "request_investigation_modal",
             "private_metadata": "42",
             "state": {"values": {
                 "feedback_block": {
@@ -30,7 +30,7 @@ def test_view_submission_extracts_case_id_and_feedback_from_nested_state():
         },
     })
 
-    assert interaction.action_id == "reanalysis_modal"
+    assert interaction.action_id == "request_investigation_modal"
     assert interaction.case_id == 42
     assert interaction.feedback == "최근 변경된 쿠폰으로 다시 분석해 주세요."
     assert interaction.dedupe_key == "V123"
@@ -81,3 +81,39 @@ def test_reanalysis_uses_chat_update_without_posting_a_new_message():
     payload = json.loads(requests[1].content)
     assert payload["channel"] == "C123"
     assert payload["ts"] == "1700000000.000100"
+
+
+def test_actions_show_retry_approval_only_when_recommended():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True, "ts": "1700000000.000100"})
+
+    async def scenario(recommendation: str):
+        settings = Settings(slack_bot_token="xoxb-test", slack_channel_id="C123")
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        notifier = SlackNotifier(settings, client)
+        case = ClaimedCase(
+            caseId=42, dispatchId=11, executionId=7, status="ANALYZING",
+            failureCategory="TRANSIENT_DELIVERY", analysisClaimToken="claim",
+            analysisAttemptCount=1,
+        )
+        output = AnalysisOutput(
+            recommendation=recommendation, confidence=0.7, summary="요약",
+            evidence=["근거"], operator_next_step="다음 조치",
+        )
+        await notifier.send(case, output, {"dispatchContext": {}})
+        await client.aclose()
+
+    asyncio.run(scenario("MANUAL_INVESTIGATION"))
+    asyncio.run(scenario("RETRY_RECOMMENDED"))
+
+    first = json.loads(requests[0].content)["blocks"][1]["elements"]
+    second = json.loads(requests[1].content)["blocks"][1]["elements"]
+    assert [item["action_id"] for item in first] == [
+        "request_investigation", "record_confirmation", "close",
+    ]
+    assert [item["action_id"] for item in second] == [
+        "approve", "request_investigation", "record_confirmation", "close",
+    ]

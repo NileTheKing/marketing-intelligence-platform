@@ -55,22 +55,37 @@ class SlackNotifier:
                    facts: dict[str, Any], update: bool = False) -> str | None:
         if not self.settings.slack_bot_token or not self.settings.slack_channel_id:
             raise RuntimeError("SLACK_BOT_TOKEN and SLACK_CHANNEL_ID are required")
-        text = (f"Axon 마케팅 DLQ triage case={case.caseId} dispatch={case.dispatchId} "
-                f"category={case.failureCategory} recommendation={output.recommendation}\n"
-                f"{output.summary}\n확인: {output.operator_next_step}")
+        decision_label = {
+            "RETRY_RECOMMENDED": "재실행 권고",
+            "MANUAL_INVESTIGATION": "관리자 확인 필요",
+            "NO_RETRY": "재실행 비권고",
+        }[output.recommendation]
+        evidence = "\n".join(f"• {item}" for item in output.evidence)
+        text = (f"*마케팅 실행 실패*\n"
+                f"판단: *{decision_label}*\n\n"
+                f"{output.summary}\n\n"
+                f"*근거*\n{evidence}\n\n"
+                f"*다음 조치*\n{output.operator_next_step}\n\n"
+                f"추적 ID: case #{case.caseId}")
+        actions = [
+            {"type": "button", "text": {"type": "plain_text", "text": "추가 확인 요청"},
+             "action_id": "request_investigation", "value": str(case.caseId)},
+            {"type": "button", "text": {"type": "plain_text", "text": "확인 결과 입력"},
+             "action_id": "record_confirmation", "value": str(case.caseId)},
+            {"type": "button", "text": {"type": "plain_text", "text": "종료"},
+             "style": "danger", "action_id": "close", "value": str(case.caseId)},
+        ]
+        if output.recommendation == "RETRY_RECOMMENDED":
+            actions.insert(0, {
+                "type": "button", "text": {"type": "plain_text", "text": "재실행 승인"},
+                "style": "primary", "action_id": "approve", "value": str(case.caseId),
+            })
         payload: dict[str, Any] = {
             "channel": self.settings.slack_channel_id,
             "text": text,
             "blocks": [
                 {"type": "section", "text": {"type": "mrkdwn", "text": text}},
-                {"type": "actions", "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "재실행 승인"},
-                     "style": "primary", "action_id": "approve", "value": str(case.caseId)},
-                    {"type": "button", "text": {"type": "plain_text", "text": "재분석 요청"},
-                     "action_id": "request_reanalysis", "value": str(case.caseId)},
-                    {"type": "button", "text": {"type": "plain_text", "text": "종료"},
-                     "style": "danger", "action_id": "close", "value": str(case.caseId)},
-                ]},
+                {"type": "actions", "elements": actions},
             ],
         }
         if update:
@@ -91,9 +106,21 @@ class SlackNotifier:
             raise RuntimeError(f"Slack API request failed: {body.get('error', 'unknown_error')}")
         return body.get("ts") or case.slackMessageTs
 
-    async def open_reanalysis_modal(self, trigger_id: str, case_id: int) -> None:
+    async def open_reanalysis_modal(self, trigger_id: str, case_id: int, mode: str) -> None:
         if not self.settings.slack_bot_token:
             raise RuntimeError("SLACK_BOT_TOKEN is required for re-analysis feedback")
+        modal = {
+            "request_investigation": {
+                "title": "추가 확인 요청",
+                "label": "AI가 다시 확인할 내용",
+                "hint": "예: 최근 설정 변경 또는 동일 대상의 다른 실패 이력을 확인해 주세요.",
+            },
+            "record_confirmation": {
+                "title": "확인 결과 입력",
+                "label": "외부 확인 또는 조치 결과",
+                "hint": "예: endpoint 200 응답 확인, rate limit 없음.",
+            },
+        }[mode]
         response = await self.client.post(
             "https://slack.com/api/views.open",
             headers={"Authorization": f"Bearer {self.settings.slack_bot_token}"},
@@ -101,16 +128,19 @@ class SlackNotifier:
                 "trigger_id": trigger_id,
                 "view": {
                     "type": "modal",
-                    "callback_id": "reanalysis_modal",
+                    "callback_id": f"{mode}_modal",
                     "private_metadata": str(case_id),
-                    "title": {"type": "plain_text", "text": "재분석 요청"},
+                    "title": {"type": "plain_text", "text": modal["title"]},
                     "submit": {"type": "plain_text", "text": "제출"},
                     "close": {"type": "plain_text", "text": "취소"},
                     "blocks": [{
                         "type": "input",
                         "block_id": "feedback_block",
-                        "label": {"type": "plain_text", "text": "반려 사유"},
-                        "element": {"type": "plain_text_input", "action_id": "feedback"},
+                        "label": {"type": "plain_text", "text": modal["label"]},
+                        "element": {
+                            "type": "plain_text_input", "action_id": "feedback",
+                            "placeholder": {"type": "plain_text", "text": modal["hint"]},
+                        },
                     }],
                 },
             },

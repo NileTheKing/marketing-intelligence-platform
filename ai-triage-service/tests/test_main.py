@@ -17,7 +17,7 @@ class FakeCore:
 
 
 class FakeNotifier:
-    async def open_reanalysis_modal(self, trigger_id, case_id):
+    async def open_reanalysis_modal(self, trigger_id, case_id, mode):
         return None
 
 
@@ -74,7 +74,7 @@ def test_slack_retry_header_does_not_drop_first_processing_and_dedupes_same_inte
         "type": "view_submission",
         "user": {"id": "U_ADMIN"},
         "view": {
-            "id": "V_RETRY", "callback_id": "reanalysis_modal", "private_metadata": "42",
+            "id": "V_RETRY", "callback_id": "request_investigation_modal", "private_metadata": "42",
             "state": {"values": {"feedback_block": {"feedback": {
                 "type": "plain_text_input", "value": "재전송 테스트",
             }}}},
@@ -102,7 +102,7 @@ def test_view_submission_acknowledges_immediately_and_submits_background_reanaly
         "type": "view_submission",
         "user": {"id": "U_ADMIN"},
         "view": {
-            "id": "V123", "callback_id": "reanalysis_modal", "private_metadata": "42",
+            "id": "V123", "callback_id": "record_confirmation_modal", "private_metadata": "42",
             "state": {"values": {"feedback_block": {"feedback": {
                 "type": "plain_text_input", "value": "사유",
             }}}},

@@ -148,20 +148,30 @@ def create_app(settings: Settings | None = None, runtime: ServiceRuntime | None 
                 service_runtime.triage.decide(interaction.case_id, "CLOSE", interaction.user_id),
             )
             return JSONResponse({"text": "triage case를 종료했습니다."})
-        if interaction.action_id == "request_reanalysis":
+        if interaction.action_id in {"request_investigation", "record_confirmation", "request_reanalysis"}:
             if not interaction.trigger_id:
                 raise HTTPException(status_code=400, detail="Missing Slack trigger id")
+            mode = "request_investigation" if interaction.action_id == "request_reanalysis" else interaction.action_id
             service_runtime.submit_interaction(
                 interaction.dedupe_key,
-                service_runtime.notifier.open_reanalysis_modal(interaction.trigger_id, interaction.case_id),
+                service_runtime.notifier.open_reanalysis_modal(interaction.trigger_id, interaction.case_id, mode),
             )
-            return JSONResponse({"response_type": "ephemeral", "text": "재분석 사유를 입력해 주세요."})
-        if interaction.action_id == "reanalysis_modal":
+            return JSONResponse({"response_type": "ephemeral", "text": "입력창을 열었습니다."})
+        if interaction.action_id in {
+            "request_investigation_modal", "record_confirmation_modal", "reanalysis_modal",
+        }:
             if not interaction.feedback:
-                return JSONResponse({"text": "재분석 사유를 입력한 뒤 다시 제출해 주세요."}, status_code=400)
+                return JSONResponse({"text": "내용을 입력한 뒤 다시 제출해 주세요."}, status_code=400)
+            feedback_prefix = {
+                "request_investigation_modal": "관리자 추가 확인 요청",
+                "record_confirmation_modal": "관리자 확인 결과",
+                "reanalysis_modal": "관리자 추가 확인 요청",
+            }[interaction.action_id]
             service_runtime.submit_interaction(
                 interaction.dedupe_key,
-                service_runtime.triage.reanalyze(interaction.case_id, interaction.feedback),
+                service_runtime.triage.reanalyze(
+                    interaction.case_id, f"{feedback_prefix}: {interaction.feedback}"
+                ),
             )
             return JSONResponse({"response_action": "clear"})
         raise HTTPException(status_code=400, detail="Unsupported Slack action")
