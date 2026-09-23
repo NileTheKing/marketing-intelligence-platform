@@ -91,7 +91,7 @@ class ServiceRuntime:
         await self.notifier.client.aclose()
         if self.checkpointer_resource:
             self.checkpointer_resource.close()
-            await self.checkpointer_resource.wait_closed()
+            await self.checkpointer_resource.ensure_closed()
 
 
 def _payload_from_body(raw: bytes, content_type: str) -> dict:
