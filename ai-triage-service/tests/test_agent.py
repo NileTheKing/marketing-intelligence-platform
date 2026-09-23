@@ -128,23 +128,36 @@ def test_approve_and_close_resume_the_interrupt_to_end_on_the_same_thread():
 
 
 def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch):
-    captured = {}
+    captured = {"kwargs": []}
 
     class FakeModel:
+        def __init__(self, structured=False):
+            self.structured = structured
+
         def bind_tools(self, tools):
             captured["tools"] = {tool.name for tool in tools}
             return self
 
+        def with_structured_output(self, schema, method):
+            captured["schema"] = schema
+            captured["method"] = method
+            return FakeModel(structured=True)
+
         async def ainvoke(self, messages):
+            if self.structured:
+                return {
+                    "recommendation": "MANUAL_INVESTIGATION",
+                    "confidence": 0.7,
+                    "summary": "외부 전송 실패를 확인해야 합니다.",
+                    "evidence": ["Coupon not found"],
+                    "operator_next_step": "대상 설정을 확인하세요.",
+                }
             return AIMessage(content=(
-                '{"recommendation":"MANUAL_INVESTIGATION","confidence":0.7,'
-                '"summary":"외부 전송 실패를 확인해야 합니다.",'
-                '"evidence":["Coupon not found"],'
-                '"operator_next_step":"대상 설정을 확인하세요."}'
+                "Facts are sufficient for a structured recommendation."
             ))
 
     def fake_chat_openai(**kwargs):
-        captured["kwargs"] = kwargs
+        captured["kwargs"].append(kwargs)
         return FakeModel()
 
     monkeypatch.setattr("app.agent.ChatOpenAI", fake_chat_openai)
@@ -155,12 +168,16 @@ def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch
 
     asyncio.run(runtime.process(case))
 
-    assert captured["kwargs"] == {
+    assert captured["kwargs"] == [{
         "api_key": "test-key",
         "base_url": "https://api.groq.com/openai/v1",
         "model": "openai/gpt-oss-20b",
         "temperature": 0,
-    }
+        "timeout": 30,
+        "max_retries": 1,
+    }] * 2
+    assert captured["schema"].__name__ == "AnalysisOutput"
+    assert captured["method"] == "json_schema"
     assert captured["tools"] == {
         "get_dispatch_context",
         "get_action_failure_history",

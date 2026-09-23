@@ -96,8 +96,18 @@ class TriageRuntime:
         async def llm(state: GraphState) -> GraphState:
             if not self.settings.groq_api_key:
                 raise RuntimeError("GROQ_API_KEY is not configured")
-            model = ChatOpenAI(api_key=self.settings.groq_api_key, base_url=self.settings.groq_base_url,
-                               model=self.settings.groq_model, temperature=0).bind_tools(tools)
+            model_kwargs = {
+                "api_key": self.settings.groq_api_key,
+                "base_url": self.settings.groq_base_url,
+                "model": self.settings.groq_model,
+                "temperature": 0,
+                "timeout": 30,
+                "max_retries": 1,
+            }
+            tool_model = ChatOpenAI(**model_kwargs).bind_tools(tools)
+            output_model = ChatOpenAI(**model_kwargs).with_structured_output(
+                AnalysisOutput, method="json_schema"
+            )
             system = ("You are the Axon DLQ failure triage agent. Use only the three provided read-only "
                        "Core tools. Do not invent IDs, counts, or facts. Return only JSON matching this schema: "
                        '{"recommendation":"RETRY_RECOMMENDED|MANUAL_INVESTIGATION|NO_RETRY",'
@@ -108,22 +118,27 @@ class TriageRuntime:
             prompt = (f"Triage case: {_json(case)}\nFacts already loaded: {_json(state['facts'])}\n"
                       f"Operator feedback for re-analysis: {state.get('feedback') or 'none'}")
             messages: list[Any] = [SystemMessage(content=system), HumanMessage(content=prompt)]
-            for _ in range(5):
-                response = await model.ainvoke(messages)
+            for _ in range(3):
+                response = await tool_model.ainvoke(messages)
                 messages.append(response)
                 calls = getattr(response, "tool_calls", None) or []
                 if not calls:
-                    content = response.content
-                    if isinstance(content, list):
-                        content = "".join(item.get("text", "") for item in content if isinstance(item, dict))
-                    return {"output": AnalysisOutput.model_validate_json(content).model_dump()}
+                    break
                 for call in calls:
                     name = call["name"]
                     if name not in tool_map:
                         raise RuntimeError(f"Unsupported tool requested: {name}")
                     result = await tool_map[name].ainvoke(call.get("args", {}))
                     messages.append(ToolMessage(content=_json(result), tool_call_id=call["id"]))
-            raise RuntimeError("LLM did not return a final triage JSON")
+            else:
+                raise RuntimeError("LLM exceeded the triage tool-call limit")
+
+            # Tool calls are optional because bounded Core facts are loaded first. Always use
+            # schema-constrained output for the operator-facing recommendation.
+            output = await output_model.ainvoke(messages + [HumanMessage(content=(
+                "Using only the supplied Core facts and tool results, return the final triage decision."
+            ))])
+            return {"output": AnalysisOutput.model_validate(output).model_dump()}
 
         async def save(state: GraphState) -> GraphState:
             output = AnalysisOutput.model_validate(state["output"])

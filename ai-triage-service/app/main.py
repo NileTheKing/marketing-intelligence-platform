@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Any
@@ -12,6 +13,9 @@ from .agent import TriageRuntime, create_checkpointer
 from .config import Settings, get_settings
 from .core_client import CoreClient
 from .slack import extract_interaction, SlackNotifier, verify_slack_signature
+
+
+logger = logging.getLogger(__name__)
 
 
 class ServiceRuntime:
@@ -62,7 +66,7 @@ class ServiceRuntime:
                     await self.triage.process(case)
             except Exception:
                 # A failed case is recorded by TriageRuntime; the worker must remain available for the next case.
-                pass
+                logger.exception("Triage polling failed")
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=self.settings.triage_poll_seconds)
             except asyncio.TimeoutError:
