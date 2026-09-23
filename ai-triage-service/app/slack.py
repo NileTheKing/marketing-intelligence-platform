@@ -52,7 +52,7 @@ class SlackNotifier:
         self.client = client or httpx.AsyncClient(timeout=15.0)
 
     async def send(self, case: ClaimedCase, output: AnalysisOutput,
-                   facts: dict[str, Any], update: bool = False) -> str | None:
+                   evidence: list[str], update: bool = False) -> str | None:
         if not self.settings.slack_bot_token or not self.settings.slack_channel_id:
             raise RuntimeError("SLACK_BOT_TOKEN and SLACK_CHANNEL_ID are required")
         decision_label = {
@@ -60,11 +60,11 @@ class SlackNotifier:
             "MANUAL_INVESTIGATION": "관리자 확인 필요",
             "NO_RETRY": "재실행 비권고",
         }[output.recommendation]
-        evidence = "\n".join(f"• {item}" for item in output.evidence)
+        evidence_text = "\n".join(f"• {item}" for item in evidence)
         text = (f"*마케팅 실행 실패*\n"
                 f"판단: *{decision_label}*\n\n"
-                f"{output.summary}\n\n"
-                f"*근거*\n{evidence}\n\n"
+                f"*AI 판단*\n{output.summary}\n\n"
+                f"*확인된 사실*\n{evidence_text}\n\n"
                 f"*다음 조치*\n{output.operator_next_step}\n\n"
                 f"추적 ID: case #{case.caseId}")
         actions = [

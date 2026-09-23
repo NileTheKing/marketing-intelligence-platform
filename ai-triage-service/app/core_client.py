@@ -56,7 +56,7 @@ class CoreClient:
                 "recommendation": output.recommendation,
                 "confidence": output.confidence,
                 "summary": output.summary,
-                "evidence": output.evidence,
+                "evidenceRefs": output.evidence_refs,
                 "operatorNextStep": output.operator_next_step,
                 "llmModel": self.settings.groq_model,
             },

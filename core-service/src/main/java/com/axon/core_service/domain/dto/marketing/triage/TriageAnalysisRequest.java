@@ -15,7 +15,7 @@ public record TriageAnalysisRequest(
         @NotBlank String recommendation,
         @NotNull @DecimalMin("0.0") @DecimalMax("1.0") Double confidence,
         @NotBlank @Size(max = 2000) String summary,
-        @NotNull @Size(max = 10) List<@Size(max = 1000) String> evidence,
+        @NotNull @Size(min = 1, max = 4) List<@NotBlank String> evidenceRefs,
         @NotBlank @Size(max = 1000) String operatorNextStep,
         @Size(max = 100) String llmModel
 ) {

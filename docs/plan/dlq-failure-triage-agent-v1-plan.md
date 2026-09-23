@@ -31,7 +31,7 @@ DLT 최종 실패
 |---|---|---|
 | 상태·권한 소유 | Core + MySQL | FastAPI와 Slack은 운영 보조 도구다. 실행 상태를 소유하거나 Kafka를 발행하지 않는다. |
 | 사실 조회 | Core의 고정된 내부 API를 function tool로 호출 | LLM이 SQL, Elasticsearch DSL, Redis 명령을 만들지 않는다. |
-| AI 역할 | 실패 사실 요약, 재실행 권고, 근거 정리 | AI가 상태 변경·자동 재실행·인프라 변경을 하지 않는다. |
+| AI 역할 | 제한된 근거 참조값 선택, 실패 요약, 재실행 권고 | AI가 상태 변경·자동 재실행·인프라 변경을 하지 않는다. Core가 근거 문장을 렌더링한다. |
 | 최종 실행 | 사람 승인 후 Core | 기존 `retry` 도메인 규칙과 Dispatch 동시성 제어를 재사용한다. |
 | 알림 | Slack | 운영자가 보는 단일 채널로 시작한다. Discord, n8n은 추가하지 않는다. |
 | 문서 지식 | Core가 선택한 짧은 운영 가이드만 전달 | 현재 문서 규모에서 RAG/벡터 DB는 비용 대비 이득이 없다. |
@@ -168,12 +168,13 @@ get_execution_dispatch_history(executionId)
   "recommendation": "RETRY_RECOMMENDED | MANUAL_INVESTIGATION | NO_RETRY",
   "confidence": 0.0,
   "summary": "운영자가 읽는 2~4문장 요약",
-  "evidence": ["Core가 제공한 사실만 인용"],
+  "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
   "operator_next_step": "승인 전 확인할 한 가지 또는 두 가지"
 }
 ```
 
-- JSON 검증 실패, 근거 없는 ID/숫자, 허용되지 않은 권고는 `ANALYSIS_FAILED`로 기록하고 Slack 재실행 버튼을 제공하지 않는다.
+- `evidence_refs`는 `CURRENT_DELIVERY_FAILURE`, `RECENT_ACTION_FAILURES`, `EXECUTION_DISPATCH_HISTORY`, `OPERATOR_CONFIRMED_RECOVERY` 중에서만 선택한다. Core는 스냅샷에 해당 사실이 있을 때만 한국어 문장으로 렌더링·저장한다. AI가 만든 근거 문장은 Slack에 표시하지 않는다.
+- JSON 검증 실패, 허용되지 않은 근거 참조값, 허용되지 않은 권고는 `ANALYSIS_FAILED`로 기록하고 Slack 재실행 버튼을 제공하지 않는다.
 - `confidence`는 모델의 자기평가다. 값이 높아도 자동 재실행하지 않는다.
 - Jev 같은 별도 분류 모델은 넣지 않는다. v1의 결정적 실패 라우팅은 코드 조건으로 충분하고, triage 건수도 별도 모델 도입을 정당화할 규모가 아니다.
 
@@ -184,7 +185,7 @@ get_execution_dispatch_history(executionId)
 Slack 메시지는 한국어 운영 문장으로 다음만 전달한다. Core JSON field name, 내부 상태값, 마케팅 룰의 행동 조건은 그대로 노출하지 않는다.
 
 - action/channel, Dispatch ID, 실패 category, 시도 횟수
-- 정형 사실 기반 요약과 권고
+- Core가 렌더링한 `확인된 사실`과 AI의 `판단 요약`
 - 승인 전 확인할 항목
 - `추가 확인 요청`, `확인 결과 입력`, `종료` 버튼
 - 권고가 `RETRY_RECOMMENDED`일 때만 `재실행 승인` 버튼

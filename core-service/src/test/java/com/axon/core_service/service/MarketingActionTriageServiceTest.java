@@ -36,12 +36,13 @@ class MarketingActionTriageServiceTest {
     @Mock private MarketingActionRepository actionRepository;
     @Mock private MarketingActionExecutionRetryClaimService retryClaimService;
     @Mock private KafkaTemplate<String, Object> kafkaTemplate;
+    @Mock private TriageEvidenceRenderer evidenceRenderer;
 
     @Test
     void duplicateDltDoesNotCreateAnotherCaseForTheSameDispatch() {
         MarketingActionTriageService service = new MarketingActionTriageService(
                 triageCaseRepository, dispatchRepository, executionRepository, actionRepository,
-                retryClaimService, kafkaTemplate);
+                retryClaimService, kafkaTemplate, evidenceRenderer);
         MarketingActionDispatch dispatch = mock(MarketingActionDispatch.class);
         MarketingActionExecution execution = MarketingActionExecution.builder()
                 .actionId(5L).ruleId(10L).actionReferenceId(99L).userId(1L).productId(100L)
@@ -64,7 +65,7 @@ class MarketingActionTriageServiceTest {
     void operatorCanReclaimAnalysisFailedCaseForReanalysis() {
         MarketingActionTriageService service = new MarketingActionTriageService(
                 triageCaseRepository, dispatchRepository, executionRepository, actionRepository,
-                retryClaimService, kafkaTemplate);
+                retryClaimService, kafkaTemplate, evidenceRenderer);
         MarketingActionExecution execution = MarketingActionExecution.builder()
                 .actionId(5L).ruleId(10L).actionReferenceId(99L).userId(1L).productId(100L)
                 .channel(RewardType.WEBHOOK).build();

@@ -94,8 +94,8 @@ class TriageRuntime:
             return {"output": AnalysisOutput(
                 recommendation="NO_RETRY",
                 confidence=1.0,
-                summary=f"대상 또는 쿠폰이 유효하지 않아 재실행해도 성공 가능성이 낮습니다. 실패 원인은 {reason}입니다.",
-                evidence=[reason],
+                summary="대상 또는 쿠폰 설정 오류로 분류되어 같은 발송을 다시 실행해도 성공 가능성이 낮습니다.",
+                evidence_refs=["CURRENT_DELIVERY_FAILURE"],
                 operator_next_step="대상 또는 쿠폰 설정을 수정하고 필요하면 새 액션을 생성하세요.",
             ).model_dump()}
 
@@ -128,7 +128,11 @@ class TriageRuntime:
                        "failureReason to the operator. Return only JSON matching this schema: "
                        '{"recommendation":"RETRY_RECOMMENDED|MANUAL_INVESTIGATION|NO_RETRY",'
                        '"confidence":0.0,"summary":"2-4 sentences",'
-                       '"evidence":["facts only"],"operator_next_step":"one or two checks"}. '
+                       '"evidence_refs":["CURRENT_DELIVERY_FAILURE|RECENT_ACTION_FAILURES|EXECUTION_DISPATCH_HISTORY|OPERATOR_CONFIRMED_RECOVERY"],'
+                       '"operator_next_step":"one or two checks"}. '
+                       "evidence_refs are codes, not operator-facing sentences. Select only codes supported by the facts. "
+                       "Select OPERATOR_CONFIRMED_RECOVERY only when operatorFeedback.source is operator and it explicitly confirms recovery. "
+                       "Do not put numeric facts, identifiers, or internal field names in summary or operator_next_step; Core renders verified facts separately. "
                        "Never approve, retry, or change infrastructure.")
             case = state["case"]
             prompt = (f"Triage case: {_json(case)}\nFacts already loaded: {_json(state['facts'])}\n"
@@ -168,7 +172,6 @@ class TriageRuntime:
 
         async def save(state: GraphState) -> GraphState:
             output = AnalysisOutput.model_validate(state["output"])
-            self._validate_evidence(output, state["facts"])
             case = ClaimedCase.model_validate(state["case"])
             saved = await self.core.save_analysis(case.caseId, case.analysisClaimToken,
                                                    state["facts"], output)
@@ -176,8 +179,13 @@ class TriageRuntime:
 
         async def notify(state: GraphState) -> GraphState:
             case = ClaimedCase.model_validate(state["case"])
-            message_ts = await self.notifier.send(case, AnalysisOutput.model_validate(state["output"]),
-                                                  state["facts"], update=state.get("reanalysis", False))
+            saved = state["saved"]
+            message_ts = await self.notifier.send(
+                case,
+                AnalysisOutput.model_validate(state["output"]),
+                saved.get("evidence") or [],
+                update=state.get("reanalysis", False),
+            )
             if message_ts:
                 await self.core.record_slack_message(case.caseId, message_ts)
             return {}
@@ -216,13 +224,9 @@ class TriageRuntime:
         return workflow.compile(checkpointer=checkpointer)
 
     @staticmethod
-    def _validate_evidence(output: AnalysisOutput, facts: dict[str, Any]) -> None:
-        if TriageRuntime._needs_operator_rewrite(output):
-            raise ValueError("Operator output still exposes internal fields or is not Korean")
-
     @staticmethod
     def _needs_operator_rewrite(output: AnalysisOutput) -> bool:
-        text = " ".join([output.summary, *output.evidence, output.operator_next_step])
+        text = " ".join([output.summary, output.operator_next_step])
         internal_names = (
             "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
             "failureReason", "operatorGuidance", "totalFailures",

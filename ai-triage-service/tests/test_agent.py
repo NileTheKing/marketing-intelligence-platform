@@ -29,7 +29,7 @@ class FakeCore:
         self.saved = output
         self.saved_outputs.append((case_id, claim_token, output))
         self.saved_facts.append(facts)
-        return {"caseId": case_id, "status": "AWAITING_APPROVAL"}
+        return {"caseId": case_id, "status": "AWAITING_APPROVAL", "evidence": ["Core 확인 사실"]}
 
     async def claim(self, case_id):
         self.claim_count += 1
@@ -50,7 +50,7 @@ class FakeNotifier:
     def __init__(self):
         self.calls = []
 
-    async def send(self, case, output, facts, update=False):
+    async def send(self, case, output, evidence, update=False):
         self.calls.append((case.caseId, case.analysisClaimToken, update))
         return "1700000000.000100"
 
@@ -155,7 +155,7 @@ def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch
                     "recommendation": "MANUAL_INVESTIGATION",
                     "confidence": 0.7,
                     "summary": "외부 전송 실패를 확인해야 합니다.",
-                    "evidence": ["Coupon not found"],
+                    "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
                     "operator_next_step": "대상 설정을 확인하세요.",
                 }
             return AIMessage(content=(
@@ -196,14 +196,14 @@ def test_operator_rewrite_is_required_for_english_or_internal_field_names():
         "recommendation": "MANUAL_INVESTIGATION",
         "confidence": 0.7,
         "summary": "The dispatchContext failed.",
-        "evidence": ["actionFailureHistory.totalFailures=1"],
+        "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
         "operator_next_step": "Check it.",
     }
     korean = {
         "recommendation": "MANUAL_INVESTIGATION",
         "confidence": 0.7,
         "summary": "Webhook 전달 실패 원인을 확인해야 합니다.",
-        "evidence": ["최근 30일 같은 액션의 최종 실패는 1건입니다."],
+        "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
         "operator_next_step": "수신 endpoint의 정상 응답을 확인하세요.",
     }
 

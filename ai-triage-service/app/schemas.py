@@ -9,7 +9,12 @@ class AnalysisOutput(BaseModel):
     recommendation: Literal["RETRY_RECOMMENDED", "MANUAL_INVESTIGATION", "NO_RETRY"]
     confidence: float = Field(ge=0.0, le=1.0)
     summary: str = Field(min_length=1, max_length=2000)
-    evidence: list[str] = Field(min_length=1, max_length=10)
+    evidence_refs: list[Literal[
+        "CURRENT_DELIVERY_FAILURE",
+        "RECENT_ACTION_FAILURES",
+        "EXECUTION_DISPATCH_HISTORY",
+        "OPERATOR_CONFIRMED_RECOVERY",
+    ]] = Field(min_length=1, max_length=4)
     operator_next_step: str = Field(min_length=1, max_length=1000)
 
 

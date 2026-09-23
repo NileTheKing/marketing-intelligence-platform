@@ -66,11 +66,11 @@ def test_reanalysis_uses_chat_update_without_posting_a_new_message():
         )
         output = AnalysisOutput(
             recommendation="NO_RETRY", confidence=1.0, summary="재분석 결과",
-            evidence=["대상 오류"], operator_next_step="대상 확인",
+            evidence_refs=["CURRENT_DELIVERY_FAILURE"], operator_next_step="대상 확인",
         )
         initial_case = case.model_copy(update={"slackMessageTs": None})
-        assert await notifier.send(initial_case, output, {"dispatchContext": {}}) == "1700000000.000100"
-        await notifier.send(case, output, {"dispatchContext": {}}, update=True)
+        assert await notifier.send(initial_case, output, ["Core 확인 사실"]) == "1700000000.000100"
+        await notifier.send(case, output, ["Core 확인 사실"], update=True)
         await client.aclose()
 
     asyncio.run(scenario())
@@ -81,6 +81,7 @@ def test_reanalysis_uses_chat_update_without_posting_a_new_message():
     payload = json.loads(requests[1].content)
     assert payload["channel"] == "C123"
     assert payload["ts"] == "1700000000.000100"
+    assert "*확인된 사실*\n• Core 확인 사실" in payload["blocks"][0]["text"]["text"]
 
 
 def test_actions_show_retry_approval_only_when_recommended():
@@ -101,9 +102,9 @@ def test_actions_show_retry_approval_only_when_recommended():
         )
         output = AnalysisOutput(
             recommendation=recommendation, confidence=0.7, summary="요약",
-            evidence=["근거"], operator_next_step="다음 조치",
+            evidence_refs=["CURRENT_DELIVERY_FAILURE"], operator_next_step="다음 조치",
         )
-        await notifier.send(case, output, {"dispatchContext": {}})
+        await notifier.send(case, output, ["Core 확인 사실"])
         await client.aclose()
 
     asyncio.run(scenario("MANUAL_INVESTIGATION"))

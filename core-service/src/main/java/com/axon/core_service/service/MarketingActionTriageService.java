@@ -40,6 +40,7 @@ public class MarketingActionTriageService {
     private final MarketingActionRepository actionRepository;
     private final MarketingActionExecutionRetryClaimService retryClaimService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final TriageEvidenceRenderer evidenceRenderer;
 
     @Value("${axon.triage.analysis-claim-ttl-seconds:600}")
     private long claimTtlSeconds;
@@ -129,8 +130,9 @@ public class MarketingActionTriageService {
         } catch (IllegalArgumentException exception) {
             throw new BusinessConflictException("Unsupported triage recommendation");
         }
+        List<String> evidence = evidenceRenderer.render(request.factSnapshot(), request.evidenceRefs());
         triageCase.saveAnalysis(request.factSnapshot(), recommendation, request.confidence(), request.summary(),
-                request.evidence() == null ? List.of() : request.evidence(), request.operatorNextStep(), request.llmModel());
+                evidence, request.operatorNextStep(), request.llmModel());
         return TriageCaseResponse.from(triageCaseRepository.save(triageCase));
     }
 
