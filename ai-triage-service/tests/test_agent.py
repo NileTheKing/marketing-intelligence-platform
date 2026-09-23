@@ -5,13 +5,14 @@ from langchain_core.messages import AIMessage
 
 from app.agent import TriageRuntime, build_read_only_tools
 from app.config import Settings
-from app.schemas import ClaimedCase
+from app.schemas import AnalysisOutput, ClaimedCase
 
 
 class FakeCore:
     def __init__(self):
         self.saved = None
         self.saved_outputs = []
+        self.saved_facts = []
         self.claim_count = 0
         self.decisions = []
 
@@ -27,6 +28,7 @@ class FakeCore:
     async def save_analysis(self, case_id, claim_token, facts, output):
         self.saved = output
         self.saved_outputs.append((case_id, claim_token, output))
+        self.saved_facts.append(facts)
         return {"caseId": case_id, "status": "AWAITING_APPROVAL"}
 
     async def claim(self, case_id):
@@ -105,6 +107,10 @@ def test_reanalysis_resumes_the_existing_thread_checkpoint_and_updates_message()
             (1, "claim", False),
             (1, "claim-1", True),
         ]
+        assert core.saved_facts[1]["operatorFeedback"] == {
+            "source": "operator",
+            "content": "쿠폰 ID가 최근에 변경됐는지 다시 확인해 주세요.",
+        }
 
     asyncio.run(scenario())
 
@@ -183,3 +189,23 @@ def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch
         "get_action_failure_history",
         "get_execution_dispatch_history",
     }
+
+
+def test_operator_rewrite_is_required_for_english_or_internal_field_names():
+    english = {
+        "recommendation": "MANUAL_INVESTIGATION",
+        "confidence": 0.7,
+        "summary": "The dispatchContext failed.",
+        "evidence": ["actionFailureHistory.totalFailures=1"],
+        "operator_next_step": "Check it.",
+    }
+    korean = {
+        "recommendation": "MANUAL_INVESTIGATION",
+        "confidence": 0.7,
+        "summary": "Webhook 전달 실패 원인을 확인해야 합니다.",
+        "evidence": ["최근 30일 같은 액션의 최종 실패는 1건입니다."],
+        "operator_next_step": "수신 endpoint의 정상 응답을 확인하세요.",
+    }
+
+    assert TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate(english))
+    assert not TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate(korean))

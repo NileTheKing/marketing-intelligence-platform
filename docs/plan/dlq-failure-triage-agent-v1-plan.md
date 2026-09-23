@@ -12,7 +12,7 @@
 - 일시 장애라 재실행할 만한가, 잘못된 쿠폰/대상처럼 재실행해도 소용없는가
 - 같은 액션에서 최근에 반복되는 장애인가
 
-v1의 목표는 이 판단 재료와 권고를 Slack으로 전달하고, 사람이 승인·재분석 요청·종료를 선택하도록 만드는 것이다.
+v1의 목표는 이 판단 재료와 권고를 Slack으로 전달하고, 사람이 재실행 승인·추가 확인 요청·확인 결과 입력·종료를 선택하도록 만드는 것이다.
 
 ```text
 DLT 최종 실패
@@ -72,7 +72,7 @@ MarketingActionTriageCase
 
 - `dispatch_id UNIQUE`로 동일 DLT가 Kafka에서 재전달되어도 case를 중복 생성하지 않는다.
 - `failure_category`는 raw 예외 메시지의 정규식 추론이 아니라, Coupon/Webhook 처리부가 DLT를 만들 때 함께 넣는 코드값이다.
-- `fact_snapshot_json`은 LLM이 확인한 사실을 저장한다. 생성 문장만 남기지 않아 운영자가 근거를 재확인할 수 있다.
+- `fact_snapshot_json`은 LLM이 확인한 Core 사실과, 재분석 때 관리자가 입력한 확인 결과를 출처와 함께 저장한다. 생성 문장만 남기지 않아 운영자가 근거를 재확인할 수 있다.
 - 사용자 개인정보·전체 Kafka payload·인증 토큰은 case와 Slack에 저장하지 않는다. 필요한 식별자는 내부 ID와 마스킹된 대상 정보로 제한한다.
 
 `analysis_claim_expires_at`은 AI worker가 case를 가져간 뒤 죽었을 때의 안전장치다. 예를 들어 10분 안에 분석 결과를 저장하지 못하면 다른 worker가 그 case를 다시 가져갈 수 있다. 이것은 **작업 점유 시간**이고, LangGraph가 어디까지 판단했는지는 저장하지 않는다.
@@ -131,7 +131,7 @@ Core는 `failureCategory + channel`에 따라 짧은 `operatorGuidance`를 선�
 - Core의 읽기 전용 function tool만 호출한다.
 - 정해진 출력 schema로 권고를 만든 뒤 Core에 저장한다.
 - 저장 성공 case만 Slack으로 알린다.
-- Slack 승인/재분석 요청/종료 요청의 서명을 검증하고, 그래프 재개 또는 Core decision API 호출을 수행한다.
+- Slack 재실행 승인/추가 확인 요청/확인 결과 입력/종료 요청의 서명을 검증하고, 그래프 재개 또는 Core decision API 호출을 수행한다.
 
 FastAPI는 Core의 MySQL 업무 테이블·Kafka·Redis에 직접 접속하지 않는다. 단, LangGraph checkpointer 전용 MySQL schema에는 별도 최소 권한 계정으로 접근한다. 재실행 Kafka command를 만들거나 발행하지 않는다.
 
@@ -149,7 +149,7 @@ claim case
   -> schema validation -> Core에 analysis 저장 -> Slack 알림
   -> interrupt: 사람 판단 대기
       승인 -> 같은 thread 재개 -> Core APPROVE -> 새 Dispatch 발행
-      재분석 요청 + 사유 -> 같은 thread 재개 -> 사실 재확인/요약 갱신 -> Slack 갱신
+      추가 확인 요청 또는 확인 결과 입력 -> 같은 thread 재개 -> 사실 재확인/요약 갱신 -> Slack 갱신
       종료 -> Core CLOSE -> END
 ```
 
@@ -181,14 +181,15 @@ get_execution_dispatch_history(executionId)
 
 ### 5.3 Slack
 
-Slack 메시지는 다음만 전달한다.
+Slack 메시지는 한국어 운영 문장으로 다음만 전달한다. Core JSON field name, 내부 상태값, 마케팅 룰의 행동 조건은 그대로 노출하지 않는다.
 
 - action/channel, Dispatch ID, 실패 category, 시도 횟수
 - 정형 사실 기반 요약과 권고
 - 승인 전 확인할 항목
-- `재실행 승인`, `재분석 요청`, `종료` 버튼
+- `추가 확인 요청`, `확인 결과 입력`, `종료` 버튼
+- 권고가 `RETRY_RECOMMENDED`일 때만 `재실행 승인` 버튼
 
-`재분석 요청`에는 반려 사유를 필수 입력으로 받는다. FastAPI는 이를 LangGraph의 같은 `thread_id`에 전달해 직전 분석 상태에서 다시 판단하게 한다. `재실행 승인`과 `종료`는 Core decision API로 전달한다. FastAPI가 승인 여부를 자체 DB에 저장하거나 Kafka를 직접 발행하지 않는다.
+`추가 확인 요청`에는 AI가 다시 검토할 가설이나 질문을 입력한다. `확인 결과 입력`에는 운영자가 외부 endpoint, 수신자 제한처럼 Core에서 직접 볼 수 없는 사실을 입력한다. FastAPI는 둘 다 출처를 표시해 LangGraph의 같은 `thread_id`에 전달하고, 새 Core 사실과 함께 다시 판단하게 한다. `재실행 승인`과 `종료`는 Core decision API로 전달한다. FastAPI가 승인 여부를 자체 DB에 저장하거나 Kafka를 직접 발행하지 않는다.
 
 Slack 사용자 ID allowlist와 Core의 service-to-service 인증을 모두 적용한다. Slack 알림 실패는 분석 결과를 지우지 않고 `slack_message_ts`/전송 상태를 기준으로 별도 재전송할 수 있게 한다.
 

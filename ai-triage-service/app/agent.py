@@ -72,11 +72,17 @@ class TriageRuntime:
             context = await self.core.get_dispatch_context(case.dispatchId)
             history = await self.core.get_action_failure_history(context["actionId"], 30)
             dispatch_history = await self.core.get_execution_dispatch_history(case.executionId)
-            return {"facts": {
+            facts: dict[str, Any] = {
                 "dispatchContext": context,
                 "actionFailureHistory": history,
                 "executionDispatchHistory": dispatch_history,
-            }}
+            }
+            if state.get("feedback"):
+                facts["operatorFeedback"] = {
+                    "source": "operator",
+                    "content": state["feedback"],
+                }
+            return {"facts": facts}
 
         def route(state: GraphState) -> str:
             return "deterministic" if state["case"]["failureCategory"] == "INVALID_TARGET" else "llm"
@@ -109,7 +115,17 @@ class TriageRuntime:
                 AnalysisOutput, method="json_schema"
             )
             system = ("You are the Axon DLQ failure triage agent. Use only the three provided read-only "
-                       "Core tools. Do not invent IDs, counts, or facts. Return only JSON matching this schema: "
+                       "Core tools and any operatorFeedback explicitly supplied in the facts. Do not invent IDs, "
+                       "counts, or facts. Write every operator-facing field in clear Korean. Technical terms such "
+                       "as Webhook, HTTP, DLT, and status codes may remain in English. "
+                       "actionFailureHistory.totalFailures is an observed failure count, not a retry threshold. "
+                       "dispatchContext.thresholdCount is a marketing-rule trigger condition and is never evidence "
+                       "for a delivery failure or retry decision. One observed transient failure does not establish "
+                       "a recurring incident. If the failure is TRANSIENT_DELIVERY, recommend manual investigation "
+                       "until an operator explicitly confirms recovery. If operatorFeedback explicitly confirms that "
+                       "the target recovered, RETRY_RECOMMENDED is allowed but never automatic. Never expose JSON "
+                       "field names such as dispatchContext, actionFailureHistory, thresholdCount, byCategory, or "
+                       "failureReason to the operator. Return only JSON matching this schema: "
                        '{"recommendation":"RETRY_RECOMMENDED|MANUAL_INVESTIGATION|NO_RETRY",'
                        '"confidence":0.0,"summary":"2-4 sentences",'
                        '"evidence":["facts only"],"operator_next_step":"one or two checks"}. '
@@ -135,10 +151,20 @@ class TriageRuntime:
 
             # Tool calls are optional because bounded Core facts are loaded first. Always use
             # schema-constrained output for the operator-facing recommendation.
-            output = await output_model.ainvoke(messages + [HumanMessage(content=(
+            output = AnalysisOutput.model_validate(await output_model.ainvoke(messages + [HumanMessage(content=(
                 "Using only the supplied Core facts and tool results, return the final triage decision."
-            ))])
-            return {"output": AnalysisOutput.model_validate(output).model_dump()}
+            ))]))
+            if self._needs_operator_rewrite(output):
+                output = AnalysisOutput.model_validate(await output_model.ainvoke([
+                    SystemMessage(content=(
+                        "Rewrite this triage result for a Korean operator. Preserve only supported facts and the "
+                        "recommendation. Do not expose JSON field names or call a single failure a recurring issue."
+                    )),
+                    HumanMessage(content=(
+                        f"Facts: {_json(state['facts'])}\nDraft: {_json(output.model_dump())}"
+                    )),
+                ]))
+            return {"output": output.model_dump()}
 
         async def save(state: GraphState) -> GraphState:
             output = AnalysisOutput.model_validate(state["output"])
@@ -196,6 +222,15 @@ class TriageRuntime:
             for number in re.findall(r"\d+", evidence):
                 if number not in serialized:
                     raise ValueError("Evidence contains a number not present in Core facts")
+
+    @staticmethod
+    def _needs_operator_rewrite(output: AnalysisOutput) -> bool:
+        text = " ".join([output.summary, *output.evidence, output.operator_next_step])
+        internal_names = (
+            "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
+            "failureReason", "operatorGuidance", "totalFailures",
+        )
+        return not re.search(r"[가-힣]", text) or any(name in text for name in internal_names)
 
     async def _invoke(self, command: Any, case: ClaimedCase) -> None:
         config = {"configurable": {"thread_id": str(case.caseId)}}
