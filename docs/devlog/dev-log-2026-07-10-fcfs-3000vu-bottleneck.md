@@ -109,7 +109,7 @@ Under contamination the signature is consistent: Redis Lua admits exactly `FCFS_
    - `run-external-compose-baseline.sh` forwards `PRELOAD_CAMPAIGN_META` (default true) to the VM prepare step.
 2. **Config drift fix**: VM `.env` pins `ENTRY_CPUS=1.5`, `CORE_CPUS=1.2`; and the repo default in `compose.resources.yml` was corrected from the stale `0.6` to the validated `1.5` (see git history). Previously 1.5 lived only in an ephemeral shell env, so a plain `docker compose up` would silently revert entry to `0.6`.
 
-Entry was returned to 1.5 (2 carriers) as the validated steady-state baseline: it reliably serves 800/800, keeps headroom for core (the fragile payment path, which is also not owned by this workstream), and the big CPU win (0.6→1.5) is already banked there. Raising entry (2.1/2.5 → 3 carriers) is *not* an established improvement (Tier 3 above) and, on a shared 4-core box, a larger entry limit mainly lets entry win more contention against whatever else runs concurrently. A defensible use of a higher value is a **dedicated event window** (pause batch/scheduler, bump entry via `.env`, revert after) — i.e. part of pre-event tuning, not the steady-state default.
+Entry was returned to 1.5 (2 carriers) as the validated steady-state baseline: it reliably serves 800/800, keeps headroom for Core, and retains the measured CPU gain from 0.6 to 1.5. Raising Entry to 2.1 or 2.5 (3 carriers) is not an established improvement (Tier 3 above); on a shared 4-core VM, a larger Entry limit mainly increases contention with concurrent workloads. A higher limit is therefore only a dedicated event-window option: pause batch/scheduler, raise Entry through `.env`, then revert after the event.
 
 ## Remaining limits and conclusion
 
@@ -128,7 +128,7 @@ Separate the **two axes**: a real public-path capacity defect (host nginx connec
 
 ```bash
 # external, warmed. Set the CPU profile explicitly — the repo default alone is not the validated profile.
-cd /Users/yangnail/dev/projects/skusw/axon
+cd "$AXON_REPO_ROOT"
 # on the VM, ensure the resource profile:  ENTRY_CPUS=1.5 CORE_CPUS=1.2  (in ~/apps/axon/.env)
 SCENARIO=waiting_burst FLOW=payment PRELOAD_CAMPAIGN_META=true \
   NUM_USERS=3000 MAX_VUS=3000 FCFS_LIMIT_COUNT=800 \

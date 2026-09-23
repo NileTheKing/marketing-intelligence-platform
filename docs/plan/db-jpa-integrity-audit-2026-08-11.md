@@ -158,7 +158,7 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 | 높음 | SHOP 결제 기록 경계 재설계 | GET 성공 콜백, 클라이언트 가격, Purchase·Coupon 원자성은 다른 담당자의 결제 계약과 함께 정해야 함 |
 | 중간 | 재고 부족 시 동기화 정책 결정 | 현재는 보유 재고까지만 차감한다. 실패·대사 이력·활성화 차단 중 제품 정책 선택이 필요 |
 | 중간 | Product/Purchase/CampaignActivity 금액 precision 통일 | 실제 DB가 Product `decimal(38,2)`, Purchase·Activity `decimal(10,2)`로 달라 기존 값 범위 확인이 필요 |
-| 후속 | DTO 변환 완료 후 OSIV 비활성화 | 아직 일부 SSR 조회가 LAZY 연관관계에 의존하므로 선행 정리가 필요 |
+| 완료 (2026-09-17) | DTO 변환 후 OSIV 비활성화 | `StoreViewService`와 `DashboardPageService`가 SSR DTO/view-model을 read-only 트랜잭션 안에서 조립하도록 옮긴 뒤 Core에 `spring.jpa.open-in-view=false` 적용 |
 
 ## 의도적으로 하지 않은 것
 

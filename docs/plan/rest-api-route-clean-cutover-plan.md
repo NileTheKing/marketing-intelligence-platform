@@ -28,7 +28,7 @@ The target routes below are the current contract. The `Current` column is retain
 ## Non-goals
 
 - React/Vue 등의 SPA 전환
-- payment prepare/confirm 내부 계약 변경 (다른 개발자 담당 경계)
+- payment prepare/confirm 내부 계약 변경 (본 cutover 범위 제외)
 - HTTP status, response body, DTO 필드의 일괄 REST 교정
 - 이전 URL alias, redirect, version v2 추가
 - controller/service/domain 구조 리팩터

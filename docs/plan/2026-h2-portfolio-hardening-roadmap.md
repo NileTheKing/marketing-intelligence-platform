@@ -160,6 +160,42 @@ Reason:
 - k3s becomes useful when the system needs to call Kubernetes APIs safely
 - the portfolio story becomes stronger when scaling is tied to a controlled operational workflow
 
+## Main Upgrade 0: Payment Completion Event Boundary
+
+Status: planned
+
+### Goal
+
+Extend the checkout flow so a payment approval becomes a durable domain event
+that can safely trigger commerce and marketing processing.
+
+### Scope
+
+```text
+Entry payment module
+  -> Mock PG approval
+  -> Payment status update + OutboxEvent in one transaction
+  -> Outbox publisher sends PaymentCompleted after broker acknowledgement
+
+Core commerce module
+  -> consumes PaymentCompleted idempotently
+  -> confirms CampaignActivityEntry + Purchase
+  -> continues UserSummary, RFM, cohort, dashboard, and notification flows
+```
+
+### Validation
+
+1. repeated payment confirmation produces one payment completion and one
+   purchase;
+2. publisher recovery delivers an approved payment event after a simulated
+   broker publication failure;
+3. duplicate completion events do not duplicate commerce records.
+
+### Boundary
+
+The initial scope uses a Mock PG. Real provider integration, settlement, and
+financial compliance are outside this upgrade.
+
 ## Main Upgrade 1: Event History Based Scale Advisor
 
 ### Problem

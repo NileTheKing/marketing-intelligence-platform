@@ -4,22 +4,18 @@ Status: active
 
 ## Purpose
 
-Obsidian vault의 `T*.md`는 이력서 문장이 아니라, 회사별 포트폴리오를 다시 조립할 때 쓰는 원자 단위의 **증거 정본**이다. 결론 수치만 남기지 말고, 다른 에이전트가 "무엇을 관측하고 어떤 가설을 기각해 이 조치를 했는가"를 재구성할 수 있게 작성한다.
+비공개 `T*.md`는 이력서 문장이 아니라, 회사별 포트폴리오를 다시 조립할 때 쓰는 원자 단위의 **증거 정본**이다. 결론 수치만 남기지 말고, 다른 에이전트가 "무엇을 관측하고 어떤 가설을 기각해 이 조치를 했는가"를 재구성할 수 있게 작성한다.
 
-Vault root:
-
-`/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼`
-
-T 파일 목록과 주제는 `docs/plan/document-map.md`의 `Current Portfolio Source Notes`가 정본이다.
+The private vault location and T-file index are intentionally excluded from this repository.
 
 ## T File Update Protocol
 
 T 파일을 새로 쓰거나 수정하라는 요청을 받으면:
 
-1. 대응하는 기존 T 파일, 현재 코드, `document-map`의 active 문서를 먼저 읽는다.
+1. 대응하는 기존 T 파일과 현재 코드, 관련 active 문서를 먼저 읽는다.
 2. 사실이 바뀌었어도 과거 실험·결과를 삭제하지 않는다. `초기 진단`, `historical`, `N=1`, `현재 대표 결과`처럼 신뢰 수준과 환경을 분리한다.
 3. 증거가 없는 개선 수치·원인·처리량을 만들지 않는다. 불명확하면 조건 또는 검증 필요 상태를 남긴다.
-4. 외부 Obsidian 파일 변경 전에는 사용자가 요청한 범위인지 확인하고, 변경 후에는 어떤 T 파일을 어떻게 갱신했는지 보고한다.
+4. 비공개 증거 파일 변경 전에는 사용자가 요청한 범위인지 확인하고, 변경 후에는 어떤 T 파일을 어떻게 갱신했는지 보고한다.
 
 ## Required Evidence Shape
 

@@ -74,14 +74,14 @@ Preferred official path: run k6 from the Mac against the public route through th
 Default end-to-end purchase path:
 
 ```bash
-cd /Users/yangnail/dev/projects/skusw/axon
+cd "$AXON_REPO_ROOT"
 FLOW=payment MAX_VUS=100 ./scripts/load-test/run-external-compose-baseline.sh 1000 1
 ```
 
 Reservation-only hot path:
 
 ```bash
-cd /Users/yangnail/dev/projects/skusw/axon
+cd "$AXON_REPO_ROOT"
 FLOW=reservation MAX_VUS=100 ./scripts/load-test/run-external-compose-baseline.sh 1000 1
 ```
 
@@ -101,11 +101,11 @@ ssh -i ~/.ssh/oci_arm_key ubuntu@134.185.100.15 'cd ~/apps/axon && ./scripts/loa
 ```
 
 ```bash
-scp -i ~/.ssh/oci_arm_key ubuntu@134.185.100.15:/home/ubuntu/apps/axon/scripts/load-test/jwt-tokens.json /Users/yangnail/dev/projects/skusw/axon/scripts/load-test/jwt-tokens.json
+scp -i "$OCI_SSH_KEY" "$OCI_HOST:/home/ubuntu/apps/axon/scripts/load-test/jwt-tokens.json" "$AXON_REPO_ROOT/scripts/load-test/jwt-tokens.json"
 ```
 
 ```bash
-cd /Users/yangnail/dev/projects/skusw/axon && FLOW=payment SCENARIO=spike MAX_VUS=100 USE_PRODUCTION_API=true USE_TOKEN_FILE=true TOKEN_FILE_PATH=/Users/yangnail/dev/projects/skusw/axon/scripts/load-test/jwt-tokens.json ENTRY_SERVICE_URL=https://axon.opicnic.xyz CORE_SERVICE_URL=https://axon.opicnic.xyz ACTIVITY_ID=1 PRODUCT_ID=1 FCFS_LIMIT_COUNT=200 USER_ID_START=1000 USER_ID_END=1999 k6 run scripts/load-test/k6-fcfs-load-test.js
+cd "$AXON_REPO_ROOT" && FLOW=payment SCENARIO=spike MAX_VUS=100 USE_PRODUCTION_API=true USE_TOKEN_FILE=true TOKEN_FILE_PATH="$AXON_REPO_ROOT/scripts/load-test/jwt-tokens.json" ENTRY_SERVICE_URL="$PUBLIC_ENTRY_URL" CORE_SERVICE_URL="$PUBLIC_CORE_URL" ACTIVITY_ID=1 PRODUCT_ID=1 FCFS_LIMIT_COUNT=200 USER_ID_START=1000 USER_ID_END=1999 k6 run scripts/load-test/k6-fcfs-load-test.js
 ```
 
 GitHub Actions path: useful for remote execution and artifact collection, but not the preferred official baseline while k6 runs inside the VM.
@@ -497,7 +497,7 @@ artifact includes reservation ingress/completion peak data; do not print or
 inspect per-request console logs unless the run fails.
 
 ```bash
-cd /Users/yangnail/dev/projects/skusw/axon
+cd "$AXON_REPO_ROOT"
 
 RUN_ID="$(date '+%Y%m%d-%H%M%S')-home-final-payment-3000vu-800"
 RESULT_ROOT="$PWD/artifacts/load-test/$RUN_ID"

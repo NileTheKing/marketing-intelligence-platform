@@ -36,7 +36,7 @@ Reason:
 
 ## 2. Remove Entity access from Controller/View paths
 
-Status: partially done in current pass
+Status: implemented for current SSR paths (2026-09-17)
 
 Current issue:
 
@@ -57,10 +57,11 @@ Implemented:
 - Moved cached cohort batch response assembly from `DashboardController` into `CohortAnalysisService`.
 - Added explicit `@EntityGraph` repository methods for view paths that still need simple lazy associations.
 
-Remaining:
+Implemented after the initial review:
 
-- `DashboardViewController` and `StoreController` still assemble some view models directly.
-- A later pass should move these remaining view-model assembly paths into dedicated query/view services before considering OSIV off.
+- `StoreViewService` now returns a coupon display DTO rather than exposing `UserCoupon` to the Thymeleaf view.
+- `DashboardPageService` owns activity/campaign SSR metadata assembly inside a read-only transaction.
+- `DashboardViewController` no longer injects repositories for SSR view-model assembly.
 
 Reason:
 
@@ -95,9 +96,9 @@ Implemented:
 - Added `CampaignActivityRepository.findWithProductAndCouponById(...)`.
 - Added `@EntityGraph` to active activity listing, `UserCoupon.findAllByUserId(...)`, and LTV batch lookup.
 
-## 4. Consider turning OSIV off after DTO conversion
+## 4. Turn OSIV off after DTO conversion
 
-Status: defer until DTO paths are stable
+Status: implemented (2026-09-17)
 
 Clarification:
 
@@ -105,11 +106,11 @@ Clarification:
 - It is convenient for SSR/admin CRUD views because lazy associations can still be loaded in the view.
 - The downside is that DB queries can happen outside the service layer, hiding N+1 problems.
 
-Decision:
+Implemented decision:
 
-- Do not turn OSIV off first.
-- First move controller/view entity access to DTOs.
-- After tests pass and view paths are stable, consider `spring.jpa.open-in-view=false`.
+- DTO/view-model assembly was moved into `StoreViewService` and `DashboardPageService` first.
+- Core now configures `spring.jpa.open-in-view=false`.
+- Focused Store/Dashboard service tests pass with the persistence boundary closed before view rendering.
 
 Reason:
 
@@ -283,14 +284,11 @@ Reason:
 - Core-service already owns persistence-heavy flows.
 - If outbox is introduced first, core-service is the more natural place to evaluate it.
 
-### Turning OSIV off immediately
+### OSIV boundary
 
-Decision: defer
+Decision: implemented
 
-Reason:
-
-- DTO conversion should happen first.
-- Then OSIV can be disabled to catch accidental lazy loading outside the service boundary.
+- DTO conversion preceded OSIV disablement. Core now uses `spring.jpa.open-in-view=false` as a guard against accidental lazy queries during rendering.
 
 ## Interview Prep Follow-up Backlog
 
@@ -298,7 +296,7 @@ Status: active backlog
 
 Context:
 
-- During ABLY interview preparation, several implementation boundaries were clarified against the current code.
+- During a code-review preparation pass, several implementation boundaries were clarified against the current code.
 - These items are not portfolio wording tasks. They are code debt items to resolve step by step.
 - Do not implement all of them in one pass. Each item needs a focused change, test, and verification.
 
@@ -807,27 +805,17 @@ Verify:
 - Failure response behavior remains explicit when Kafka send fails.
 - Code comments or docs make the success boundary clear: broker ack only.
 
-### Phase 8. OSIV follow-up
+### Phase 8. OSIV follow-up — completed
 
-Goal:
+Implemented:
 
-- Use OSIV off as a later boundary check, not as the first change.
+- `StoreController` and `DashboardViewController` delegate SSR data assembly to DTO/view services.
+- Core runs with `spring.jpa.open-in-view=false`.
+- `StoreViewServiceTest` and `DashboardPageServiceTest` cover the moved DTO/view-model paths.
 
-Actions:
+Boundary retained:
 
-- After DTO conversion and query optimization are stable, test with:
-  - `spring.jpa.open-in-view=false`
-- Fix any remaining lazy loading failures by moving data access into service/query methods.
-
-Do not:
-
-- Do not disable OSIV before DTO cleanup.
-- Do not hide failures by adding broad eager loading.
-
-Verify:
-
-- Controller/view tests pass with OSIV disabled.
-- No view rendering path depends on lazy loading outside service transactions.
+- Do not re-enable OSIV or use broad eager loading to hide a new lazy-loading failure. Move the needed read into the owning read-only service transaction instead.
 
 ## Success Criteria
 
@@ -956,8 +944,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 
 ### Remaining follow-up if polishing further
 
-- Move remaining `DashboardViewController` and `StoreController` view-model assembly into dedicated query/view services.
-- Then test with `spring.jpa.open-in-view=false`.
+- The targeted `DashboardViewController` and `StoreController` paths now use dedicated query/view services with OSIV disabled. Keep this boundary when adding new SSR views.
 - Extract `PurchaseHandler.PurchaseSummary` out of `PurchaseHandler` before making `PurchaseHandler` package-private.
 - Add an integration test that verifies individual retry continues after one failed entry when Docker/Testcontainers is available.
 

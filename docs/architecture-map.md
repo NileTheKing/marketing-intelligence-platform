@@ -36,7 +36,7 @@
 
 **B. 결제**
 ```
-당첨자 → entry PaymentController prepare/confirm (토큰 검증, entry↔core 경합 취약 구간)
+당첨자 → entry PaymentController prepare/confirm (토큰 검증 및 Core 처리 명령 전달)
   → PaymentService → Kafka CAMPAIGN_ACTIVITY_COMMAND
   → core batch listener (poll당 최대 20건) → FCFS orchestration
       → Entry + Purchase 단일 원장 트랜잭션
@@ -83,8 +83,8 @@ BehaviorTriggerScheduler
 | `axon.event.raw` / `axon.user.login` | 원시 이벤트 / 로그인 (deprecated, 신규 사용 금지) |
 
 ## 스코프 경계 (누가 뭘 담당)
-- 이 레포 = **개발/고도화**. 자소서·포폴 산출물은 별도(obsidian)에서.
-- **결제 API·토큰 내부 로직 = 다른 개발자 담당.** 별도 요청 없이 해당 세부 구현은 변경하지 않는다.
+- 이 레포 = **개발/고도화**. 채용 산출물은 별도 관리한다.
+- 결제 API·토큰 내부 로직은 현재 이 문서의 고도화 범위 밖이다.
 - Kafka 이후 Core 후속처리, 관측, DB 수렴은 현재 고도화 범위다.
 
 ## 더 깊이

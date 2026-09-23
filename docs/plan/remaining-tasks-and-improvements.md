@@ -162,7 +162,7 @@
 
 | 주차 | 주요 작업 | 담당 |
 | :--- | :--- | :--- |
-| **이번 주 (잔여)** | `Click Rate`, `Device Breakdown` 지표 추가 (Frontend/Backend) | Dev A/B |
+| **이번 주 (잔여)** | `Click Rate`, `Device Breakdown` 지표 추가 (Frontend/Backend) | 미배정 |
 | **다음 주 (1주차)** | 🧪 **시뮬레이션 기능 구현** (Phase 1-2), 부하 테스트(k6) 수행 | Dev A |
 | **다음 주 (2주차)** | `campaignId` 최적화 작업, 시뮬레이션 기능 완료 (Phase 3) | Dev A |
-| **다다음 주 (3주차)** | 장애 복구 훈련, 최종 포트폴리오 문서(README, PPT) 정리, LLM 기획 | Dev B |
+| **다다음 주 (3주차)** | 장애 복구 훈련, 최종 문서(README, PPT) 정리, LLM 기획 | 미배정 |

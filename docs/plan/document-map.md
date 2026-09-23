@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file separates current working documents from old backlog and portfolio source notes.
+This file separates current working documents from old backlog documents.
 
 Do not delete old documents just because they are outdated. Mark their current role instead.
 
@@ -18,7 +18,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 |---|---|---|
 | `docs/plan/fcfs-entry-purchase-transaction-boundary-handoff.md` | active (implemented, OCI-validated) | **현재 FCFS 후속 구현 정본.** Entry–Purchase 단일 원장 트랜잭션, 단건 fallback/DLT, UserSummary projection 실패 기록, 행동 로그 커밋 경계와 2026-08-03 회귀 검증 |
 | `docs/plan/2026-h2-portfolio-hardening-roadmap.md` | active | 2026 H2 upgrade direction: observability, Scale Advisor, DLQ triage, execution history |
-| `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and ABLY interview prep follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
+| `docs/plan/critical-refactoring-decision-log.md` | active | current code-quality refactoring decisions and follow-up backlog: transaction boundaries, DTO/OSIV, idempotency, unbounded queue/backpressure, Purchase/UserSummary split, scheduler safety |
 | `docs/plan/backend-foundation-hardening-audit-2026-08-11.md` | active | correctness/security/test/overengineering audit, completed cleanup, verification boundary, and larger deferred work |
 | `docs/plan/api-contract-audit-2026-08-11.md` | active (Security, behavior identity, image upload boundary implemented; remaining contract work tracked) | current API authentication/authorization, error, validation, async completion, idempotency, and browser-caller audit |
 | `docs/plan/db-jpa-integrity-audit-2026-08-11.md` | active | DB/JPA integrity audit, OCI schema evidence, persistence invariants, Campaign/Purchase and Activity/Entry query-count cleanup, SSE aggregate reuse, RFM keyset pagination, cohort live-path cleanup, and deferred migration boundary |
@@ -49,29 +49,10 @@ These are still useful, but code must win if there is a conflict.
 | `docs/design/llm-query-architecture.md` | active/reference | LLM query architecture background |
 | `docs/network-architecture.md` | active/reference | final KT Cloud K2P network topology used in the previous project deployment; keep as historical deployment reference, not as current Oracle VM/k3s source of truth |
 
-## Current Portfolio Source Notes
-
-| Document | Status | Use |
-|---|---|---|
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/프로젝트_전체그림.md` | active | neutral project overview and portfolio interpretation boundary |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T1_*.md` | active | FCFS Redis Lua consistency story |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T2_*.md` | historical | 2025-12~2026-04 queue/BEFORE_COMMIT Kafka pipeline and batch-contamination evidence; not the current FCFS implementation |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T3_*.md` | active | JS SDK, Kafka, Elasticsearch behavior pipeline |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T6_*.md` | active | MarketingRule behavior trigger campaign |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T8_*.md` | active | bounded LLM Function Calling and tool metadata |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T9_*.md` | active | SQL offloading and index optimization |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T12_*.md` | active | MySQL FOR UPDATE lock contention diagnosis |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T24_*.md` | active | Testcontainers and concurrency tests |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T25_*.md` | active | webhook failure isolation |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T26_*.md` | active | common funnel modeling and unsupported-type boundary |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T27_*.md` | active | OTel/Jaeger/Actuator based FCFS/nginx bottleneck diagnosis and Docker Compose payment load-test results |
-| `/Users/yangnail/Documents/obsidian-career/projects/이벤트기반커머스플랫폼/T28_*.md` | active | current Entry+Purchase ledger transaction, UserSummary projection reconciliation, and repair boundary |
-
 ## Reference Documents
 
 | Document | Status | Use |
 |---|---|---|
-| `docs/PORTFOLIO_MASTER.md` | reference | old/current portfolio source; verify facts before reuse |
 | `docs/payment-resilience-architecture.md` | reference | payment resilience architecture; contains Transactional Outbox wording that must be code-verified before reuse |
 | `docs/micro-batch-implementation-plan.md` | reference | historical micro-batch implementation plan |
 | `docs/FUNNEL_STANDARD_PLAN.md` | reference | funnel modeling background; T26 is newer for portfolio facts |
@@ -101,7 +82,6 @@ These are still useful, but code must win if there is a conflict.
 | `docs/infrastructure-status-report.md` | legacy/reference | old infrastructure state; do not mix with Oracle VM/k3s plan without rechecking |
 | `docs/flow/behavior-event-fluentd-plan.md` | legacy/reference | Fluentd/Fluent Bit behavior-event plan; current behavior pipeline facts should come from code/T3 |
 | `docs/flow/payment-resilience-flow.md` | legacy | removed Core `/process` payment controller and recovery-service design; current contract is Entry `prepare`/`confirm` plus Kafka Core processing |
-| `docs/project-tasks.md` | legacy backlog | old 4-week project plan; not a current implementation source |
 | `docs/purchase-domain-refactoring-plan.md` | legacy/draft | planned purchase-domain refactor; do not claim as implemented without code check |
 | `docs/plan/marketing-dashboard-development-plan.md` | legacy/reference | broad team plan mixing completed, planned, and future dashboard/LLM items |
 | `docs/private/*` | private/reference | company-specific or old output materials; not project source of truth |
@@ -120,7 +100,6 @@ These documents are not classified as wrong, but they may contain old assumption
 
 | Document | Why recheck |
 |---|---|
-| `docs/PORTFOLIO_MASTER.md` | contains old Redisson wording and TODO sections; latest company portfolios/T-files may be newer |
 | `docs/micro-batch-implementation-plan.md` | old implementation plan with Prometheus/Grafana monitoring assumptions |
 | `docs/purchase-domain-refactoring-plan.md` | explicitly marked implementation pending in content |
 | `docs/infrastructure-status-report.md` | old K8s/Prometheus/Grafana deployment state; separate from Oracle VM plan |

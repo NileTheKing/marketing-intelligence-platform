@@ -18,6 +18,28 @@ It is not a rewrite plan. The goal is to make the existing Axon backend easier t
 | `core-service` | Handles campaign/activity persistence, Kafka command consumption, purchase/entry persistence, dashboard aggregation, marketing rules, validation, and LLM query. | `CampaignActivityConsumerService`, `FcfsCommandOrchestrator`, `FcfsLedgerPersistenceService`, `DashboardService`, `BehaviorTriggerScheduler`, `GeminiLLMQueryService` |
 | `common-messaging` | Shares Kafka topic names and message DTOs between services. | `KafkaTopics`, `CampaignActivityKafkaProducerDto`, `ReservationTokenPayload`, `UserBehaviorEventMessage` |
 
+### Current Component Navigation Map
+
+> **Current-code navigation, not a target package design.** Read this table before changing a feature. Follow the listed boundary and focused tests before expanding the change surface. Class names are search anchors, not a claim that one class owns every detail.
+
+| Capability | Entry point | Main path and output | Focused tests | Change boundary |
+|---|---|---|---|---|
+| FCFS reservation | `EntryController#createEntry` | `EntryApplicationService` → `EntryReservationService` → Redis Lua; success publishes a behavior event | `EntryReservationServiceRedisIntegrationTest` | Entry owns fast slot admission and reservation tokens. It must not persist Core ledger records directly. |
+| Payment command | `PaymentController` `prepare` / `confirm` | `PaymentService` / `CampaignActivityProducerService` → `CAMPAIGN_ACTIVITY_COMMAND` | `PaymentControllerTest` | Payment token internals are a separate owner. Do not change them while modifying Core purchase persistence unless explicitly requested. |
+| FCFS ledger consumption | `CampaignActivityConsumerService` Kafka listener | `FcfsCommandOrchestrator` → `FcfsLedgerPersistenceService` → `CampaignActivityEntry` + `Purchase`; final command failure goes to DLT | `CampaignActivityConsumerServiceTest`, `FcfsCommandOrchestratorTest` | Core owns durable ledger persistence and Kafka completion. Keep Entry reservation and post-ledger projections outside this transaction. |
+| Purchase projection and repair | Post-ledger projection / scheduled reconciliation | `UserSummary` projection; failures recorded separately and reconciliation repairs from `Purchase` ledger | `ReconciliationSchedulerTest`, `ReconciliationIssueServiceIntegrationTest` | `Purchase` is the source of truth. `UserSummary` is rebuildable derived data, so do not make a projection failure roll back a committed ledger. |
+| Behavior collection | `BehaviorEventController` and reservation-approved application event | Event normalization → `BEHAVIOR_EVENT` → Elasticsearch sink | `BehaviorEventApiContractTest`, `BehaviorEventPropertyTest` | Entry accepts and normalizes behavior data; Core consumes analysis results. Keep official property schema separate from free-form attributes. |
+| Marketing action delivery | `BehaviorTriggerScheduler` and command consumers | Rule/action evaluation → coupon command or dedicated webhook topic; Webhook retries then DLT | `BehaviorTriggerSchedulerTest`, `WebhookCommandConsumerServiceTest`, `WebhookStrategyTest` | Rule evaluation decides an action. Command processing delivers it. Do not let slow Webhook I/O share the FCFS command topic/group. |
+| Dashboard and SSR reads | Dashboard controllers / `StoreController` | `DashboardService`, `DashboardPageService`, `StoreViewService` assemble DTO/view models from Core read data | `DashboardServiceTest`, `DashboardPageServiceTest`, `StoreViewServiceTest` | Controllers pass DTO/view data only. Keep persistence access and lazy association resolution inside read-only service transactions. |
+| Cohort and RFM batch analysis | Scheduled batch jobs | SQL-based cohort aggregation and keyset-paged RFM segmentation over purchase-derived data | `CohortLtvSqlOffloadingTest`, `RfmSegmentationServiceTest` | These are read/projection workloads, not the FCFS hot path. Do not add them to Kafka listener transactions. |
+
+### Cross-Component Rules
+
+1. **HTTP admission, durable ledger, and derived projections are separate stages.** A successful Redis reservation is not a persisted Entry or Purchase; a committed Purchase is not the same thing as a successful UserSummary projection.
+2. **Kafka topic/group is a failure-isolation boundary.** A consumer may own only the topic whose completion semantics it can safely control. External Webhook latency must not delay the FCFS command consumer.
+3. **`common-messaging` is a contract module, not a business layer.** Message DTO or topic changes require checking both Entry producers and Core consumers plus their tests.
+4. **Schedulers are global work, unlike Kafka consumers.** Kafka consumer groups coordinate partition ownership; scheduled jobs require their own single-runner or lock decision before multi-pod deployment.
+
 ### Current Package Shape
 
 The project currently mixes two package styles.

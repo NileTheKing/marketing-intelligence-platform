@@ -497,7 +497,6 @@ Mono<String> mono = Mono.fromSupplier(() -> {
 ## 🔗 관련 문서
 
 - [마케팅 대시보드 개발계획](../plan/marketing-dashboard-development-plan.md)
-- [프로젝트 작업 목록](../project-tasks.md)
 - [CLAUDE.md 개발 가이드](../../CLAUDE.md)
 
 ---
