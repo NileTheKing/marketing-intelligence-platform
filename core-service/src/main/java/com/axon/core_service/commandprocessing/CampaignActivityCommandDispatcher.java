@@ -2,6 +2,7 @@ package com.axon.core_service.commandprocessing;
 
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.MarketingActionFailureCategory;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 import java.util.List;
@@ -89,6 +90,9 @@ public class CampaignActivityCommandDispatcher {
                 batch.size(), KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT);
         batch.forEach(message -> {
             message.setFailureReason(failureReason);
+            if (message.getFailureCategory() == null) {
+                message.setFailureCategory(MarketingActionFailureCategory.UNKNOWN);
+            }
             kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message).join();
         });
         pipelineMetrics.recordDltRouted("campaign-command", batch.size());

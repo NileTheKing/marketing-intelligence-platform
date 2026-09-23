@@ -6,6 +6,7 @@ import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.UserCouponRepository;
 import com.axon.core_service.service.MarketingActionExecutionService;
 import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.MarketingActionFailureCategory;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 import lombok.extern.slf4j.Slf4j;
@@ -89,11 +90,14 @@ public class CouponStrategy implements BatchStrategy {
         for (CampaignActivityKafkaProducerDto message : messages) {
             Long couponId = resolveCouponId(message);
             if (message.getUserId() == null) {
-                routeInvalidCommand(message, "Coupon command userId is missing");
+                routeInvalidCommand(message, MarketingActionFailureCategory.INVALID_TARGET,
+                        "Coupon command userId is missing");
             } else if (couponId == null) {
-                routeInvalidCommand(message, "Coupon command couponId is missing");
+                routeInvalidCommand(message, MarketingActionFailureCategory.INVALID_TARGET,
+                        "Coupon command couponId is missing");
             } else if (!couponMap.containsKey(couponId)) {
-                routeInvalidCommand(message, "Coupon not found for ID: " + couponId);
+                routeInvalidCommand(message, MarketingActionFailureCategory.INVALID_TARGET,
+                        "Coupon not found for ID: " + couponId);
             } else {
                 validMessages.add(message);
             }
@@ -171,8 +175,11 @@ public class CouponStrategy implements BatchStrategy {
         }
     }
 
-    private void routeInvalidCommand(CampaignActivityKafkaProducerDto message, String reason) {
+    private void routeInvalidCommand(CampaignActivityKafkaProducerDto message,
+                                     MarketingActionFailureCategory category,
+                                     String reason) {
         message.setFailureReason(reason);
+        message.setFailureCategory(category);
         if (kafkaTemplate == null) {
             throw new OffsetCommitBlockedException("Coupon command DLT producer is unavailable",
                     new IllegalStateException(reason));

@@ -113,8 +113,50 @@ services:
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-local-client-id}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-local-client-secret}
       AXON_ADMIN_EMAILS: ${AXON_ADMIN_EMAILS:-}
+      TRIAGE_SERVICE_TOKEN: ${TRIAGE_SERVICE_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED: ${MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED:-false}
+
+  ai-triage-mysql:
+    image: mysql:8.0
+    container_name: axon-ai-triage-mysql
+    profiles: ["ai"]
+    restart: unless-stopped
+    networks:
+      - axon-network
+    environment:
+      MYSQL_ROOT_PASSWORD: ${AI_TRIAGE_MYSQL_ROOT_PASSWORD:-change-me}
+      MYSQL_DATABASE: ${AI_TRIAGE_DB_NAME:-axon_ai_triage}
+      MYSQL_USER: ${AI_TRIAGE_DB_USERNAME:-ai_triage}
+      MYSQL_PASSWORD: ${AI_TRIAGE_DB_PASSWORD:-change-me}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ai_triage_mysql_data:/var/lib/mysql
+
+  ai-triage-service:
+    build:
+      context: ./ai-triage-service
+    container_name: axon-ai-triage
+    profiles: ["ai"]
+    depends_on:
+      - core-service
+      - ai-triage-mysql
+    networks:
+      - axon-network
+    environment:
+      CORE_INTERNAL_BASE_URL: http://core-service:8080
+      CORE_TRIAGE_SERVICE_TOKEN: ${TRIAGE_SERVICE_TOKEN:-}
+      TRIAGE_POLL_SECONDS: ${TRIAGE_POLL_SECONDS:-5}
+      LANGGRAPH_CHECKPOINT_MYSQL_URL: >-
+        mysql+pymysql://${AI_TRIAGE_DB_USERNAME:-ai_triage}:${AI_TRIAGE_DB_PASSWORD:-change-me}@ai-triage-mysql:3306/${AI_TRIAGE_DB_NAME:-axon_ai_triage}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      SLACK_ALLOWED_USER_IDS: ${SLACK_ALLOWED_USER_IDS:-}
 
   entry-service:
     build:
@@ -166,3 +208,4 @@ volumes:
   broker_data:
   mysql_data:
   redis_data:
+  ai_triage_mysql_data:

@@ -18,6 +18,11 @@ public interface MarketingActionDispatchRepository extends JpaRepository<Marketi
 
     List<MarketingActionDispatch> findAllByExecution_IdOrderBySequenceAsc(Long executionId);
 
+    @Query("select d from MarketingActionDispatch d join fetch d.execution where d.execution.actionId = :actionId "
+            + "and d.dltAt >= :since order by d.dltAt desc")
+    List<MarketingActionDispatch> findFailureHistoryByActionSince(@Param("actionId") Long actionId,
+                                                                    @Param("since") LocalDateTime since);
+
     @Query("select d from MarketingActionDispatch d join fetch d.execution where d.id = :id")
     Optional<MarketingActionDispatch> findByIdWithExecution(@Param("id") Long id);
 

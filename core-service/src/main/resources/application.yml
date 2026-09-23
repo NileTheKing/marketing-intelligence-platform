@@ -66,6 +66,9 @@ gemini:
 
 axon:
   entry-service-url: ${AXON_ENTRY_SERVICE_URL:${ENTRY_SERVICE_URL:http://localhost:8081}}
+  triage:
+    service-token: ${TRIAGE_SERVICE_TOKEN:}
+    analysis-claim-ttl-seconds: ${TRIAGE_ANALYSIS_CLAIM_TTL_SECONDS:600}
   upload:
     directory: ${AXON_UPLOAD_DIRECTORY:core-service/uploads}
   security:

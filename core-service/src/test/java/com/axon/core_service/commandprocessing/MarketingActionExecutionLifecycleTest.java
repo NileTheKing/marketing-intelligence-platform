@@ -7,6 +7,7 @@ import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.UserCouponRepository;
 import com.axon.core_service.service.MarketingActionExecutionService;
 import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.MarketingActionFailureCategory;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 import org.junit.jupiter.api.Test;
@@ -76,7 +77,8 @@ class MarketingActionExecutionLifecycleTest {
         verify(kafkaTemplate).send(eq(KafkaTopics.WEBHOOK_FAILED_DLT), dltCaptor.capture());
         WebhookFailedDelivery envelope = (WebhookFailedDelivery) dltCaptor.getValue();
         new MarketingActionExecutionDltConsumer(executionService).consumeWebhookDlt(List.of(envelope));
-        verify(executionService).markDltFinal(11L, envelope.getFailureReason());
+        verify(executionService).markDltFinal(11L, MarketingActionFailureCategory.TRANSIENT_DELIVERY,
+                envelope.getFailureReason());
         verify(pipelineMetrics).recordDltRouted("webhook", 1);
     }
 
@@ -132,7 +134,8 @@ class MarketingActionExecutionLifecycleTest {
         CampaignActivityKafkaProducerDto dltMessage = dltCaptor.getValue();
         new MarketingActionExecutionDltConsumer(executionService)
                 .consumeCampaignCommandDlt(List.of(dltMessage));
-        verify(executionService).markDltFinal(11L, "coupon persistence failed");
+        verify(executionService).markDltFinal(11L, MarketingActionFailureCategory.UNKNOWN,
+                "coupon persistence failed");
     }
 
     @Test

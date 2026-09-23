@@ -5,6 +5,7 @@ import com.axon.core_service.client.dto.WebhookRequest;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.MarketingActionExecutionService;
 import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.MarketingActionFailureCategory;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
 import lombok.extern.slf4j.Slf4j;
@@ -118,10 +119,12 @@ public class WebhookStrategy implements BatchStrategy {
                 request.getIdempotencyKey(), lastFailure);
         try {
             kafkaTemplate.send(KafkaTopics.WEBHOOK_FAILED_DLT, WebhookFailedDelivery.builder()
+                    .channel("WEBHOOK")
                     .dispatchId(message.getDispatchId())
                     .request(request)
                     .attemptCount(attemptsMade)
                     .failureReason(lastFailure == null ? "Webhook delivery failed" : lastFailure.getMessage())
+                    .failureCategory(classifyFailure(lastFailure))
                     .build()).join();
             pipelineMetrics.recordDltRouted("webhook", 1);
         } catch (CompletionException e) {
@@ -135,6 +138,22 @@ public class WebhookStrategy implements BatchStrategy {
         }
         return failure instanceof HttpClientErrorException clientError
                 && clientError.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS;
+    }
+
+    private MarketingActionFailureCategory classifyFailure(Exception failure) {
+        if (failure instanceof HttpClientErrorException clientError) {
+            if (clientError.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                return MarketingActionFailureCategory.RATE_LIMITED;
+            }
+            if (clientError.getStatusCode() == HttpStatus.UNAUTHORIZED
+                    || clientError.getStatusCode() == HttpStatus.FORBIDDEN) {
+                return MarketingActionFailureCategory.AUTHORIZATION;
+            }
+        }
+        if (failure instanceof ResourceAccessException || failure instanceof HttpServerErrorException) {
+            return MarketingActionFailureCategory.TRANSIENT_DELIVERY;
+        }
+        return MarketingActionFailureCategory.UNKNOWN;
     }
 
 }

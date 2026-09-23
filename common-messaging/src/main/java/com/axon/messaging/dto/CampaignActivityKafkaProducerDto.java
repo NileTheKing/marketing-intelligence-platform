@@ -1,6 +1,7 @@
 package com.axon.messaging.dto;
 
 import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.MarketingActionFailureCategory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -28,6 +29,7 @@ public class CampaignActivityKafkaProducerDto {
     private Long executionId;
     private Long dispatchId;
     private String failureReason;
+    private MarketingActionFailureCategory failureCategory;
     /**
      * Get the event time as an Instant.
      *

@@ -8,9 +8,10 @@ import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.repository.MarketingActionDispatchRepository;
 import com.axon.core_service.repository.MarketingActionExecutionRepository;
 import com.axon.messaging.CampaignActivityType;
+import com.axon.messaging.MarketingActionFailureCategory;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.axon.messaging.topic.KafkaTopics;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +20,28 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class MarketingActionExecutionService {
 
     private final MarketingActionExecutionRepository executionRepository;
     private final MarketingActionDispatchRepository dispatchRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final MarketingActionExecutionRetryClaimService retryClaimService;
+    private MarketingActionTriageService triageService;
+
+    public MarketingActionExecutionService(MarketingActionExecutionRepository executionRepository,
+                                           MarketingActionDispatchRepository dispatchRepository,
+                                           KafkaTemplate<String, Object> kafkaTemplate,
+                                           MarketingActionExecutionRetryClaimService retryClaimService) {
+        this.executionRepository = executionRepository;
+        this.dispatchRepository = dispatchRepository;
+        this.kafkaTemplate = kafkaTemplate;
+        this.retryClaimService = retryClaimService;
+    }
+
+    @Autowired(required = false)
+    public void setTriageService(MarketingActionTriageService triageService) {
+        this.triageService = triageService;
+    }
 
     @Transactional
     public MarketingActionDispatch createPending(Long actionId, Long ruleId, Long actionReferenceId,
@@ -98,11 +114,16 @@ public class MarketingActionExecutionService {
 
     @Transactional
     public boolean markDltFinal(Long dispatchId, String reason) {
+        return markDltFinal(dispatchId, MarketingActionFailureCategory.UNKNOWN, reason);
+    }
+
+    @Transactional
+    public boolean markDltFinal(Long dispatchId, MarketingActionFailureCategory category, String reason) {
         if (dispatchId == null) {
             return false;
         }
         LocalDateTime now = LocalDateTime.now();
-        return dispatchRepository.markDltFinal(dispatchId,
+        boolean updated = dispatchRepository.markDltFinal(dispatchId,
                 MarketingActionExecutionStatus.DISPATCHING,
                 MarketingActionExecutionStatus.DISPATCHED,
                 MarketingActionExecutionStatus.PROCESSING,
@@ -111,6 +132,10 @@ public class MarketingActionExecutionService {
                 reason,
                 now,
                 now) == 1;
+        if (updated && triageService != null) {
+            triageService.createForFinalFailure(dispatchId, category, reason);
+        }
+        return updated;
     }
 
     @Transactional(readOnly = true)

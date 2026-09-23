@@ -25,6 +25,7 @@ public class SecurityConfig {
         private final CustomOAuth2UserService customOAuth2UserService;
         private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
         private final CustomLogoutHandler customLogoutHandler;
+        private final TriageServiceTokenFilter triageServiceTokenFilter;
 
         /**
          * Creates a JwtAuthenticationFilter initialized with the configured
@@ -67,6 +68,8 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/campaign-activities/{campaignActivityId:[0-9]+}")
                                                 .hasAnyAuthority(Role.ADMIN.getKey(), "ROLE_SYSTEM")
+                                                .requestMatchers("/internal/v1/marketing-triage/**")
+                                                .hasAuthority("ROLE_SYSTEM")
                                                 .requestMatchers("/admin/**", "/api/v1/campaigns/**",
                                                                 "/api/v1/campaign-activities/**", "/api/v1/coupons/**",
                                                                 "/api/v1/dashboard/**", "/api/v1/events/**",
@@ -82,7 +85,8 @@ public class SecurityConfig {
                                 .exceptionHandling(exceptions -> exceptions
                                                 .authenticationEntryPoint((request, response, authException) -> {
                                                         String uri = request.getRequestURI();
-                                                        if (uri.startsWith("/api/") || uri.startsWith("/core/api/")) {
+                                                        if (uri.startsWith("/api/") || uri.startsWith("/core/api/")
+                                                                || uri.startsWith("/internal/")) {
                                                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)
                                                                         .commence(request, response, authException);
                                                                 return;
@@ -102,7 +106,8 @@ public class SecurityConfig {
                                                                 .userService(customOAuth2UserService))
                                                 .successHandler(oAuth2AuthenticationSuccessHandler)
                                                 .failureHandler(new SimpleUrlAuthenticationFailureHandler("/")))
-                                .addFilterAfter(jwtAuthenticationFilter, OAuth2LoginAuthenticationFilter.class);
+                                .addFilterAfter(jwtAuthenticationFilter, OAuth2LoginAuthenticationFilter.class)
+                                .addFilterBefore(triageServiceTokenFilter, JwtAuthenticationFilter.class);
                 return http.build();
         }
 }

@@ -20,16 +20,26 @@ public class MarketingActionExecutionDltConsumer {
     @KafkaListener(topics = KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT,
             groupId = "axon-marketing-action-campaign-dlt-group")
     public void consumeCampaignCommandDlt(List<CampaignActivityKafkaProducerDto> messages) {
-        messages.forEach(message -> executionService.markDltFinal(
-                message.getDispatchId(),
-                message.getFailureReason()));
+        messages.forEach(message -> {
+            if (message.getFailureCategory() == null) {
+                executionService.markDltFinal(message.getDispatchId(), message.getFailureReason());
+            } else {
+                executionService.markDltFinal(message.getDispatchId(), message.getFailureCategory(),
+                        message.getFailureReason());
+            }
+        });
     }
 
     @KafkaListener(topics = KafkaTopics.WEBHOOK_FAILED_DLT,
             groupId = "axon-marketing-action-webhook-dlt-group")
     public void consumeWebhookDlt(List<WebhookFailedDelivery> messages) {
-        messages.forEach(message -> executionService.markDltFinal(
-                message.getDispatchId(),
-                message.getFailureReason()));
+        messages.forEach(message -> {
+            if (message.getFailureCategory() == null) {
+                executionService.markDltFinal(message.getDispatchId(), message.getFailureReason());
+            } else {
+                executionService.markDltFinal(message.getDispatchId(), message.getFailureCategory(),
+                        message.getFailureReason());
+            }
+        });
     }
 }

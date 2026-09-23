@@ -1,0 +1,126 @@
+import asyncio
+
+from langgraph.checkpoint.memory import MemorySaver
+
+from app.agent import TriageRuntime, build_read_only_tools
+from app.config import Settings
+from app.schemas import ClaimedCase
+
+
+class FakeCore:
+    def __init__(self):
+        self.saved = None
+        self.saved_outputs = []
+        self.claim_count = 0
+        self.decisions = []
+
+    async def get_dispatch_context(self, dispatch_id):
+        return {"dispatchId": dispatch_id, "actionId": 5, "failureReason": "Coupon not found for ID: 99"}
+
+    async def get_action_failure_history(self, action_id, days):
+        return {"actionId": action_id, "days": days, "totalFailures": 1, "byCategory": []}
+
+    async def get_execution_dispatch_history(self, execution_id):
+        return [{"executionId": execution_id, "dispatchId": 11, "status": "FAILED_FINAL"}]
+
+    async def save_analysis(self, case_id, claim_token, facts, output):
+        self.saved = output
+        self.saved_outputs.append((case_id, claim_token, output))
+        return {"caseId": case_id, "status": "AWAITING_APPROVAL"}
+
+    async def claim(self, case_id):
+        self.claim_count += 1
+        return claimed_case(token=f"claim-{self.claim_count}", slack_message_ts="1700000000.000200")
+
+    async def record_slack_message(self, case_id, message_ts):
+        return {"caseId": case_id, "slackMessageTs": message_ts}
+
+    async def decide(self, case_id, decision, user_id, reason=None):
+        self.decisions.append((case_id, decision, user_id, reason))
+        return {"caseId": case_id, "decision": decision}
+
+    async def fail_analysis(self, case_id, claim_token, reason):
+        raise AssertionError("deterministic analysis should not fail")
+
+
+class FakeNotifier:
+    def __init__(self):
+        self.calls = []
+
+    async def send(self, case, output, facts, update=False):
+        self.calls.append((case.caseId, case.analysisClaimToken, update))
+        return "1700000000.000100"
+
+
+def claimed_case(token="claim", slack_message_ts=None):
+    return ClaimedCase(
+        caseId=1, dispatchId=11, executionId=42, status="ANALYZING",
+        failureCategory="INVALID_TARGET", failureReason="Coupon not found",
+        analysisClaimToken=token, analysisAttemptCount=1,
+        slackMessageTs=slack_message_ts,
+    )
+
+
+def test_only_declared_read_only_tools_are_exposed():
+    tools = build_read_only_tools(FakeCore())
+    assert {tool.name for tool in tools} == {
+        "get_dispatch_context",
+        "get_action_failure_history",
+        "get_execution_dispatch_history",
+    }
+
+
+def test_invalid_target_uses_deterministic_route_without_llm():
+    core = FakeCore()
+    notifier = FakeNotifier()
+    runtime = TriageRuntime(Settings(llm_api_key=""), core, notifier, MemorySaver())
+
+    asyncio.run(runtime.process(claimed_case()))
+
+    assert core.saved.recommendation == "NO_RETRY"
+    assert core.saved.confidence == 1.0
+    assert notifier.calls == [(1, "claim", False)]
+
+
+def test_reanalysis_resumes_the_existing_thread_checkpoint_and_updates_message():
+    async def scenario():
+        core = FakeCore()
+        notifier = FakeNotifier()
+        runtime = TriageRuntime(Settings(llm_api_key=""), core, notifier, MemorySaver())
+        config = {"configurable": {"thread_id": "1"}}
+
+        await runtime.process(claimed_case())
+        checkpoint = await runtime.graph.aget_state(config)
+        assert checkpoint.next == ("await_operator",)
+
+        await runtime.reanalyze(1, "쿠폰 ID가 최근에 변경됐는지 다시 확인해 주세요.")
+        resumed_checkpoint = await runtime.graph.aget_state(config)
+        assert resumed_checkpoint.next == ("await_operator",)
+        assert core.saved_outputs == [
+            (1, "claim", core.saved_outputs[0][2]),
+            (1, "claim-1", core.saved_outputs[1][2]),
+        ]
+        assert notifier.calls == [
+            (1, "claim", False),
+            (1, "claim-1", True),
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_approve_and_close_resume_the_interrupt_to_end_on_the_same_thread():
+    async def scenario(decision):
+        core = FakeCore()
+        runtime = TriageRuntime(Settings(llm_api_key=""), core, FakeNotifier(), MemorySaver())
+        config = {"configurable": {"thread_id": "1"}}
+
+        await runtime.process(claimed_case())
+        assert (await runtime.graph.aget_state(config)).next == ("await_operator",)
+
+        await runtime.decide(1, decision, "U_ADMIN", "operator reason")
+
+        assert (await runtime.graph.aget_state(config)).next == ()
+        assert core.decisions == [(1, decision, "U_ADMIN", "operator reason")]
+
+    asyncio.run(scenario("APPROVE"))
+    asyncio.run(scenario("CLOSE"))
