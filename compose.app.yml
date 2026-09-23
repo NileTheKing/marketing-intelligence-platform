@@ -134,15 +134,24 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - ai_triage_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 
   ai-triage-service:
     build:
       context: ./ai-triage-service
     container_name: axon-ai-triage
     profiles: ["ai"]
+    restart: unless-stopped
     depends_on:
-      - core-service
-      - ai-triage-mysql
+      core-service:
+        condition: service_started
+      ai-triage-mysql:
+        condition: service_healthy
     networks:
       - axon-network
     environment:
