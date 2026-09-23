@@ -217,11 +217,8 @@ class TriageRuntime:
 
     @staticmethod
     def _validate_evidence(output: AnalysisOutput, facts: dict[str, Any]) -> None:
-        serialized = _json(facts)
-        for evidence in output.evidence:
-            for number in re.findall(r"\d+", evidence):
-                if number not in serialized:
-                    raise ValueError("Evidence contains a number not present in Core facts")
+        if TriageRuntime._needs_operator_rewrite(output):
+            raise ValueError("Operator output still exposes internal fields or is not Korean")
 
     @staticmethod
     def _needs_operator_rewrite(output: AnalysisOutput) -> bool:

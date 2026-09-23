@@ -103,7 +103,7 @@ FastAPI 전용이며 `ROLE_SYSTEM` 또는 별도 service token만 허용한다. 
 | `POST /internal/v1/marketing-triage/cases/{caseId}/analysis` | 유효한 claim token일 때만 분석 결과를 저장하고 `AWAITING_APPROVAL`로 전이 |
 | `POST /internal/v1/marketing-triage/cases/{caseId}/decision` | `APPROVE`/`CLOSE`를 원자적으로 반영 |
 
-- `claim`은 `analysisClaimToken`과 짧은 분석 점유 만료 시각을 발급한다. FastAPI 장애 뒤에는 만료된 case를 다시 분석할 수 있다.
+- `claim`은 `analysisClaimToken`과 짧은 분석 점유 만료 시각을 발급한다. FastAPI 장애 뒤에는 만료된 case를 다시 분석할 수 있다. 자동 worker는 `PENDING`과 점유 만료 case만 가져가며, `ANALYSIS_FAILED`는 Slack에서 운영자가 추가 확인 또는 확인 결과를 제출할 때만 다시 claim한다.
 - 모든 조회 API는 페이징/기간 상한을 둔다. 동적 SQL, 임의 테이블 조회, 전체 payload 조회는 제공하지 않는다.
 - `decision=APPROVE`는 parent Execution을 잠그고 최신 Dispatch가 여전히 `FAILED_FINAL`인지 확인한 뒤, 기존 관리자 재실행 규칙으로 새 Dispatch를 생성한다. Kafka 발행은 그 DB 트랜잭션 commit 뒤에 한다.
 - `decision=CLOSE`는 triage case만 종료한다. 기존 Dispatch와 DLT 이력은 유지한다.

@@ -70,7 +70,8 @@ public class MarketingActionTriageService {
                         MarketingActionTriageStatus.PENDING, MarketingActionTriageStatus.ANALYZING, now,
                         PageRequest.of(0, 1))
                 : triageCaseRepository.findByIdForUpdate(requestedCaseId)
-                        .filter(item -> item.getStatus() == MarketingActionTriageStatus.AWAITING_APPROVAL)
+                        .filter(item -> item.getStatus() == MarketingActionTriageStatus.AWAITING_APPROVAL
+                                || item.getStatus() == MarketingActionTriageStatus.ANALYSIS_FAILED)
                         .map(List::of).orElseGet(List::of);
         if (candidates.isEmpty()) {
             return null;
