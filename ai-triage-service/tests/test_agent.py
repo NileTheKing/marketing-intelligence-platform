@@ -209,3 +209,10 @@ def test_operator_rewrite_is_required_for_english_or_internal_field_names():
 
     assert TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate(english))
     assert not TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate(korean))
+
+
+def test_legacy_checkpoint_output_is_detected_before_reanalysis():
+    assert TriageRuntime._has_legacy_evidence({"output": {"evidence": ["old"]}})
+    assert not TriageRuntime._has_legacy_evidence({
+        "output": {"evidence_refs": ["CURRENT_DELIVERY_FAILURE"]},
+    })

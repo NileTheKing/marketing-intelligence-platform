@@ -60,6 +60,7 @@ class TriageRuntime:
         self.settings = settings
         self.core = core
         self.notifier = notifier
+        self.checkpointer = checkpointer
         self.graph = self._build_graph(checkpointer)
 
     def _build_graph(self, checkpointer: Any):
@@ -88,9 +89,6 @@ class TriageRuntime:
             return "deterministic" if state["case"]["failureCategory"] == "INVALID_TARGET" else "llm"
 
         async def deterministic(state: GraphState) -> GraphState:
-            facts = state["facts"]
-            context = facts["dispatchContext"]
-            reason = context.get("failureReason") or "구조화된 대상 오류"
             return {"output": AnalysisOutput(
                 recommendation="NO_RETRY",
                 confidence=1.0,
@@ -224,7 +222,6 @@ class TriageRuntime:
         return workflow.compile(checkpointer=checkpointer)
 
     @staticmethod
-    @staticmethod
     def _needs_operator_rewrite(output: AnalysisOutput) -> bool:
         text = " ".join([output.summary, output.operator_next_step])
         internal_names = (
@@ -232,6 +229,11 @@ class TriageRuntime:
             "failureReason", "operatorGuidance", "totalFailures",
         )
         return not re.search(r"[가-힣]", text) or any(name in text for name in internal_names)
+
+    @staticmethod
+    def _has_legacy_evidence(checkpoint_values: dict[str, Any]) -> bool:
+        output = checkpoint_values.get("output")
+        return isinstance(output, dict) and "evidence" in output and "evidence_refs" not in output
 
     async def _invoke(self, command: Any, case: ClaimedCase) -> None:
         config = {"configurable": {"thread_id": str(case.caseId)}}
@@ -257,6 +259,18 @@ class TriageRuntime:
         case = await self.core.claim(case_id)
         if case is None:
             raise RuntimeError("Triage case is not available for re-analysis")
+        config = {"configurable": {"thread_id": str(case.caseId)}}
+        checkpoint = await self.graph.aget_state(config)
+        if self._has_legacy_evidence(checkpoint.values):
+            # Checkpoints contain only resumable graph state. Core remains the source
+            # of truth for the case, so an old output schema can be safely rebuilt.
+            await self.checkpointer.adelete_thread(str(case.caseId))
+            await self._invoke({
+                "case": case.model_dump(by_alias=True),
+                "feedback": feedback,
+                "reanalysis": True,
+            }, case)
+            return
         await self._invoke(Command(resume={
             "action": "reanalyze",
             "case": case.model_dump(by_alias=True),

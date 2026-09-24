@@ -180,6 +180,8 @@ get_execution_dispatch_history(executionId)
 
 분석 결과를 Core에 저장하고 Slack을 보낸 뒤에는 Core case를 `AWAITING_APPROVAL`로 둔다. 이때 분석 점유는 해제한다. LangGraph checkpointer만 해당 case의 `interrupt` 지점과 사람이 보기 직전의 사실·초안을 저장한다. FastAPI가 재시작되어도 Slack action의 `triageCaseId`로 같은 graph thread를 재개할 수 있다.
 
+출력 schema가 바뀐 뒤 이전 `evidence` 필드를 가진 checkpoint를 재개해야 하면, FastAPI는 그 checkpoint만 삭제하고 동일 `triageCaseId`로 최신 Core 사실과 사람 피드백을 다시 분석한다. Core의 case·Dispatch·결정 이력은 삭제하지 않는다.
+
 ### 5.3 Slack
 
 Slack 메시지는 한국어 운영 문장으로 다음만 전달한다. Core JSON field name, 내부 상태값, 마케팅 룰의 행동 조건은 그대로 노출하지 않는다.
