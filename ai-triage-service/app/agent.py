@@ -297,9 +297,9 @@ class TriageRuntime:
         except Exception as error:
             await self.core.fail_analysis(case.caseId, case.analysisClaimToken, str(error))
             raise
-        if self._has_legacy_evidence(checkpoint.values):
-            # Checkpoints contain only resumable graph state. Core remains the source
-            # of truth for the case, so an old output schema can be safely rebuilt.
+        if self._requires_fresh_run(checkpoint):
+            # A graph interrupted for approval can resume. A graph that failed mid-run
+            # retains its old claim token, so rebuild it from Core's newly claimed state.
             await self.checkpointer.adelete_thread(str(case.caseId))
             await self._invoke({
                 "case": case.model_dump(by_alias=True),
@@ -312,6 +312,10 @@ class TriageRuntime:
             "case": case.model_dump(by_alias=True),
             "feedback": feedback,
         }), case)
+
+    @classmethod
+    def _requires_fresh_run(cls, checkpoint: Any) -> bool:
+        return cls._has_legacy_evidence(checkpoint.values) or checkpoint.next != ("await_operator",)
 
     async def decide(self, case_id: int, decision: str, user_id: str,
                      reason: str | None = None) -> dict[str, Any]:

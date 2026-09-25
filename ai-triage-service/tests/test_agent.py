@@ -229,6 +229,16 @@ def test_legacy_checkpoint_output_is_detected_before_reanalysis():
     })
 
 
+def test_failed_checkpoint_requires_a_fresh_run_but_approval_wait_can_resume():
+    class Checkpoint:
+        def __init__(self, next_nodes):
+            self.values = {"output": {"evidence_refs": ["CURRENT_DELIVERY_FAILURE"]}}
+            self.next = next_nodes
+
+    assert not TriageRuntime._requires_fresh_run(Checkpoint(("await_operator",)))
+    assert TriageRuntime._requires_fresh_run(Checkpoint(("save",)))
+
+
 def test_checkpointer_connection_is_reconnected_before_graph_work():
     class Connection:
         def __init__(self):
