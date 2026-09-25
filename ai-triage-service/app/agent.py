@@ -163,6 +163,7 @@ class TriageRuntime:
             output = await self._invoke_structured_output(output_model, messages + [HumanMessage(content=(
                 "Using only the supplied Core facts and tool results, return the final triage decision."
             ))])
+            output = self._sanitize_operator_output(output)
             if self._needs_operator_rewrite(output):
                 output = await self._invoke_structured_output(output_model, [
                     SystemMessage(content=(
@@ -174,6 +175,7 @@ class TriageRuntime:
                         f"Facts: {_json(state['facts'])}\nDraft: {_json(output.model_dump())}"
                     )),
                 ])
+                output = self._sanitize_operator_output(output)
             if self._needs_operator_rewrite(output):
                 raise ValueError("Operator output exposes internal, English, or numeric facts")
             return {"output": output.model_dump()}
@@ -242,6 +244,25 @@ class TriageRuntime:
                     raise
                 await asyncio.sleep(attempt + 1)
         raise AssertionError("unreachable")
+
+    @staticmethod
+    def _sanitize_operator_output(output: AnalysisOutput) -> AnalysisOutput:
+        def sanitize(text: str) -> str:
+            text = re.sub(r"\boperator\b", "관리자", text, flags=re.IGNORECASE)
+            text = re.sub(r"\b(?:HTTP\s*)?\d{3}(?:\s+Internal Server Error)?\b",
+                          "외부 서버 오류", text, flags=re.IGNORECASE)
+            text = re.sub(r"\b\d+\b", "여러", text)
+            for name in (
+                "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
+                "failureReason", "operatorGuidance", "totalFailures",
+            ):
+                text = text.replace(name, "세부 실행 정보")
+            return text
+
+        return output.model_copy(update={
+            "summary": sanitize(output.summary),
+            "operator_next_step": sanitize(output.operator_next_step),
+        })
 
     @staticmethod
     def _needs_operator_rewrite(output: AnalysisOutput) -> bool:

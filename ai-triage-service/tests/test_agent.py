@@ -222,6 +222,20 @@ def test_operator_rewrite_is_required_for_english_or_internal_field_names():
     }))
 
 
+def test_operator_output_sanitization_masks_non_display_facts():
+    sanitized = TriageRuntime._sanitize_operator_output(AnalysisOutput.model_validate({
+        "recommendation": "MANUAL_INVESTIGATION",
+        "confidence": 0.7,
+        "summary": "operator가 HTTP 500 Internal Server Error와 dispatchContext를 확인했습니다.",
+        "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
+        "operator_next_step": "최근 2건의 totalFailures를 확인하세요.",
+    }))
+
+    assert sanitized.summary == "관리자가 외부 서버 오류와 세부 실행 정보를 확인했습니다."
+    assert sanitized.operator_next_step == "최근 여러건의 세부 실행 정보를 확인하세요."
+    assert not TriageRuntime._needs_operator_rewrite(sanitized)
+
+
 def test_legacy_checkpoint_output_is_detected_before_reanalysis():
     assert TriageRuntime._has_legacy_evidence({"output": {"evidence": ["old"]}})
     assert not TriageRuntime._has_legacy_evidence({
