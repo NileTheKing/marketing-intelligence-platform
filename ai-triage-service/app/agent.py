@@ -251,7 +251,7 @@ class TriageRuntime:
             text = re.sub(r"operator", "관리자", text, flags=re.IGNORECASE)
             text = re.sub(r"HTTP\s+\d{3}(?:\s+Internal\s+Server\s+Error)?",
                           "외부 서버 오류", text, flags=re.IGNORECASE)
-            text = re.sub(r"\b\d+\b", "여러", text)
+            text = re.sub(r"\d+", "여러", text)
             for name in (
                 "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
                 "failureReason", "operatorGuidance", "totalFailures",
