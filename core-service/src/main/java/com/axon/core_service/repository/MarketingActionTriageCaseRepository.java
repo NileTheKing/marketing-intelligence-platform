@@ -28,8 +28,7 @@ public interface MarketingActionTriageCaseRepository extends JpaRepository<Marke
             org.springframework.data.domain.Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select c from MarketingActionTriageCase c join fetch c.dispatch d join fetch d.execution "
-            + "where c.id = :id")
+    @Query("select c from MarketingActionTriageCase c where c.id = :id")
     Optional<MarketingActionTriageCase> findByIdForUpdate(@Param("id") Long id);
 
     @Query("select c.failureCategory as category, count(c) as count from MarketingActionTriageCase c "
