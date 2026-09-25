@@ -238,6 +238,7 @@ class TriageRuntime:
     async def _invoke(self, command: Any, case: ClaimedCase) -> None:
         config = {"configurable": {"thread_id": str(case.caseId)}}
         try:
+            await self._ensure_checkpointer_connection()
             await self.graph.ainvoke(command, config)
         except Exception as error:
             try:
@@ -247,6 +248,12 @@ class TriageRuntime:
                 # awaiting-approval result and do not overwrite it as a failure.
                 pass
             raise
+
+    async def _ensure_checkpointer_connection(self) -> None:
+        connection = getattr(self.checkpointer, "conn", None)
+        ping = getattr(connection, "ping", None)
+        if ping:
+            await ping(reconnect=True)
 
     async def process(self, case: ClaimedCase) -> None:
         state: GraphState = {
@@ -260,7 +267,12 @@ class TriageRuntime:
         if case is None:
             raise RuntimeError("Triage case is not available for re-analysis")
         config = {"configurable": {"thread_id": str(case.caseId)}}
-        checkpoint = await self.graph.aget_state(config)
+        try:
+            await self._ensure_checkpointer_connection()
+            checkpoint = await self.graph.aget_state(config)
+        except Exception as error:
+            await self.core.fail_analysis(case.caseId, case.analysisClaimToken, str(error))
+            raise
         if self._has_legacy_evidence(checkpoint.values):
             # Checkpoints contain only resumable graph state. Core remains the source
             # of truth for the case, so an old output schema can be safely rebuilt.

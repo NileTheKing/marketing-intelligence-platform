@@ -72,7 +72,10 @@ public class MarketingActionTriageService {
                         PageRequest.of(0, 1))
                 : triageCaseRepository.findByIdForUpdate(requestedCaseId)
                         .filter(item -> item.getStatus() == MarketingActionTriageStatus.AWAITING_APPROVAL
-                                || item.getStatus() == MarketingActionTriageStatus.ANALYSIS_FAILED)
+                                || item.getStatus() == MarketingActionTriageStatus.ANALYSIS_FAILED
+                                || (item.getStatus() == MarketingActionTriageStatus.ANALYZING
+                                && item.getAnalysisClaimExpiresAt() != null
+                                && item.getAnalysisClaimExpiresAt().isBefore(now)))
                         .map(List::of).orElseGet(List::of);
         if (candidates.isEmpty()) {
             return null;

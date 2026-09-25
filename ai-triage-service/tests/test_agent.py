@@ -216,3 +216,25 @@ def test_legacy_checkpoint_output_is_detected_before_reanalysis():
     assert not TriageRuntime._has_legacy_evidence({
         "output": {"evidence_refs": ["CURRENT_DELIVERY_FAILURE"]},
     })
+
+
+def test_checkpointer_connection_is_reconnected_before_graph_work():
+    class Connection:
+        def __init__(self):
+            self.reconnect = None
+
+        async def ping(self, reconnect):
+            self.reconnect = reconnect
+
+    class Checkpointer:
+        def __init__(self):
+            self.conn = Connection()
+
+    async def scenario():
+        runtime = TriageRuntime(Settings(), FakeCore(), FakeNotifier(), MemorySaver())
+        checkpointer = Checkpointer()
+        runtime.checkpointer = checkpointer
+        await runtime._ensure_checkpointer_connection()
+        assert checkpointer.conn.reconnect is True
+
+    asyncio.run(scenario())

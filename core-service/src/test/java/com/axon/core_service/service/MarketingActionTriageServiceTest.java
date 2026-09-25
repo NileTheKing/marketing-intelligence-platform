@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,5 +87,33 @@ class MarketingActionTriageServiceTest {
 
         assertThat(response.status()).isEqualTo("ANALYZING");
         assertThat(response.analysisAttemptCount()).isEqualTo(1);
+    }
+
+    @Test
+    void operatorCanReclaimExpiredAnalysisCaseForReanalysis() {
+        MarketingActionTriageService service = new MarketingActionTriageService(
+                triageCaseRepository, dispatchRepository, executionRepository, actionRepository,
+                retryClaimService, kafkaTemplate, evidenceRenderer);
+        MarketingActionExecution execution = MarketingActionExecution.builder()
+                .actionId(5L).ruleId(10L).actionReferenceId(99L).userId(1L).productId(100L)
+                .channel(RewardType.WEBHOOK).build();
+        ReflectionTestUtils.setField(execution, "id", 42L);
+        MarketingActionDispatch dispatch = MarketingActionDispatch.builder()
+                .execution(execution).sequence(1L)
+                .initiatedBy(com.axon.core_service.domain.marketing.MarketingActionDispatchInitiatedBy.SYSTEM)
+                .build();
+        ReflectionTestUtils.setField(dispatch, "id", 11L);
+        MarketingActionTriageCase triageCase = MarketingActionTriageCase.pending(
+                dispatch, MarketingActionFailureCategory.TRANSIENT_DELIVERY, "timeout", "confirm recovery");
+        ReflectionTestUtils.setField(triageCase, "id", 7L);
+        triageCase.claim("expired", LocalDateTime.now().minusSeconds(1));
+        when(triageCaseRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(triageCase));
+        when(triageCaseRepository.saveAndFlush(triageCase)).thenReturn(triageCase);
+
+        var response = service.claim(7L);
+
+        assertThat(response.status()).isEqualTo("ANALYZING");
+        assertThat(response.analysisAttemptCount()).isEqualTo(2);
+        assertThat(response.analysisClaimToken()).isNotEqualTo("expired");
     }
 }
