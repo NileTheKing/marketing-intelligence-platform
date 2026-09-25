@@ -248,8 +248,8 @@ class TriageRuntime:
     @staticmethod
     def _sanitize_operator_output(output: AnalysisOutput) -> AnalysisOutput:
         def sanitize(text: str) -> str:
-            text = re.sub(r"\boperator\b", "관리자", text, flags=re.IGNORECASE)
-            text = re.sub(r"\b(?:HTTP\s*)?\d{3}(?:\s+Internal Server Error)?\b",
+            text = re.sub(r"operator", "관리자", text, flags=re.IGNORECASE)
+            text = re.sub(r"HTTP\s+\d{3}(?:\s+Internal\s+Server\s+Error)?",
                           "외부 서버 오류", text, flags=re.IGNORECASE)
             text = re.sub(r"\b\d+\b", "여러", text)
             for name in (
