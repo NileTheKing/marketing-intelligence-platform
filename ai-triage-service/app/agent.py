@@ -137,7 +137,7 @@ class TriageRuntime:
                        "evidence_refs are codes, not operator-facing sentences. Select only codes supported by the facts. "
                        "Select OPERATOR_CONFIRMED_RECOVERY only when operatorFeedback.source is operator and it explicitly confirms recovery. "
                        "Do not put numeric facts, HTTP status codes, identifiers, or internal field names in summary or operator_next_step; Core renders verified facts separately. "
-                       "Use 관리자, never the English word operator. "
+                       "Use 관리자, never the English word operator or enum values such as TRANSIENT_DELIVERY. "
                        "Never approve, retry, or change infrastructure.")
             case = state["case"]
             prompt = (f"Triage case: {_json(case)}\nFacts already loaded: {_json(state['facts'])}\n"
@@ -163,7 +163,7 @@ class TriageRuntime:
             output = await self._invoke_structured_output(output_model, messages + [HumanMessage(content=(
                 "Using only the supplied Core facts and tool results, return the final triage decision."
             ))])
-            output = self._sanitize_operator_output(output)
+            output = self._normalize_operator_output(output)
             if self._needs_operator_rewrite(output):
                 output = await self._invoke_structured_output(output_model, [
                     SystemMessage(content=(
@@ -175,7 +175,7 @@ class TriageRuntime:
                         f"Facts: {_json(state['facts'])}\nDraft: {_json(output.model_dump())}"
                     )),
                 ])
-                output = self._sanitize_operator_output(output)
+                output = self._normalize_operator_output(output)
             if self._needs_operator_rewrite(output):
                 raise ValueError("Operator output exposes internal, English, or numeric facts")
             return {"output": output.model_dump()}
@@ -251,6 +251,10 @@ class TriageRuntime:
             text = re.sub(r"operator", "관리자", text, flags=re.IGNORECASE)
             text = re.sub(r"HTTP\s+\d{3}(?:\s+Internal\s+Server\s+Error)?",
                           "외부 서버 오류", text, flags=re.IGNORECASE)
+            text = text.replace("TRANSIENT_DELIVERY_FAILURE", "일시적인 외부 전달 오류")
+            text = text.replace("TRANSIENT_DELIVERY 오류", "일시적인 외부 전달 오류")
+            text = text.replace("TRANSIENT_DELIVERY", "일시적인 외부 전달 오류")
+            text = text.replace("정상 응답을 확인되었습니다", "정상 응답하는 것을 확인했습니다")
             text = re.sub(r"\d+", "여러", text)
             for name in (
                 "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
@@ -263,6 +267,12 @@ class TriageRuntime:
             "summary": sanitize(output.summary),
             "operator_next_step": sanitize(output.operator_next_step),
         })
+
+    @classmethod
+    def _normalize_operator_output(cls, output: AnalysisOutput) -> AnalysisOutput:
+        output = cls._sanitize_operator_output(output)
+        evidence_refs = ["CURRENT_DELIVERY_FAILURE", *output.evidence_refs]
+        return output.model_copy(update={"evidence_refs": list(dict.fromkeys(evidence_refs))})
 
     @staticmethod
     def _needs_operator_rewrite(output: AnalysisOutput) -> bool:

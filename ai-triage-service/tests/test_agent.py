@@ -236,6 +236,24 @@ def test_operator_output_sanitization_masks_non_display_facts():
     assert not TriageRuntime._needs_operator_rewrite(sanitized)
 
 
+def test_operator_output_normalization_keeps_the_failure_and_confirmation_evidence():
+    output = AnalysisOutput.model_validate({
+        "recommendation": "RETRY_RECOMMENDED",
+        "confidence": 0.8,
+        "summary": "TRANSIENT_DELIVERY 오류를 확인했습니다.",
+        "evidence_refs": ["OPERATOR_CONFIRMED_RECOVERY"],
+        "operator_next_step": "재실행 후 결과를 확인하세요.",
+    })
+
+    normalized = TriageRuntime._normalize_operator_output(output)
+
+    assert normalized.summary == "일시적인 외부 전달 오류를 확인했습니다."
+    assert normalized.evidence_refs == [
+        "CURRENT_DELIVERY_FAILURE",
+        "OPERATOR_CONFIRMED_RECOVERY",
+    ]
+
+
 def test_legacy_checkpoint_output_is_detected_before_reanalysis():
     assert TriageRuntime._has_legacy_evidence({"output": {"evidence": ["old"]}})
     assert not TriageRuntime._has_legacy_evidence({
