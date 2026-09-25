@@ -133,7 +133,7 @@ class TriageRuntime:
                        '{"recommendation":"RETRY_RECOMMENDED|MANUAL_INVESTIGATION|NO_RETRY",'
                        '"confidence":0.0,"summary":"2-4 sentences",'
                        '"evidence_refs":["CURRENT_DELIVERY_FAILURE|RECENT_ACTION_FAILURES|EXECUTION_DISPATCH_HISTORY|OPERATOR_CONFIRMED_RECOVERY"],'
-                       '"operator_next_step":"one or two checks"}. '
+                       '"operator_next_step":"one concise next step without numbered list labels"}. '
                        "evidence_refs are codes, not operator-facing sentences. Select only codes supported by the facts. "
                        "Select OPERATOR_CONFIRMED_RECOVERY only when operatorFeedback.source is operator and it explicitly confirms recovery. "
                        "Do not put numeric facts, HTTP status codes, identifiers, or internal field names in summary or operator_next_step; Core renders verified facts separately. "
@@ -255,13 +255,16 @@ class TriageRuntime:
             text = text.replace("TRANSIENT_DELIVERY 오류", "일시적인 외부 전달 오류")
             text = text.replace("TRANSIENT_DELIVERY", "일시적인 외부 전달 오류")
             text = text.replace("정상 응답을 확인되었습니다", "정상 응답하는 것을 확인했습니다")
+            text = text.replace("외부 Webhook 엔드포인트가 정상 응답하는 것으로 확인되었습니다",
+                                "관리자가 외부 Webhook 엔드포인트의 정상 응답을 확인했습니다")
+            text = re.sub(r"(?:^|\s)\d+[.)]\s*", " ", text)
             text = re.sub(r"\d+", "여러", text)
             for name in (
                 "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
                 "failureReason", "operatorGuidance", "totalFailures",
             ):
                 text = text.replace(name, "세부 실행 정보")
-            return text
+            return re.sub(r"\s+", " ", text).strip()
 
         return output.model_copy(update={
             "summary": sanitize(output.summary),

@@ -228,7 +228,7 @@ def test_operator_output_sanitization_masks_non_display_facts():
         "confidence": 0.7,
         "summary": "operator가 HTTP 500 Internal Server Error와 dispatchContext를 확인했습니다.",
         "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
-        "operator_next_step": "최근 2건의 totalFailures를 확인하세요.",
+        "operator_next_step": "1. 최근 2건의 totalFailures를 확인하세요.",
     }))
 
     assert sanitized.summary == "관리자가 외부 서버 오류와 세부 실행 정보를 확인했습니다."
