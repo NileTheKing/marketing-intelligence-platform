@@ -144,9 +144,10 @@ def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch
             captured["tools"] = {tool.name for tool in tools}
             return self
 
-        def with_structured_output(self, schema, method):
+        def with_structured_output(self, schema, method, strict):
             captured["schema"] = schema
             captured["method"] = method
+            captured["strict"] = strict
             return FakeModel(structured=True)
 
         async def ainvoke(self, messages):
@@ -180,11 +181,13 @@ def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch
         "model": "openai/gpt-oss-20b",
         "temperature": 0,
         "timeout": 30,
-        "max_tokens": 400,
+        "max_tokens": 800,
         "max_retries": 3,
+        "reasoning_effort": "low",
     }] * 2
     assert captured["schema"].__name__ == "AnalysisOutput"
     assert captured["method"] == "json_schema"
+    assert captured["strict"] is True
     assert captured["tools"] == {
         "get_dispatch_context",
         "get_action_failure_history",

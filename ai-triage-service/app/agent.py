@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from typing import Any, TypedDict
@@ -7,6 +8,7 @@ from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
+from openai import BadRequestError
 
 from .config import Settings
 from .core_client import CoreClient
@@ -108,12 +110,13 @@ class TriageRuntime:
                 "timeout": 30,
                 # The operator card needs a short structured decision, not a long completion.
                 # Retrying provider rate limits keeps a transient 429 out of the final-failure path.
-                "max_tokens": 400,
+                "max_tokens": 800,
                 "max_retries": 3,
+                "reasoning_effort": "low",
             }
             tool_model = ChatOpenAI(**model_kwargs).bind_tools(tools)
             output_model = ChatOpenAI(**model_kwargs).with_structured_output(
-                AnalysisOutput, method="json_schema"
+                AnalysisOutput, method="json_schema", strict=True
             )
             system = ("You are the Axon DLQ failure triage agent. Use only the three provided read-only "
                        "Core tools and any operatorFeedback explicitly supplied in the facts. Do not invent IDs, "
@@ -157,11 +160,11 @@ class TriageRuntime:
 
             # Tool calls are optional because bounded Core facts are loaded first. Always use
             # schema-constrained output for the operator-facing recommendation.
-            output = AnalysisOutput.model_validate(await output_model.ainvoke(messages + [HumanMessage(content=(
+            output = await self._invoke_structured_output(output_model, messages + [HumanMessage(content=(
                 "Using only the supplied Core facts and tool results, return the final triage decision."
-            ))]))
+            ))])
             if self._needs_operator_rewrite(output):
-                output = AnalysisOutput.model_validate(await output_model.ainvoke([
+                output = await self._invoke_structured_output(output_model, [
                     SystemMessage(content=(
                         "Rewrite this triage result for a Korean operator. Preserve only supported facts and the "
                         "recommendation. Do not expose JSON field names, English word operator, IDs, counts, or "
@@ -170,7 +173,7 @@ class TriageRuntime:
                     HumanMessage(content=(
                         f"Facts: {_json(state['facts'])}\nDraft: {_json(output.model_dump())}"
                     )),
-                ]))
+                ])
             if self._needs_operator_rewrite(output):
                 raise ValueError("Operator output exposes internal, English, or numeric facts")
             return {"output": output.model_dump()}
@@ -227,6 +230,18 @@ class TriageRuntime:
         workflow.add_conditional_edges("await_operator", operator_route,
                                        {"reanalyze": "load_context", "end": END})
         return workflow.compile(checkpointer=checkpointer)
+
+    @staticmethod
+    async def _invoke_structured_output(model: Any, messages: list[Any]) -> AnalysisOutput:
+        for attempt in range(3):
+            try:
+                return AnalysisOutput.model_validate(await model.ainvoke(messages))
+            except BadRequestError as error:
+                # A provider can reject a transiently invalid constrained response before it is returned.
+                if "json" not in str(error).lower() or attempt == 2:
+                    raise
+                await asyncio.sleep(attempt + 1)
+        raise AssertionError("unreachable")
 
     @staticmethod
     def _needs_operator_rewrite(output: AnalysisOutput) -> bool:
