@@ -7,9 +7,13 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class TriageEvidenceRenderer {
+
+    private static final Pattern HTTP_STATUS = Pattern.compile("\\b([1-5]\\d{2})\\b");
 
     public List<String> render(Map<String, Object> facts, List<String> references) {
         if (references == null || references.isEmpty()) {
@@ -39,7 +43,11 @@ public class TriageEvidenceRenderer {
         if (reason == null) {
             throw new BusinessConflictException("Current delivery failure evidence is unavailable");
         }
-        return "이번 전달은 " + reason + " 사유로 최종 실패했습니다.";
+        Matcher status = HTTP_STATUS.matcher(reason);
+        if (status.find()) {
+            return "이번 전달은 외부 수신 서버의 HTTP " + status.group(1) + " 응답으로 최종 실패했습니다.";
+        }
+        return "이번 전달은 외부 전달 오류로 최종 실패했습니다.";
     }
 
     private String recentFailures(Map<String, Object> history) {

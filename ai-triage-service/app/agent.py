@@ -130,7 +130,8 @@ class TriageRuntime:
                        '"operator_next_step":"one or two checks"}. '
                        "evidence_refs are codes, not operator-facing sentences. Select only codes supported by the facts. "
                        "Select OPERATOR_CONFIRMED_RECOVERY only when operatorFeedback.source is operator and it explicitly confirms recovery. "
-                       "Do not put numeric facts, identifiers, or internal field names in summary or operator_next_step; Core renders verified facts separately. "
+                       "Do not put numeric facts, HTTP status codes, identifiers, or internal field names in summary or operator_next_step; Core renders verified facts separately. "
+                       "Use 관리자, never the English word operator. "
                        "Never approve, retry, or change infrastructure.")
             case = state["case"]
             prompt = (f"Triage case: {_json(case)}\nFacts already loaded: {_json(state['facts'])}\n"
@@ -160,12 +161,15 @@ class TriageRuntime:
                 output = AnalysisOutput.model_validate(await output_model.ainvoke([
                     SystemMessage(content=(
                         "Rewrite this triage result for a Korean operator. Preserve only supported facts and the "
-                        "recommendation. Do not expose JSON field names or call a single failure a recurring issue."
+                        "recommendation. Do not expose JSON field names, English word operator, IDs, counts, or "
+                        "HTTP status codes. Do not call a single failure a recurring issue."
                     )),
                     HumanMessage(content=(
                         f"Facts: {_json(state['facts'])}\nDraft: {_json(output.model_dump())}"
                     )),
                 ]))
+            if self._needs_operator_rewrite(output):
+                raise ValueError("Operator output exposes internal, English, or numeric facts")
             return {"output": output.model_dump()}
 
         async def save(state: GraphState) -> GraphState:
@@ -228,7 +232,9 @@ class TriageRuntime:
             "dispatchContext", "actionFailureHistory", "thresholdCount", "byCategory",
             "failureReason", "operatorGuidance", "totalFailures",
         )
-        return not re.search(r"[가-힣]", text) or any(name in text for name in internal_names)
+        return (not re.search(r"[가-힣]", text)
+                or bool(re.search(r"\boperator\b|\d", text, flags=re.IGNORECASE))
+                or any(name in text for name in internal_names))
 
     @staticmethod
     def _has_legacy_evidence(checkpoint_values: dict[str, Any]) -> bool:

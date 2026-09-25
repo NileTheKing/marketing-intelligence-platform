@@ -16,7 +16,7 @@ class TriageEvidenceRendererTest {
     @Test
     void rendersOnlyFactsSupportedByTheCoreSnapshot() {
         Map<String, Object> facts = Map.of(
-                "dispatchContext", Map.of("failureReason", "HTTP 500 응답"),
+                "dispatchContext", Map.of("failureReason", "500 Internal Server Error: <html>upstream body</html>"),
                 "actionFailureHistory", Map.of("totalFailures", 3),
                 "executionDispatchHistory", List.of(Map.of("dispatchId", 1)),
                 "operatorFeedback", Map.of("source", "operator", "content", "관리자 확인 결과: endpoint 200 확인")
@@ -28,7 +28,7 @@ class TriageEvidenceRendererTest {
                 "EXECUTION_DISPATCH_HISTORY",
                 "OPERATOR_CONFIRMED_RECOVERY"
         ))).containsExactly(
-                "이번 전달은 HTTP 500 응답 사유로 최종 실패했습니다.",
+                "이번 전달은 외부 수신 서버의 HTTP 500 응답으로 최종 실패했습니다.",
                 "최근 30일 같은 액션의 최종 실패는 3건입니다.",
                 "이 실행의 발송 이력 1건을 함께 확인했습니다.",
                 "관리자가 외부 대상의 확인 결과를 입력했습니다."

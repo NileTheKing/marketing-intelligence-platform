@@ -203,12 +203,19 @@ def test_operator_rewrite_is_required_for_english_or_internal_field_names():
         "recommendation": "MANUAL_INVESTIGATION",
         "confidence": 0.7,
         "summary": "Webhook 전달 실패 원인을 확인해야 합니다.",
-        "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
+        "evidence_refs": ["RECENT_ACTION_FAILURES"],
         "operator_next_step": "수신 endpoint의 정상 응답을 확인하세요.",
     }
 
     assert TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate(english))
     assert not TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate(korean))
+    assert TriageRuntime._needs_operator_rewrite(AnalysisOutput.model_validate({
+        "recommendation": "MANUAL_INVESTIGATION",
+        "confidence": 0.7,
+        "summary": "operator가 HTTP 500 응답을 확인했습니다.",
+        "evidence_refs": ["CURRENT_DELIVERY_FAILURE"],
+        "operator_next_step": "관리자 확인이 필요합니다.",
+    }))
 
 
 def test_legacy_checkpoint_output_is_detected_before_reanalysis():

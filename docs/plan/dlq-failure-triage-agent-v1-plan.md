@@ -174,6 +174,7 @@ get_execution_dispatch_history(executionId)
 ```
 
 - `evidence_refs`는 `CURRENT_DELIVERY_FAILURE`, `RECENT_ACTION_FAILURES`, `EXECUTION_DISPATCH_HISTORY`, `OPERATOR_CONFIRMED_RECOVERY` 중에서만 선택한다. Core는 스냅샷에 해당 사실이 있을 때만 한국어 문장으로 렌더링·저장한다. AI가 만든 근거 문장은 Slack에 표시하지 않는다.
+- Core는 원본 HTTP 응답 본문·내부 예외 문자열을 Slack에 노출하지 않고, 확인 가능한 HTTP 상태 또는 일반화한 전달 오류만 렌더링한다. AI 판단에는 식별자·건수·HTTP 상태 코드·내부 field name을 넣지 않는다.
 - JSON 검증 실패, 허용되지 않은 근거 참조값, 허용되지 않은 권고는 `ANALYSIS_FAILED`로 기록하고 Slack 재실행 버튼을 제공하지 않는다.
 - `confidence`는 모델의 자기평가다. 값이 높아도 자동 재실행하지 않는다.
 - Jev 같은 별도 분류 모델은 넣지 않는다. v1의 결정적 실패 라우팅은 코드 조건으로 충분하고, triage 건수도 별도 모델 도입을 정당화할 규모가 아니다.
