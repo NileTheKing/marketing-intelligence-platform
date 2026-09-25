@@ -117,6 +117,12 @@ services:
       TRIAGE_SERVICE_TOKEN: ${TRIAGE_SERVICE_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED: ${MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
 
   ai-triage-mysql:
     image: mysql:8.0
@@ -150,7 +156,7 @@ services:
     restart: unless-stopped
     depends_on:
       core-service:
-        condition: service_started
+        condition: service_healthy
       ai-triage-mysql:
         condition: service_healthy
     networks:
