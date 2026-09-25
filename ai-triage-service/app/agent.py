@@ -106,7 +106,10 @@ class TriageRuntime:
                 "model": self.settings.groq_model,
                 "temperature": 0,
                 "timeout": 30,
-                "max_retries": 1,
+                # The operator card needs a short structured decision, not a long completion.
+                # Retrying provider rate limits keeps a transient 429 out of the final-failure path.
+                "max_tokens": 400,
+                "max_retries": 3,
             }
             tool_model = ChatOpenAI(**model_kwargs).bind_tools(tools)
             output_model = ChatOpenAI(**model_kwargs).with_structured_output(

@@ -180,7 +180,8 @@ def test_non_deterministic_triage_uses_groq_openai_compatible_client(monkeypatch
         "model": "openai/gpt-oss-20b",
         "temperature": 0,
         "timeout": 30,
-        "max_retries": 1,
+        "max_tokens": 400,
+        "max_retries": 3,
     }] * 2
     assert captured["schema"].__name__ == "AnalysisOutput"
     assert captured["method"] == "json_schema"
