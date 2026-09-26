@@ -1,38 +1,106 @@
 {
   "annotations": { "list": [] },
+  "description": "Single-VM operations view. Start with service health, then inspect traffic, latency, errors, and saturation. Use Loki logs to open a related Jaeger trace.",
   "editable": true,
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [{ "type": "value", "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
       "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "up{job=\"axon-entry\"}", "legendFormat": "Entry", "refId": "A" }],
+      "title": "Entry 상태",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [{ "type": "value", "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "up{job=\"axon-core\"}", "legendFormat": "Core", "refId": "A" }],
+      "title": "처리 서비스 상태",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [{ "type": "value", "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } } }], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "up{job=\"axon-ai-triage\"}", "legendFormat": "AI triage", "refId": "A" }],
+      "title": "AI triage 상태",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 500 }, { "color": "red", "value": 1000 }] }, "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "1000 * histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"axon-entry\"}[5m])))", "legendFormat": "p95", "refId": "A" }],
+      "title": "Entry p95",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 100 }, { "color": "red", "value": 1000 }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
+      "id": 5,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "sum(kafka_consumer_fetch_manager_records_lag{application=\"axon-core\"}) or vector(0)", "legendFormat": "records", "refId": "A" }],
+      "title": "Kafka lag",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+      "id": 6,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "sum(increase(axon_pipeline_dlt_routed_total[1h])) or vector(0)", "legendFormat": "last hour", "refId": "A" }],
+      "title": "DLT 유입 1시간",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "id": 7,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(http_server_requests_seconds_count{application=~\"axon-entry|axon-core\"}[1m]))", "legendFormat": "HTTP requests/s", "refId": "A" },
-        { "expr": "sum(rate(axon_pipeline_flush_seconds_count{application=\"axon-core\"}[1m]))", "legendFormat": "Core records/s", "refId": "B" },
-        { "expr": "sum(rate(axon_triage_cases_total{outcome=\"claimed\"}[1m]))", "legendFormat": "AI cases/s", "refId": "C" }
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=\"axon-entry\"}[1m])) or vector(0)", "legendFormat": "Entry requests/s", "refId": "A" },
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=\"axon-core\"}[1m])) or vector(0)", "legendFormat": "Core requests/s", "refId": "B" },
+        { "expr": "sum(rate(axon_pipeline_flush_seconds_count{application=\"axon-core\"}[1m])) or vector(0)", "legendFormat": "Core records/s", "refId": "C" }
       ],
       "title": "Traffic",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "id": 2,
-      "targets": [{ "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"axon-entry\"}[5m])))", "legendFormat": "Entry p95", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "id": 8,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "1000 * histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"axon-entry\"}[5m])))", "legendFormat": "Entry p50", "refId": "A" },
+        { "expr": "1000 * histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"axon-entry\"}[5m])))", "legendFormat": "Entry p95", "refId": "B" },
+        { "expr": "1000 * histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"axon-core\"}[5m])))", "legendFormat": "Core p95", "refId": "C" }
+      ],
       "title": "Latency",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "id": 3,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
+      "id": 9,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(http_server_requests_seconds_count{application=~\"axon-entry|axon-core\",status=~\"5..\"}[5m]))", "legendFormat": "HTTP 5xx/s", "refId": "A" },
-        { "expr": "sum(rate(axon_pipeline_dlt_routed_total[5m]))", "legendFormat": "DLT routed/s", "refId": "B" },
-        { "expr": "sum(rate(axon_triage_llm_calls_total{outcome=\"failure\"}[5m]))", "legendFormat": "AI LLM failure/s", "refId": "C" }
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=~\"axon-entry|axon-core\",status=~\"5..\"}[5m])) or vector(0)", "legendFormat": "HTTP 5xx/s", "refId": "A" },
+        { "expr": "sum(rate(axon_pipeline_dlt_routed_total[5m])) or vector(0)", "legendFormat": "DLT routed/s", "refId": "B" },
+        { "expr": "sum(rate(axon_triage_llm_calls_total{outcome=\"failure\"}[5m])) or vector(0)", "legendFormat": "AI LLM failure/s", "refId": "C" }
       ],
       "title": "Errors",
       "type": "timeseries"
@@ -40,23 +108,57 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "id": 4,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 },
+      "id": 10,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "hikaricp_connections_pending{application=\"axon-core\"}", "legendFormat": "Hikari pending", "refId": "A" },
-        { "expr": "sum(kafka_consumer_fetch_manager_records_lag{application=\"axon-core\"})", "legendFormat": "Kafka lag", "refId": "B" },
-        { "expr": "max(executor_queued_tasks{application=\"axon-entry\",name=\"backendEventTaskExecutor\"})", "legendFormat": "Entry event queue", "refId": "C" },
-        { "expr": "max(process_cpu_usage{application=~\"axon-entry|axon-core\"})", "legendFormat": "JVM process CPU", "refId": "D" }
+        { "expr": "hikaricp_connections_pending{application=\"axon-core\"} or vector(0)", "legendFormat": "Hikari pending", "refId": "A" },
+        { "expr": "sum(kafka_consumer_fetch_manager_records_lag{application=\"axon-core\"}) or vector(0)", "legendFormat": "Kafka lag", "refId": "B" },
+        { "expr": "max(executor_queued_tasks{application=\"axon-entry\",name=\"backendEventTaskExecutor\"}) or vector(0)", "legendFormat": "Entry event queue", "refId": "C" },
+        { "expr": "max(process_cpu_usage{application=~\"axon-entry|axon-core\"}) or vector(0)", "legendFormat": "JVM CPU", "refId": "D" }
       ],
       "title": "Saturation",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 },
+      "id": 11,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "sum(rate(axon_triage_cases_total{outcome=~\"claimed|reanalyze_claimed\"}[5m])) or vector(0)", "legendFormat": "cases/s", "refId": "A" },
+        { "expr": "sum(rate(axon_triage_llm_calls_total[5m])) or vector(0)", "legendFormat": "LLM calls/s", "refId": "B" },
+        { "expr": "sum(increase(axon_triage_decisions_total{decision=\"approve\"}[1h])) or vector(0)", "legendFormat": "approved (1h)", "refId": "C" }
+      ],
+      "title": "AI triage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 21 },
+      "id": 12,
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyJSON": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "expr": "{service=~\"core-service|entry-service|ai-triage-service|axon-nginx|host-nginx\", level=~\"error|warn\"}", "refId": "A" }],
+      "title": "최근 경고 및 오류 로그",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 21 },
+      "id": 13,
+      "options": { "content": "## 장애 확인 순서\n\n1. 상단 카드에서 서비스 상태, p95, lag, DLT를 확인합니다.\n2. `Errors`와 `Saturation`에서 어느 계층이 밀리는지 좁힙니다.\n3. 아래 로그에서 `trace_id`, `triage_case_id`, `dispatch_id`로 같은 사건을 찾습니다.\n4. 로그의 Trace 링크로 Jaeger 스팬을 열어 외부 호출, DB, Kafka 구간을 확인합니다.\n\nAI triage는 모든 trace를 보존합니다. Entry와 Core는 고빈도 경로라 5%만 저장합니다.", "mode": "markdown" },
+      "title": "운영 드릴다운",
+      "type": "text"
     }
   ],
+  "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["golden-signals", "axon"],
+  "tags": ["golden-signals", "axon", "operations"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
-  "title": "Axon Golden Signals",
+  "title": "Axon Operations",
   "uid": "axon-golden-signals",
-  "version": 1
+  "version": 2
 }
