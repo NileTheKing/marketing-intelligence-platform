@@ -1,6 +1,6 @@
 # Observability Correlation v1
 
-Status: active (local implementation verified, VM rollout pending)
+Status: active (Oracle VM deployed, focused smoke verification passed)
 
 ## Goal
 
@@ -63,13 +63,23 @@ or LLM prompts/operator feedback.
 4. `jaeger`: existing trace backend promoted from manual diagnosis overlay to
    sampled operational tracing.
 
-## Rollout Boundary
+## Runtime Rollout
 
-The tracked Compose changes are implemented locally. The Oracle VM host nginx
-source files are tracked under `infrastructure/host-nginx/`. Rollout is not
-complete until that vhost forwards `X-Request-Id` to axon-nginx and writes the
-observability JSON log with the same `request_id` field. Its legacy timing log
-remains unchanged because FCFS load-test artifact scripts consume it.
+The Oracle VM rollout completed on 2026-09-26. The host nginx vhost forwards
+`X-Request-Id` to axon-nginx and writes an observability JSON log. Its legacy
+timing log remains unchanged because FCFS load-test artifact scripts consume it.
+
+Focused runtime verification confirmed:
+
+- Loki and Alloy are healthy and collect only the `axon` Compose project plus
+  the host nginx files.
+- Prometheus reports Entry, Core, and AI targets as `up`.
+- A single public request has the same `request_id` in host nginx and
+  axon-nginx Loki streams.
+- Jaeger contains sampled `axon-entry` traces.
+
+The remaining AI-specific acceptance checks stay below. They must be repeated
+whenever the triage workflow or its instrumentation changes.
 
 Use the normal runtime overlay only after the Java agent JAR is present:
 
