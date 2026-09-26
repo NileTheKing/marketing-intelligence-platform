@@ -1,6 +1,7 @@
 package com.axon.entry_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -16,11 +17,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -37,25 +39,13 @@ class RedisReservationComparisonIT {
     private static final int INTERRUPTED = 50;
     private static final String USERS = "campaign:901:users";
     private static final String COUNTER = "campaign:901:counter";
-    private static final String LUA = """
-            local added = redis.call('SADD', KEYS[1], ARGV[1])
-            if added == 0 then return -1 end
-            local count = redis.call('INCR', KEYS[2])
-            if tonumber(ARGV[2]) > 0 and count > tonumber(ARGV[2]) then
-              redis.call('SREM', KEYS[1], ARGV[1])
-              redis.call('DECR', KEYS[2])
-              return -2
-            end
-            return count
-            """;
-    private static final RedisScript<Long> RESERVATION_SCRIPT = new DefaultRedisScript<>(LUA, Long.class);
-
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379);
 
     private LettuceConnectionFactory connectionFactory;
     private StringRedisTemplate redis;
+    private RedisScript<Long> reservationScript;
 
     @BeforeEach
     void connect() {
@@ -64,6 +54,8 @@ class RedisReservationComparisonIT {
         redis = new StringRedisTemplate();
         redis.setConnectionFactory(connectionFactory);
         redis.afterPropertiesSet();
+        EntryReservationService service = new EntryReservationService(redis, mock(ApplicationEventPublisher.class));
+        reservationScript = reservationScriptFrom(service);
     }
 
     @AfterEach
@@ -189,7 +181,7 @@ class RedisReservationComparisonIT {
                             }
                             if (algorithm == Algorithm.LUA) {
                                 commands++;
-                                Long result = redis.execute(RESERVATION_SCRIPT,
+                                Long result = redis.execute(reservationScript,
                                         List.of(USERS, COUNTER), String.valueOf(50_000 + index),
                                         String.valueOf(LIMIT));
                                 totalCommands.addAndGet(commands);
@@ -368,7 +360,12 @@ class RedisReservationComparisonIT {
     }
 
     private Long executeLua(int index) {
-        return redis.execute(RESERVATION_SCRIPT, List.of(USERS, COUNTER), userId(index), String.valueOf(LIMIT));
+        return redis.execute(reservationScript, List.of(USERS, COUNTER), userId(index), String.valueOf(LIMIT));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static RedisScript<Long> reservationScriptFrom(EntryReservationService service) {
+        return (RedisScript<Long>) ReflectionTestUtils.getField(service, "reservationScript");
     }
 
     private static Set<Integer> indices(int first, int count) {
