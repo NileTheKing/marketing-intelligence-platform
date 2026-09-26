@@ -1,6 +1,6 @@
 # Observability Correlation v1
 
-Status: active (Oracle VM deployed, focused smoke verification passed)
+Status: active (Oracle VM deployed, full triage recovery verification passed)
 
 ## Goal
 
@@ -78,8 +78,15 @@ Focused runtime verification confirmed:
   axon-nginx Loki streams.
 - Jaeger contains sampled `axon-entry` traces.
 
-The remaining AI-specific acceptance checks stay below. They must be repeated
-whenever the triage workflow or its instrumentation changes.
+The AI recovery verification completed on 2026-09-26 with a temporary internal
+Webhook endpoint: `500 -> DLT -> triage -> operator feedback -> re-analysis ->
+approval -> retry -> 200`. The original and first approved retry remained
+`FAILED_FINAL`; the next approved Dispatch succeeded, proving that retry
+history is retained rather than overwritten. Loki recorded the AI case and
+Dispatch IDs, Prometheus recorded the re-analysis and approval counters, and a
+temporarily 100% sampled re-analysis trace contained graph, Core-tool, Groq,
+and Slack-update spans in Jaeger. The temporary endpoint and sampling override
+were removed after the check; normal runtime sampling remains 5%.
 
 Use the normal runtime overlay only after the Java agent JAR is present:
 
@@ -129,11 +136,15 @@ Grafana derives a Jaeger link from the Loki JSON `trace_id` field.
 
 ## Acceptance Checks
 
-1. `docker compose ... config` validates the observability overlays.
-2. Prometheus scrapes Entry, Core, and AI `/metrics`.
-3. A structured AI log with `triage_case_id` is searchable in Loki.
-4. A sampled AI request shows spans for the graph and Core/LLM/Slack boundary
-   in Jaeger.
-5. A Loki log containing `trace_id` links to the corresponding Jaeger trace.
-6. Existing Webhook 500 -> DLT -> triage -> operator approval -> retry success
-   scenario is repeatable with the observability signals visible.
+1. Completed: `docker compose ... config` validates the observability overlays.
+2. Completed: Prometheus scrapes Entry, Core, and AI `/metrics`.
+3. Completed: structured AI logs with `triage_case_id` and `dispatch_id` are
+   searchable in Loki.
+4. Completed: a sampled AI re-analysis shows graph, Core-tool, LLM, and Slack
+   spans in Jaeger.
+5. Completed: the same sampled trace ID is present in Loki JSON and resolves
+   to its Jaeger trace.
+6. Completed: the Webhook `500 -> DLT -> triage -> operator feedback ->
+   re-analysis -> approval -> retry -> 200` scenario was exercised on the VM.
+
+Repeat checks 3-6 whenever the triage workflow or its instrumentation changes.
