@@ -138,6 +138,55 @@ class EntryReservationServiceRedisIntegrationTest {
         }
     }
 
+    @Test
+    void luaReservationKeepsCounterAndParticipantsConsistentForOneThousandRequests() throws Exception {
+        int limit = 800;
+        int requestCount = 1_000;
+        int workerCount = 64;
+        CampaignActivityMeta meta = activeMeta(limit);
+        CountDownLatch ready = new CountDownLatch(workerCount);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(workerCount);
+
+        try {
+            List<Callable<ReservationStatus>> tasks = java.util.stream.IntStream.range(0, requestCount)
+                    .mapToObj(index -> (Callable<ReservationStatus>) () -> {
+                        ready.countDown();
+                        start.await();
+                        return reservationService.reserve(
+                                CAMPAIGN_ACTIVITY_ID,
+                                10_000L + index,
+                                meta,
+                                Instant.now()).status();
+                    })
+                    .toList();
+            List<java.util.concurrent.Future<ReservationStatus>> futures = tasks.stream()
+                    .map(executor::submit)
+                    .toList();
+
+            ready.await();
+            start.countDown();
+
+            List<ReservationStatus> results = futures.stream().map(future -> {
+                try {
+                    return future.get();
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            }).toList();
+
+            assertThat(results).filteredOn(status -> status == ReservationStatus.SUCCESS).hasSize(limit);
+            assertThat(results).filteredOn(status -> status == ReservationStatus.SOLD_OUT)
+                    .hasSize(requestCount - limit);
+            assertThat(redisTemplate.opsForValue().get(counterKey())).isEqualTo("800");
+            assertThat(redisTemplate.opsForSet().size(participantsKey())).isEqualTo(800L);
+            assertThat((long) (Long.parseLong(redisTemplate.opsForValue().get(counterKey()))
+                    - redisTemplate.opsForSet().size(participantsKey()))).isZero();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private CampaignActivityMeta activeMeta(int limitCount) {
         return new CampaignActivityMeta(
                 CAMPAIGN_ACTIVITY_ID,
