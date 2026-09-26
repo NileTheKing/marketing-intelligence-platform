@@ -23,7 +23,7 @@ services:
     image: grafana/alloy:v1.10.2
     container_name: axon-alloy
     user: "0"
-    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    command: run --storage.path=/var/lib/alloy/data --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
     depends_on:
       - loki
     networks:

@@ -5,10 +5,6 @@ logging {
   format = "logfmt"
 }
 
-storage {
-  path = "/var/lib/alloy/data"
-}
-
 discovery.docker "axon" {
   host = "unix:///var/run/docker.sock"
 }
