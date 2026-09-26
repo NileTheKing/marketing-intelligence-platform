@@ -138,3 +138,14 @@ def test_background_submission_starts_once_and_deduplicates_slack_retry():
         await asyncio.gather(*runtime.background_tasks, return_exceptions=True)
 
     asyncio.run(scenario())
+
+
+def test_metrics_endpoint_is_available_without_operational_trace_export():
+    runtime = FakeRuntime()
+    app = create_app(Settings(), runtime)
+
+    with TestClient(app) as client:
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "axon_triage_cases_total" in response.text

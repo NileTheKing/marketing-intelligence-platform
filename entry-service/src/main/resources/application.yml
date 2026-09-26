@@ -4,6 +4,8 @@ server:
     mbeanregistry:
       enabled: true # expose tomcat connector/thread MBeans as metrics for burst diagnosis
 spring:
+  application:
+    name: axon-entry
   threads:
     virtual:
       enabled: true
@@ -44,6 +46,8 @@ payment:
     secret: ${PAYMENT_TOKEN_SECRET:changeme}
 
 axon:
+  observability:
+    environment: ${AXON_OBSERVABILITY_ENV:local}
   core-service:
     base-url: ${AXON_CORE_SERVICE_BASE_URL:http://localhost:8080}
     connect-timeout: ${AXON_CORE_SERVICE_CONNECT_TIMEOUT:2s}

@@ -9,6 +9,31 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: axon-loki
+    command: -config.file=/etc/loki/config.yml
+    networks:
+      - axon-network
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.10.2
+    container_name: axon-alloy
+    user: "0"
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    depends_on:
+      - loki
+    networks:
+      - axon-network
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${HOST_NGINX_LOG_DIR:-/var/log/nginx}:/var/log/host-nginx:ro
+      - alloy_data:/var/lib/alloy/data
+
   grafana:
     image: grafana/grafana:latest
     container_name: axon-grafana
@@ -20,7 +45,15 @@ services:
       - axon-network
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
 
 networks:
   axon-network:
     driver: bridge
+
+volumes:
+  loki_data:
+  alloy_data:
+  grafana_data:

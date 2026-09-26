@@ -1,0 +1,98 @@
+// Docker labels provide low-cardinality stream identity. Request and business
+// identifiers stay in the JSON body and are parsed only when queried.
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+storage {
+  path = "/var/lib/alloy/data"
+}
+
+discovery.docker "axon" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "axon" {
+  targets = discovery.docker.axon.targets
+
+  // This VM also runs Opicnic. Keep Axon's Loki tenant boundary at discovery
+  // time instead of collecting every container that happens to share Docker.
+  rule {
+    action        = "keep"
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "axon"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    target_label = "environment"
+    replacement  = "production"
+  }
+}
+
+loki.source.docker "axon" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.axon.output
+  forward_to = [loki.process.axon.receiver]
+}
+
+loki.source.file "host_nginx" {
+  targets = [
+    {
+      __path__    = "/var/log/host-nginx/axon_observability.json.log",
+      service     = "host-nginx",
+      environment = "production",
+    },
+    {
+      __path__    = "/var/log/host-nginx/error.log",
+      service     = "host-nginx",
+      environment = "production",
+    },
+  ]
+  forward_to = [loki.process.host_nginx.receiver]
+}
+
+loki.process "axon" {
+  // Java, Python, and container nginx logs are JSON. Non-JSON dependency logs
+  // remain searchable as raw messages without becoming high-cardinality labels.
+  stage.json {
+    expressions = {
+      level = "level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "level",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.process "host_nginx" {
+  stage.json {
+    expressions = {
+      level = "level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "level",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

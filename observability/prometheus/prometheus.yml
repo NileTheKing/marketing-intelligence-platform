@@ -16,6 +16,11 @@ scrape_configs:
     static_configs:
       - targets: ['entry-service:8081']
 
+  - job_name: 'axon-ai-triage'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['ai-triage-service:8000']
+
   # K2P 앱 메트릭 수집 (나중에 K2P LoadBalancer IP로 수정 필요)
   # - job_name: 'k2p-apps'
   #   metrics_path: '/actuator/prometheus'

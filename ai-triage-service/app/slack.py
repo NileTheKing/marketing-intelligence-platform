@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
+from .observability import TRIAGE_SLACK_OPERATIONS, triage_span
 from .schemas import AnalysisOutput, ClaimedCase, SlackInteraction
 
 
@@ -95,16 +96,23 @@ class SlackNotifier:
             payload["ts"] = case.slackMessageTs
         else:
             endpoint = "https://slack.com/api/chat.postMessage"
-        response = await self.client.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {self.settings.slack_bot_token}"},
-            json=payload,
-        )
-        response.raise_for_status()
-        body = response.json()
-        if not body.get("ok"):
-            raise RuntimeError(f"Slack API request failed: {body.get('error', 'unknown_error')}")
-        return body.get("ts") or case.slackMessageTs
+        operation = "update" if update else "post"
+        try:
+            with triage_span(f"triage.slack.{operation}", triage_case_id=case.caseId):
+                response = await self.client.post(
+                    endpoint,
+                    headers={"Authorization": f"Bearer {self.settings.slack_bot_token}"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                body = response.json()
+                if not body.get("ok"):
+                    raise RuntimeError(f"Slack API request failed: {body.get('error', 'unknown_error')}")
+            TRIAGE_SLACK_OPERATIONS.labels(operation=operation, outcome="success").inc()
+            return body.get("ts") or case.slackMessageTs
+        except Exception:
+            TRIAGE_SLACK_OPERATIONS.labels(operation=operation, outcome="failure").inc()
+            raise
 
     async def open_reanalysis_modal(self, trigger_id: str, case_id: int, mode: str) -> None:
         if not self.settings.slack_bot_token:
@@ -121,33 +129,39 @@ class SlackNotifier:
                 "hint": "예: endpoint 200 응답 확인, rate limit 없음.",
             },
         }[mode]
-        response = await self.client.post(
-            "https://slack.com/api/views.open",
-            headers={"Authorization": f"Bearer {self.settings.slack_bot_token}"},
-            json={
-                "trigger_id": trigger_id,
-                "view": {
-                    "type": "modal",
-                    "callback_id": f"{mode}_modal",
-                    "private_metadata": str(case_id),
-                    "title": {"type": "plain_text", "text": modal["title"]},
-                    "submit": {"type": "plain_text", "text": "제출"},
-                    "close": {"type": "plain_text", "text": "취소"},
-                    "blocks": [{
-                        "type": "input",
-                        "block_id": "feedback_block",
-                        "label": {"type": "plain_text", "text": modal["label"]},
-                        "element": {
-                            "type": "plain_text_input", "action_id": "feedback",
-                            "placeholder": {"type": "plain_text", "text": modal["hint"]},
+        try:
+            with triage_span("triage.slack.open_modal", triage_case_id=case_id):
+                response = await self.client.post(
+                    "https://slack.com/api/views.open",
+                    headers={"Authorization": f"Bearer {self.settings.slack_bot_token}"},
+                    json={
+                        "trigger_id": trigger_id,
+                        "view": {
+                            "type": "modal",
+                            "callback_id": f"{mode}_modal",
+                            "private_metadata": str(case_id),
+                            "title": {"type": "plain_text", "text": modal["title"]},
+                            "submit": {"type": "plain_text", "text": "제출"},
+                            "close": {"type": "plain_text", "text": "취소"},
+                            "blocks": [{
+                                "type": "input",
+                                "block_id": "feedback_block",
+                                "label": {"type": "plain_text", "text": modal["label"]},
+                                "element": {
+                                    "type": "plain_text_input", "action_id": "feedback",
+                                    "placeholder": {"type": "plain_text", "text": modal["hint"]},
+                                },
+                            }],
                         },
-                    }],
-                },
-            },
-        )
-        response.raise_for_status()
-        if not response.json().get("ok", False):
-            raise RuntimeError("Slack modal could not be opened")
+                    },
+                )
+                response.raise_for_status()
+                if not response.json().get("ok", False):
+                    raise RuntimeError("Slack modal could not be opened")
+            TRIAGE_SLACK_OPERATIONS.labels(operation="open_modal", outcome="success").inc()
+        except Exception:
+            TRIAGE_SLACK_OPERATIONS.labels(operation="open_modal", outcome="failure").inc()
+            raise
 
 
 def verify_slack_signature(settings: Settings, timestamp: str | None, signature: str | None,

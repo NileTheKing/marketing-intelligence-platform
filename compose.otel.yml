@@ -11,16 +11,24 @@ services:
 
   core-service:
     environment:
+      AXON_OBSERVABILITY_ENV: ${AXON_OBSERVABILITY_ENV:-production}
       JAVA_TOOL_OPTIONS: >-
         ${CORE_JAVA_TOOL_OPTIONS:--Xms512m -Xmx2g}
-        ${OTEL_CORE_AGENT_OPTIONS:-}
+        ${OTEL_CORE_AGENT_OPTIONS:--javaagent:/otel-agent/opentelemetry-javaagent.jar -Dotel.service.name=axon-core -Dotel.traces.exporter=otlp -Dotel.exporter.otlp.endpoint=http://jaeger:4318 -Dotel.exporter.otlp.protocol=http/protobuf -Dotel.metrics.exporter=none -Dotel.logs.exporter=none -Dotel.traces.sampler=parentbased_traceidratio -Dotel.traces.sampler.arg=0.05}
     volumes:
       - ${OTEL_AGENT_DIR:-./otel-agent}:/otel-agent:ro
 
   entry-service:
     environment:
+      AXON_OBSERVABILITY_ENV: ${AXON_OBSERVABILITY_ENV:-production}
       JAVA_TOOL_OPTIONS: >-
         ${ENTRY_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1536m}
-        ${OTEL_ENTRY_AGENT_OPTIONS:-}
+        ${OTEL_ENTRY_AGENT_OPTIONS:--javaagent:/otel-agent/opentelemetry-javaagent.jar -Dotel.service.name=axon-entry -Dotel.traces.exporter=otlp -Dotel.exporter.otlp.endpoint=http://jaeger:4318 -Dotel.exporter.otlp.protocol=http/protobuf -Dotel.metrics.exporter=none -Dotel.logs.exporter=none -Dotel.traces.sampler=parentbased_traceidratio -Dotel.traces.sampler.arg=0.05}
     volumes:
       - ${OTEL_AGENT_DIR:-./otel-agent}:/otel-agent:ro
+
+  ai-triage-service:
+    environment:
+      AXON_OBSERVABILITY_ENV: ${AXON_OBSERVABILITY_ENV:-production}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.05}

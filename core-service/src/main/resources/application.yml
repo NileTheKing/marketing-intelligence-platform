@@ -1,5 +1,7 @@
 # application.yml
 spring:
+  application:
+    name: axon-core
   profiles:
     include: oauth, gemini
   datasource:
@@ -65,6 +67,8 @@ gemini:
     read-timeout: ${GEMINI_READ_TIMEOUT:10s}
 
 axon:
+  observability:
+    environment: ${AXON_OBSERVABILITY_ENV:local}
   entry-service-url: ${AXON_ENTRY_SERVICE_URL:${ENTRY_SERVICE_URL:http://localhost:8081}}
   triage:
     service-token: ${TRIAGE_SERVICE_TOKEN:}

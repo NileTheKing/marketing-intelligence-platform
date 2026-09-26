@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from .agent import TriageRuntime, create_checkpointer
 from .config import Settings, get_settings
 from .core_client import CoreClient
+from .observability import TRIAGE_CASES, bind_log_context, configure_observability, triage_span
 from .slack import extract_interaction, SlackNotifier, verify_slack_signature
 
 
@@ -72,7 +73,13 @@ class ServiceRuntime:
                 case = await self.core.claim()
                 if case is not None:
                     assert self.triage is not None
-                    await self.triage.process(case)
+                    with bind_log_context(triage_case_id=case.caseId, dispatch_id=case.dispatchId):
+                        TRIAGE_CASES.labels(outcome="claimed").inc()
+                        logger.info("triage case claimed", extra={"event": "triage_case_claimed"})
+                        with triage_span("triage.process", triage_case_id=case.caseId,
+                                         dispatch_id=case.dispatchId):
+                            await self.triage.process(case)
+                        TRIAGE_CASES.labels(outcome="awaiting_operator").inc()
             except Exception:
                 # A failed case is recorded by TriageRuntime; the worker must remain available for the next case.
                 logger.exception("Triage polling failed")
@@ -106,7 +113,7 @@ def create_app(settings: Settings | None = None, runtime: ServiceRuntime | None 
     service_runtime = runtime
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(application: FastAPI):
         nonlocal service_runtime
         owns_runtime = service_runtime is None
         if service_runtime is None:
@@ -115,6 +122,9 @@ def create_app(settings: Settings | None = None, runtime: ServiceRuntime | None 
         yield
         if owns_runtime:
             await service_runtime.close()
+        provider = application.state.otel_provider
+        if provider:
+            provider.shutdown()
 
     application = FastAPI(title="Axon AI Triage Service", lifespan=lifespan)
 
@@ -176,6 +186,7 @@ def create_app(settings: Settings | None = None, runtime: ServiceRuntime | None 
             return JSONResponse({"response_action": "clear"})
         raise HTTPException(status_code=400, detail="Unsupported Slack action")
 
+    application.state.otel_provider = configure_observability(application, service_settings)
     return application
 
 

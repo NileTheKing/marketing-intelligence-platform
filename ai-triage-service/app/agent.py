@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 from typing import Any, TypedDict
 
@@ -12,7 +13,21 @@ from openai import BadRequestError
 
 from .config import Settings
 from .core_client import CoreClient
+from .observability import (
+    TRIAGE_CASES,
+    TRIAGE_DECISIONS,
+    TRIAGE_LLM_CALLS,
+    TRIAGE_LLM_DURATION,
+    TRIAGE_TOOL_CALLS,
+    TRIAGE_TOOL_DURATION,
+    bind_log_context,
+    observe_duration,
+    triage_span,
+)
 from .schemas import AnalysisOutput, ClaimedCase
+
+
+logger = logging.getLogger(__name__)
 
 
 class GraphState(TypedDict, total=False):
@@ -29,14 +44,33 @@ def _json(value: Any) -> str:
 
 
 def build_read_only_tools(client: CoreClient) -> list[StructuredTool]:
+    async def observe_tool(name: str, operation):
+        try:
+            with triage_span(f"triage.tool.{name}"):
+                with observe_duration(TRIAGE_TOOL_DURATION, tool=name):
+                    result = await operation()
+            TRIAGE_TOOL_CALLS.labels(tool=name, outcome="success").inc()
+            logger.info("triage Core tool completed", extra={"event": "triage_core_tool_completed"})
+            return result
+        except Exception:
+            TRIAGE_TOOL_CALLS.labels(tool=name, outcome="failure").inc()
+            logger.exception("triage Core tool failed", extra={"event": "triage_core_tool_failed"})
+            raise
+
     async def get_dispatch_context(dispatch_id: int) -> dict[str, Any]:
-        return await client.get_dispatch_context(dispatch_id)
+        return await observe_tool("get_dispatch_context", lambda: client.get_dispatch_context(dispatch_id))
 
     async def get_action_failure_history(action_id: int, days: int = 30) -> dict[str, Any]:
-        return await client.get_action_failure_history(action_id, min(days, 30))
+        return await observe_tool(
+            "get_action_failure_history",
+            lambda: client.get_action_failure_history(action_id, min(days, 30)),
+        )
 
     async def get_execution_dispatch_history(execution_id: int) -> list[dict[str, Any]]:
-        return await client.get_execution_dispatch_history(execution_id)
+        return await observe_tool(
+            "get_execution_dispatch_history",
+            lambda: client.get_execution_dispatch_history(execution_id),
+        )
 
     return [
         StructuredTool.from_function(
@@ -72,9 +106,17 @@ class TriageRuntime:
 
         async def load_context(state: GraphState) -> GraphState:
             case = ClaimedCase.model_validate(state["case"])
-            context = await self.core.get_dispatch_context(case.dispatchId)
-            history = await self.core.get_action_failure_history(context["actionId"], 30)
-            dispatch_history = await self.core.get_execution_dispatch_history(case.executionId)
+            with triage_span("triage.graph.load_context", triage_case_id=case.caseId,
+                             dispatch_id=case.dispatchId):
+                context = await tool_map["get_dispatch_context"].ainvoke(
+                    {"dispatch_id": case.dispatchId}
+                )
+                history = await tool_map["get_action_failure_history"].ainvoke(
+                    {"action_id": context["actionId"], "days": 30}
+                )
+                dispatch_history = await tool_map["get_execution_dispatch_history"].ainvoke(
+                    {"execution_id": case.executionId}
+                )
             facts: dict[str, Any] = {
                 "dispatchContext": context,
                 "actionFailureHistory": history,
@@ -144,7 +186,7 @@ class TriageRuntime:
                       f"Operator feedback for re-analysis: {state.get('feedback') or 'none'}")
             messages: list[Any] = [SystemMessage(content=system), HumanMessage(content=prompt)]
             for _ in range(3):
-                response = await tool_model.ainvoke(messages)
+                response = await self._invoke_llm(tool_model, messages, "tool_selection")
                 messages.append(response)
                 calls = getattr(response, "tool_calls", None) or []
                 if not calls:
@@ -236,14 +278,57 @@ class TriageRuntime:
     @staticmethod
     async def _invoke_structured_output(model: Any, messages: list[Any]) -> AnalysisOutput:
         for attempt in range(3):
+            started = asyncio.get_running_loop().time()
             try:
-                return AnalysisOutput.model_validate(await model.ainvoke(messages))
+                with triage_span("triage.llm.structured_output"):
+                    output = AnalysisOutput.model_validate(await model.ainvoke(messages))
+                TRIAGE_LLM_DURATION.labels(outcome="success").observe(
+                    asyncio.get_running_loop().time() - started
+                )
+                TRIAGE_LLM_CALLS.labels(outcome="success").inc()
+                logger.info("triage structured LLM response completed",
+                            extra={"event": "triage_llm_completed"})
+                return output
             except BadRequestError as error:
+                TRIAGE_LLM_DURATION.labels(outcome="failure").observe(
+                    asyncio.get_running_loop().time() - started
+                )
+                TRIAGE_LLM_CALLS.labels(outcome="failure").inc()
+                logger.warning("triage structured LLM response rejected",
+                               extra={"event": "triage_llm_rejected"})
                 # A provider can reject a transiently invalid constrained response before it is returned.
                 if "json" not in str(error).lower() or attempt == 2:
                     raise
                 await asyncio.sleep(attempt + 1)
+            except Exception:
+                TRIAGE_LLM_DURATION.labels(outcome="failure").observe(
+                    asyncio.get_running_loop().time() - started
+                )
+                TRIAGE_LLM_CALLS.labels(outcome="failure").inc()
+                logger.exception("triage structured LLM response failed",
+                                 extra={"event": "triage_llm_failed"})
+                raise
         raise AssertionError("unreachable")
+
+    @staticmethod
+    async def _invoke_llm(model: Any, messages: list[Any], operation: str) -> Any:
+        started = asyncio.get_running_loop().time()
+        try:
+            with triage_span(f"triage.llm.{operation}"):
+                response = await model.ainvoke(messages)
+            TRIAGE_LLM_DURATION.labels(outcome="success").observe(
+                asyncio.get_running_loop().time() - started
+            )
+            TRIAGE_LLM_CALLS.labels(outcome="success").inc()
+            logger.info("triage LLM tool-selection completed", extra={"event": "triage_llm_completed"})
+            return response
+        except Exception:
+            TRIAGE_LLM_DURATION.labels(outcome="failure").observe(
+                asyncio.get_running_loop().time() - started
+            )
+            TRIAGE_LLM_CALLS.labels(outcome="failure").inc()
+            logger.exception("triage LLM tool-selection failed", extra={"event": "triage_llm_failed"})
+            raise
 
     @staticmethod
     def _sanitize_operator_output(output: AnalysisOutput) -> AnalysisOutput:
@@ -305,6 +390,7 @@ class TriageRuntime:
                 # If Core already accepted the analysis but Slack failed, keep the
                 # awaiting-approval result and do not overwrite it as a failure.
                 pass
+            logger.exception("triage analysis failed", extra={"event": "triage_analysis_failed"})
             raise
 
     async def _ensure_checkpointer_connection(self) -> None:
@@ -318,34 +404,38 @@ class TriageRuntime:
             "case": case.model_dump(by_alias=True),
             "reanalysis": False,
         }
-        await self._invoke(state, case)
+        with bind_log_context(triage_case_id=case.caseId, dispatch_id=case.dispatchId):
+            await self._invoke(state, case)
 
     async def reanalyze(self, case_id: int, feedback: str) -> None:
         case = await self.core.claim(case_id)
         if case is None:
             raise RuntimeError("Triage case is not available for re-analysis")
-        config = {"configurable": {"thread_id": str(case.caseId)}}
-        try:
-            await self._ensure_checkpointer_connection()
-            checkpoint = await self.graph.aget_state(config)
-        except Exception as error:
-            await self.core.fail_analysis(case.caseId, case.analysisClaimToken, str(error))
-            raise
-        if self._requires_fresh_run(checkpoint):
-            # A graph interrupted for approval can resume. A graph that failed mid-run
-            # retains its old claim token, so rebuild it from Core's newly claimed state.
-            await self.checkpointer.adelete_thread(str(case.caseId))
-            await self._invoke({
+        with bind_log_context(triage_case_id=case.caseId, dispatch_id=case.dispatchId):
+            config = {"configurable": {"thread_id": str(case.caseId)}}
+            TRIAGE_CASES.labels(outcome="reanalyze_claimed").inc()
+            logger.info("triage case re-analysis claimed", extra={"event": "triage_reanalysis_claimed"})
+            try:
+                await self._ensure_checkpointer_connection()
+                checkpoint = await self.graph.aget_state(config)
+            except Exception as error:
+                await self.core.fail_analysis(case.caseId, case.analysisClaimToken, str(error))
+                raise
+            if self._requires_fresh_run(checkpoint):
+                # A graph interrupted for approval can resume. A graph that failed mid-run
+                # retains its old claim token, so rebuild it from Core's newly claimed state.
+                await self.checkpointer.adelete_thread(str(case.caseId))
+                await self._invoke({
+                    "case": case.model_dump(by_alias=True),
+                    "feedback": feedback,
+                    "reanalysis": True,
+                }, case)
+                return
+            await self._invoke(Command(resume={
+                "action": "reanalyze",
                 "case": case.model_dump(by_alias=True),
                 "feedback": feedback,
-                "reanalysis": True,
-            }, case)
-            return
-        await self._invoke(Command(resume={
-            "action": "reanalyze",
-            "case": case.model_dump(by_alias=True),
-            "feedback": feedback,
-        }), case)
+            }), case)
 
     @classmethod
     def _requires_fresh_run(cls, checkpoint: Any) -> bool:
@@ -353,7 +443,11 @@ class TriageRuntime:
 
     async def decide(self, case_id: int, decision: str, user_id: str,
                      reason: str | None = None) -> dict[str, Any]:
-        result = await self.core.decide(case_id, decision, user_id, reason)
+        with bind_log_context(triage_case_id=case_id):
+            result = await self.core.decide(case_id, decision, user_id, reason)
+        TRIAGE_CASES.labels(outcome=decision.lower()).inc()
+        TRIAGE_DECISIONS.labels(decision=decision.lower()).inc()
+        logger.info("triage case decision accepted", extra={"event": "triage_decision_accepted"})
         config = {"configurable": {"thread_id": str(case_id)}}
         checkpoint = await self.graph.aget_state(config)
         if checkpoint.next == ("await_operator",):
