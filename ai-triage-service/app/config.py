@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     slack_signing_secret: str = Field(default="", repr=False)
     slack_allowed_user_ids: str = ""
     otel_exporter_otlp_endpoint: str = ""
-    otel_traces_sampler_arg: float = Field(default=0.05, ge=0, le=1)
+    otel_traces_sampler_arg: float = Field(default=1.0, ge=0, le=1)
     otel_service_name: str = "axon-ai-triage"
     axon_observability_env: str = "local"
 

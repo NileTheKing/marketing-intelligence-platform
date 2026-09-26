@@ -20,8 +20,10 @@ Entry/Core/AI sampled traces                  -> Jaeger -> Grafana
 - `Elasticsearch` remains the behavior-analytics store. It is not an
   application-log backend.
 - Prometheus and error logs are always collected.
-- OpenTelemetry uses 5% head sampling for normal runtime trace topology.
-  It is not evidence that every failed request has a saved trace.
+- Entry/Core use 5% head sampling for normal high-volume request topology.
+  It is not evidence that every Entry/Core request has a saved trace.
+- AI triage uses 100% sampling. It is a low-volume, operator-facing workflow
+  whose graph, tool, LLM, and Slack decisions must be reconstructable.
 - Official load-test before/after measurements keep OTel disabled so agent
   overhead does not affect headline figures.
 - Tail sampling through an OTel Collector, always-on error traces, alerting,
@@ -84,9 +86,9 @@ approval -> retry -> 200`. The original and first approved retry remained
 `FAILED_FINAL`; the next approved Dispatch succeeded, proving that retry
 history is retained rather than overwritten. Loki recorded the AI case and
 Dispatch IDs, Prometheus recorded the re-analysis and approval counters, and a
-temporarily 100% sampled re-analysis trace contained graph, Core-tool, Groq,
-and Slack-update spans in Jaeger. The temporary endpoint and sampling override
-were removed after the check; normal runtime sampling remains 5%.
+100% sampled re-analysis trace contained graph, Core-tool, Groq, and
+Slack-update spans in Jaeger. The temporary endpoint was removed after the
+check; normal runtime sampling remains 5% for Entry/Core and 100% for AI.
 
 Use the normal runtime overlay only after the Java agent JAR is present:
 
