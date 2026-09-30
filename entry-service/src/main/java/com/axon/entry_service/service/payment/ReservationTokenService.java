@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -36,6 +37,7 @@ public class ReservationTokenService {
 
     private static final long TOKEN_TTL_MINUTES = 5;
     private static final long APPROVALTOKEN_TTL_MINUTES = 30;
+    private static final RedisSerializer<String> STRING_SERIALIZER = RedisSerializer.string();
     // Three 5-second broker waits plus 1- and 2-second backoffs need at most 18 seconds.
     private static final long CONFIRMATION_LEASE_SECONDS = 30;
     private static final String ACQUIRE_CONFIRMATION_LEASE_LUA = """
@@ -101,6 +103,8 @@ public class ReservationTokenService {
     public ConfirmationLeaseResult tryAcquireConfirmationLease(String reservationToken) {
         Long result = redisTemplate.execute(
                 acquireConfirmationLeaseScript,
+                STRING_SERIALIZER,
+                null,
                 List.of(reservationRedisKey(reservationToken), confirmationLeaseRedisKey(reservationToken)),
                 String.valueOf(CONFIRMATION_LEASE_SECONDS));
         if (Long.valueOf(2L).equals(result)) {
