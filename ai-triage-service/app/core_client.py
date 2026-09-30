@@ -3,7 +3,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
-from .schemas import AnalysisOutput, ClaimedCase
+from .schemas import AnalysisOutput, CampaignRunReviewOutput, ClaimedCampaignRun, ClaimedCase
 
 
 class CoreClient:
@@ -87,6 +87,85 @@ class CoreClient:
             f"{self.settings.core_internal_base_url}/internal/v1/marketing-triage/cases/{case_id}/analysis-failed",
             headers=self._headers(),
             json={"claimToken": claim_token, "reason": reason[:1000]},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def claim_campaign_run(self, run_id: int | None = None) -> ClaimedCampaignRun | None:
+        params = {"runId": str(run_id)} if run_id is not None else None
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/claim",
+            params=params,
+            headers=self._headers(),
+        )
+        if response.status_code == 204:
+            return None
+        response.raise_for_status()
+        return ClaimedCampaignRun.model_validate(response.json())
+
+    async def get_campaign_run_context(self, run_id: int) -> dict[str, Any]:
+        response = await self.client.get(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/context",
+            headers=self._headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def save_campaign_run_analysis(self, run_id: int, claim_token: str,
+                                         output: CampaignRunReviewOutput) -> dict[str, Any]:
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/analysis",
+            headers=self._headers(),
+            json={
+                "claimToken": claim_token,
+                "recommendation": output.recommendation,
+                "summary": output.summary,
+            },
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def auto_dispatch_campaign_run(self, run_id: int) -> dict[str, Any]:
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/auto-dispatch",
+            headers=self._headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def fail_campaign_run_analysis(self, run_id: int, claim_token: str, reason: str) -> dict[str, Any]:
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/analysis-failed",
+            headers=self._headers(),
+            json={"claimToken": claim_token, "reason": reason[:1000]},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def record_campaign_run_slack_message(self, run_id: int, message_ts: str) -> dict[str, Any]:
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/slack-message",
+            headers=self._headers(),
+            json={"messageTs": message_ts},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def add_campaign_run_feedback(self, run_id: int, feedback: str) -> dict[str, Any]:
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/feedback",
+            headers=self._headers(),
+            json={"feedback": feedback[:1000]},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def decide_campaign_run(self, run_id: int, decision: str, user_id: str,
+                                  reason: str | None = None) -> dict[str, Any]:
+        response = await self.client.post(
+            f"{self.settings.core_internal_base_url}/internal/v1/campaign-run-reviews/runs/{run_id}/decision",
+            headers=self._headers(),
+            json={"decision": decision, "decidedBy": user_id, "reason": reason},
         )
         response.raise_for_status()
         return response.json()

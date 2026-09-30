@@ -3,9 +3,9 @@ import asyncio
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage
 
-from app.agent import TriageRuntime, build_read_only_tools
+from app.agent import CampaignRunReviewRuntime, TriageRuntime, build_read_only_tools
 from app.config import Settings
-from app.schemas import AnalysisOutput, ClaimedCase
+from app.schemas import AnalysisOutput, ClaimedCampaignRun, ClaimedCase
 
 
 class FakeCore:
@@ -83,6 +83,206 @@ def test_invalid_target_uses_deterministic_route_without_llm():
     assert core.saved.recommendation == "NO_RETRY"
     assert core.saved.confidence == 1.0
     assert notifier.calls == [(1, "claim", False)]
+
+
+def test_campaign_run_memo_target_mismatch_is_flagged_and_can_be_reanalyzed(monkeypatch):
+    class FakeRunCore:
+        def __init__(self):
+            self.feedback = None
+            self.saved = []
+
+        async def get_campaign_run_context(self, run_id):
+            return {
+                "runId": run_id,
+                "facts": {
+                    "targetCount": 80,
+                    "issuanceLimit": 100,
+                    "campaignPurpose": "GENERAL_PROMOTION",
+                    "operatorMemo": "VIP 고객 감사 쿠폰",
+                    "targetSegment": "LOYAL",
+                    "codeFlags": [],
+                },
+                "operatorFeedback": self.feedback,
+                "recentRuns": [],
+            }
+
+        async def save_campaign_run_analysis(self, run_id, claim_token, output):
+            self.saved.append((run_id, claim_token, output))
+            return {"runId": run_id, "status": "AWAITING_APPROVAL", "recommendation": output.recommendation}
+
+        async def auto_dispatch_campaign_run(self, run_id):
+            raise AssertionError("FLAG run must not be automatically dispatched")
+
+        async def record_campaign_run_slack_message(self, run_id, message_ts):
+            return {"runId": run_id, "slackMessageTs": message_ts}
+
+        async def add_campaign_run_feedback(self, run_id, feedback):
+            self.feedback = feedback
+            return {"runId": run_id}
+
+        async def claim_campaign_run(self, run_id):
+            return claimed_campaign_run("claim-2", "1700000000.000300")
+
+        async def fail_campaign_run_analysis(self, run_id, claim_token, reason):
+            raise AssertionError("campaign run analysis should not fail")
+
+        async def decide_campaign_run(self, run_id, decision, user_id, reason=None):
+            return {"runId": run_id, "decision": decision}
+
+    class FakeRunNotifier:
+        def __init__(self):
+            self.calls = []
+
+        async def send_campaign_run(self, run, output, context, update=False):
+            self.calls.append((run.runId, run.analysisClaimToken, update))
+            return "1700000000.000300"
+
+    class FakeStructuredModel:
+        def with_structured_output(self, schema, method, strict):
+            return self
+
+        async def ainvoke(self, messages):
+            return {
+                "recommendation": "FLAG",
+                "summary": "운영 메모와 대상 조건을 추가로 확인해야 합니다.",
+                "operator_next_step": "설정한 대상과 운영 의도를 확인하세요.",
+            }
+
+    monkeypatch.setattr("app.agent.ChatOpenAI", lambda **kwargs: FakeStructuredModel())
+
+    async def scenario():
+        core = FakeRunCore()
+        notifier = FakeRunNotifier()
+        runtime = CampaignRunReviewRuntime(Settings(groq_api_key="test-key"), core, notifier, MemorySaver())
+        config = {"configurable": {"thread_id": "campaign-run:3"}}
+
+        await runtime.process(claimed_campaign_run())
+        assert (await runtime.graph.aget_state(config)).next == ("await_operator",)
+
+        await runtime.reanalyze(3, "대상 조건 변경 여부를 다시 확인해 주세요.")
+
+        assert (await runtime.graph.aget_state(config)).next == ("await_operator",)
+        assert core.feedback == "대상 조건 변경 여부를 다시 확인해 주세요."
+        assert notifier.calls == [(3, "claim-1", False), (3, "claim-2", True)]
+
+    asyncio.run(scenario())
+
+
+def test_campaign_run_without_flags_automatically_dispatches_after_core_recheck(monkeypatch):
+    class FakeRunCore:
+        def __init__(self):
+            self.auto_dispatches = []
+
+        async def get_campaign_run_context(self, run_id):
+            return {
+                "runId": run_id,
+                "facts": {"targetCount": 80, "issuanceLimit": 100, "codeFlags": []},
+                "operatorFeedback": None,
+                "recentRuns": [],
+            }
+
+        async def save_campaign_run_analysis(self, run_id, claim_token, output):
+            return {"runId": run_id, "status": "AWAITING_APPROVAL", "recommendation": output.recommendation}
+
+        async def auto_dispatch_campaign_run(self, run_id):
+            self.auto_dispatches.append(run_id)
+            return {"runId": run_id, "status": "DISPATCHED"}
+
+        async def fail_campaign_run_analysis(self, run_id, claim_token, reason):
+            raise AssertionError("campaign run analysis should not fail")
+
+    class FakeRunNotifier:
+        async def send_campaign_run(self, *args, **kwargs):
+            raise AssertionError("NO_FLAG run must not notify Slack")
+
+    class FakeStructuredModel:
+        def with_structured_output(self, schema, method, strict):
+            return self
+
+        async def ainvoke(self, messages):
+            return {
+                "recommendation": "NO_FLAG",
+                "summary": "설정과 운영 메모 사이의 어긋남이 확인되지 않았습니다.",
+                "operator_next_step": "자동 발송 결과를 확인하세요.",
+            }
+
+    monkeypatch.setattr("app.agent.ChatOpenAI", lambda **kwargs: FakeStructuredModel())
+
+    async def scenario():
+        core = FakeRunCore()
+        runtime = CampaignRunReviewRuntime(Settings(groq_api_key="test-key"), core, FakeRunNotifier(), MemorySaver())
+        config = {"configurable": {"thread_id": "campaign-run:3"}}
+
+        await runtime.process(claimed_campaign_run())
+
+        assert core.auto_dispatches == [3]
+        assert (await runtime.graph.aget_state(config)).next == ()
+
+    asyncio.run(scenario())
+
+
+def test_campaign_run_llm_failure_falls_back_to_operator_review(monkeypatch):
+    class FakeRunCore:
+        def __init__(self):
+            self.saved = []
+
+        async def get_campaign_run_context(self, run_id):
+            return {
+                "runId": run_id,
+                "facts": {"targetCount": 80, "issuanceLimit": 100, "codeFlags": []},
+                "operatorFeedback": None,
+                "recentRuns": [],
+            }
+
+        async def save_campaign_run_analysis(self, run_id, claim_token, output):
+            self.saved.append(output)
+            return {"runId": run_id, "status": "AWAITING_APPROVAL", "recommendation": output.recommendation}
+
+        async def record_campaign_run_slack_message(self, run_id, message_ts):
+            return {"runId": run_id}
+
+        async def auto_dispatch_campaign_run(self, run_id):
+            raise AssertionError("LLM failure must not automatically dispatch")
+
+        async def fail_campaign_run_analysis(self, run_id, claim_token, reason):
+            raise AssertionError("safe fallback should save a FLAG result")
+
+    class FakeRunNotifier:
+        def __init__(self):
+            self.sent = False
+
+        async def send_campaign_run(self, run, output, context, update=False):
+            self.sent = True
+            assert output.recommendation == "FLAG"
+            return "1700000000.000300"
+
+    class FailingStructuredModel:
+        def with_structured_output(self, schema, method, strict):
+            return self
+
+        async def ainvoke(self, messages):
+            raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr("app.agent.ChatOpenAI", lambda **kwargs: FailingStructuredModel())
+
+    async def scenario():
+        core = FakeRunCore()
+        notifier = FakeRunNotifier()
+        runtime = CampaignRunReviewRuntime(Settings(groq_api_key="test-key"), core, notifier, MemorySaver())
+
+        await runtime.process(claimed_campaign_run())
+
+        assert core.saved[0].recommendation == "FLAG"
+        assert notifier.sent
+
+    asyncio.run(scenario())
+
+
+def claimed_campaign_run(token="claim-1", slack_message_ts=None):
+    return ClaimedCampaignRun(
+        runId=3, campaignActivityId=2, status="ANALYZING", targetCount=80,
+        analysisClaimToken=token, slackMessageTs=slack_message_ts,
+    )
 
 
 def test_reanalysis_resumes_the_existing_thread_checkpoint_and_updates_message():

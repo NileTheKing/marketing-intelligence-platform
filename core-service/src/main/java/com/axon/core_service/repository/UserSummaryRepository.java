@@ -52,4 +52,51 @@ public interface UserSummaryRepository extends JpaRepository<UserSummary, Long> 
     List<Long> findUserIdsByUserIdInAndRfmSegment(
             @Param("userIds") List<Long> userIds,
             @Param("rfmSegment") RfmSegment rfmSegment);
+
+    @Query("""
+            SELECT COUNT(summary)
+            FROM UserSummary summary
+            WHERE summary.rfmSegment = :rfmSegment
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM UserCoupon userCoupon
+                  WHERE userCoupon.userId = summary.userId
+                    AND userCoupon.coupon.id = :couponId
+              )
+            """)
+    long countCouponCampaignTargets(@Param("rfmSegment") RfmSegment rfmSegment,
+                                    @Param("couponId") Long couponId);
+
+    @Query("""
+            SELECT summary.userId
+            FROM UserSummary summary
+            WHERE summary.rfmSegment = :rfmSegment
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM UserCoupon userCoupon
+                  WHERE userCoupon.userId = summary.userId
+                    AND userCoupon.coupon.id = :couponId
+              )
+            ORDER BY summary.userId ASC
+            """)
+    List<Long> findCouponCampaignTargetUserIds(@Param("rfmSegment") RfmSegment rfmSegment,
+                                                @Param("couponId") Long couponId,
+                                                Pageable pageable);
+
+    @Query("""
+            SELECT summary.userId
+            FROM UserSummary summary
+            WHERE summary.rfmSegment = :rfmSegment
+              AND summary.userId IN :userIds
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM UserCoupon userCoupon
+                  WHERE userCoupon.userId = summary.userId
+                    AND userCoupon.coupon.id = :couponId
+              )
+            ORDER BY summary.userId ASC
+            """)
+    List<Long> findCouponCampaignTargetUserIdsByUserIdIn(@Param("rfmSegment") RfmSegment rfmSegment,
+                                                          @Param("couponId") Long couponId,
+                                                          @Param("userIds") List<Long> userIds);
 }

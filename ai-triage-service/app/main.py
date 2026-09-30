@@ -9,7 +9,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .agent import TriageRuntime, create_checkpointer
+from .agent import CampaignRunReviewRuntime, TriageRuntime, create_checkpointer
 from .config import Settings, get_settings
 from .core_client import CoreClient
 from .observability import TRIAGE_CASES, bind_log_context, configure_observability, triage_span
@@ -27,6 +27,7 @@ class ServiceRuntime:
         self.checkpointer = None
         self.checkpointer_resource = None
         self.triage: TriageRuntime | None = None
+        self.campaign_run_review: CampaignRunReviewRuntime | None = None
         self.stop = asyncio.Event()
         self.worker: asyncio.Task | None = None
         self.background_tasks: set[asyncio.Task] = set()
@@ -37,6 +38,9 @@ class ServiceRuntime:
             self.settings.langgraph_checkpoint_mysql_url
         )
         self.triage = TriageRuntime(self.settings, self.core, self.notifier, self.checkpointer)
+        self.campaign_run_review = CampaignRunReviewRuntime(
+            self.settings, self.core, self.notifier, self.checkpointer
+        )
         self.worker = asyncio.create_task(self.poll())
 
     def submit_interaction(self, dedupe_key: str | None, work: Any) -> bool:
@@ -83,6 +87,15 @@ class ServiceRuntime:
             except Exception:
                 # A failed case is recorded by TriageRuntime; the worker must remain available for the next case.
                 logger.exception("Triage polling failed")
+            try:
+                run = await self.core.claim_campaign_run()
+                if run is not None:
+                    assert self.campaign_run_review is not None
+                    with bind_log_context(campaign_run_id=run.runId):
+                        logger.info("campaign run review claimed", extra={"event": "campaign_run_review_claimed"})
+                        await self.campaign_run_review.process(run)
+            except Exception:
+                logger.exception("Campaign run review polling failed")
             try:
                 await asyncio.wait_for(self.stop.wait(), timeout=self.settings.triage_poll_seconds)
             except asyncio.TimeoutError:
@@ -145,6 +158,49 @@ def create_app(settings: Settings | None = None, runtime: ServiceRuntime | None 
             raise HTTPException(status_code=400, detail=str(error)) from error
         if interaction.user_id not in service_settings.allowed_user_ids:
             raise HTTPException(status_code=403, detail="Slack user is not allowlisted")
+
+        if interaction.subject_type == "run":
+            assert service_runtime.campaign_run_review is not None
+            if interaction.action_id == "run_approve":
+                service_runtime.submit_interaction(
+                    interaction.dedupe_key,
+                    service_runtime.campaign_run_review.decide(
+                        interaction.case_id, "APPROVE", interaction.user_id
+                    ),
+                )
+                return JSONResponse({"text": "캠페인 발송 승인이 Core에 전달되었습니다."})
+            if interaction.action_id == "run_close":
+                service_runtime.submit_interaction(
+                    interaction.dedupe_key,
+                    service_runtime.campaign_run_review.decide(
+                        interaction.case_id, "CLOSE", interaction.user_id
+                    ),
+                )
+                return JSONResponse({"text": "캠페인 발송을 종료했습니다."})
+            if interaction.action_id in {"run_request_investigation", "run_record_confirmation"}:
+                if not interaction.trigger_id:
+                    raise HTTPException(status_code=400, detail="Missing Slack trigger id")
+                mode = interaction.action_id.removeprefix("run_")
+                service_runtime.submit_interaction(
+                    interaction.dedupe_key,
+                    service_runtime.notifier.open_reanalysis_modal(
+                        interaction.trigger_id, interaction.case_id, mode, subject_type="run"
+                    ),
+                )
+                return JSONResponse({"response_type": "ephemeral", "text": "입력창을 열었습니다."})
+            if interaction.action_id in {"run_request_investigation_modal", "run_record_confirmation_modal"}:
+                if not interaction.feedback:
+                    return JSONResponse({"text": "내용을 입력한 뒤 다시 제출해 주세요."}, status_code=400)
+                prefix = ("관리자 추가 확인 요청" if interaction.action_id == "run_request_investigation_modal"
+                          else "관리자 확인 결과")
+                service_runtime.submit_interaction(
+                    interaction.dedupe_key,
+                    service_runtime.campaign_run_review.reanalyze(
+                        interaction.case_id, f"{prefix}: {interaction.feedback}"
+                    ),
+                )
+                return JSONResponse({"response_action": "clear"})
+            raise HTTPException(status_code=400, detail="Unsupported campaign run Slack action")
 
         if interaction.action_id == "approve":
             service_runtime.submit_interaction(

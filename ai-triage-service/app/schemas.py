@@ -33,6 +33,26 @@ class ClaimedCase(BaseModel):
     factSnapshot: dict[str, Any] | None = None
 
 
+class CampaignRunReviewOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recommendation: Literal["NO_FLAG", "FLAG"]
+    summary: str = Field(min_length=1, max_length=2000)
+    operator_next_step: str = Field(min_length=1, max_length=1000)
+
+
+class ClaimedCampaignRun(BaseModel):
+    runId: int
+    campaignActivityId: int
+    status: str
+    targetCount: int
+    blockedReason: str | None = None
+    recommendation: str | None = None
+    analysisSummary: str | None = None
+    analysisClaimToken: str
+    slackMessageTs: str | None = None
+
+
 class SlackInteraction(BaseModel):
     user_id: str
     action_id: str
@@ -40,3 +60,4 @@ class SlackInteraction(BaseModel):
     feedback: str | None = None
     trigger_id: str | None = None
     dedupe_key: str | None = None
+    subject_type: Literal["case", "run"] = "case"

@@ -24,7 +24,7 @@ from .observability import (
     observe_duration,
     triage_span,
 )
-from .schemas import AnalysisOutput, ClaimedCase
+from .schemas import AnalysisOutput, CampaignRunReviewOutput, ClaimedCampaignRun, ClaimedCase
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,15 @@ class GraphState(TypedDict, total=False):
     facts: dict[str, Any]
     output: dict[str, Any]
     saved: dict[str, Any]
+    reanalysis: bool
+
+
+class CampaignRunGraphState(TypedDict, total=False):
+    run: dict[str, Any]
+    facts: dict[str, Any]
+    output: dict[str, Any]
+    saved: dict[str, Any]
+    autoDispatched: bool
     reanalysis: bool
 
 
@@ -453,6 +462,208 @@ class TriageRuntime:
         if checkpoint.next == ("await_operator",):
             await self.graph.ainvoke(Command(resume={"action": decision.lower()}), config)
         return result
+
+
+class CampaignRunReviewRuntime:
+    """Reviews a campaign-wide send before it enters the existing Dispatch pipeline."""
+
+    def __init__(self, settings: Settings, core: CoreClient, notifier: Any, checkpointer: Any):
+        self.settings = settings
+        self.core = core
+        self.notifier = notifier
+        self.checkpointer = checkpointer
+        self.graph = self._build_graph(checkpointer)
+
+    def _build_graph(self, checkpointer: Any):
+        workflow = StateGraph(CampaignRunGraphState)
+
+        async def load_context(state: CampaignRunGraphState) -> CampaignRunGraphState:
+            run = ClaimedCampaignRun.model_validate(state["run"])
+            with triage_span("campaign_run_review.load_context", campaign_run_id=run.runId):
+                context = await self.core.get_campaign_run_context(run.runId)
+            return {"facts": context}
+
+        async def analyze(state: CampaignRunGraphState) -> CampaignRunGraphState:
+            if not self.settings.groq_api_key:
+                raise RuntimeError("GROQ_API_KEY is not configured")
+            model = ChatOpenAI(
+                api_key=self.settings.groq_api_key,
+                base_url=self.settings.groq_base_url,
+                model=self.settings.groq_model,
+                temperature=0,
+                timeout=30,
+                max_tokens=600,
+                max_retries=3,
+                reasoning_effort="low",
+            ).with_structured_output(CampaignRunReviewOutput, method="json_schema", strict=True)
+            system = (
+                "You review a coupon campaign before any message is sent. Use only the supplied Core facts. "
+                "Core already blocks invalid coupon periods, recipient limits, and fixed-coupon budget overruns, "
+                "and may attach codeFlags that you cannot clear. "
+                "Only look for a mismatch between campaignPurpose or operatorMemo and the target segment, recipient "
+                "count, or coupon settings. Do not invent anomalies, recipient attributes, or historical trends. "
+                "Choose FLAG when a manager should review a concrete mismatch or when purpose or memo is missing. "
+                "Choose NO_FLAG only when the supplied facts do not show a mismatch. "
+                "Write concise Korean for a manager. Do not expose JSON field names, internal IDs, or enum names. "
+                "Return only JSON with recommendation NO_FLAG|FLAG, summary, and operator_next_step."
+            )
+            messages = [
+                SystemMessage(content=system),
+                HumanMessage(content=f"Campaign run facts: {_json(state['facts'])}"),
+            ]
+            started = asyncio.get_running_loop().time()
+            try:
+                with triage_span("campaign_run_review.llm"):
+                    output = CampaignRunReviewOutput.model_validate(await model.ainvoke(messages))
+                TRIAGE_LLM_DURATION.labels(outcome="success").observe(
+                    asyncio.get_running_loop().time() - started
+                )
+                TRIAGE_LLM_CALLS.labels(outcome="success").inc()
+                return {"output": output.model_dump()}
+            except Exception:
+                TRIAGE_LLM_DURATION.labels(outcome="failure").observe(
+                    asyncio.get_running_loop().time() - started
+                )
+                TRIAGE_LLM_CALLS.labels(outcome="failure").inc()
+                logger.exception("campaign run LLM analysis failed", extra={"event": "campaign_run_llm_failed"})
+                return {"output": self._safe_flag_output(
+                    "AI 분석을 완료하지 못해 자동 발송하지 않았습니다.",
+                    "설정과 대상 수를 확인한 뒤 발송 여부를 결정하세요.",
+                ).model_dump()}
+
+        async def save(state: CampaignRunGraphState) -> CampaignRunGraphState:
+            run = ClaimedCampaignRun.model_validate(state["run"])
+            output = CampaignRunReviewOutput.model_validate(state["output"])
+            saved = await self.core.save_campaign_run_analysis(
+                run.runId, run.analysisClaimToken, output
+            )
+            if saved.get("recommendation") == "FLAG" and output.recommendation != "FLAG":
+                return {
+                    "saved": saved,
+                    "output": self._safe_flag_output(
+                        "코드 기준에서 추가 확인이 필요한 설정이 발견되었습니다.",
+                        "대상 수, 운영 목적과 설정을 확인한 뒤 발송 여부를 결정하세요.",
+                    ).model_dump(),
+                }
+            return {"saved": saved}
+
+        async def auto_dispatch(state: CampaignRunGraphState) -> CampaignRunGraphState:
+            run = ClaimedCampaignRun.model_validate(state["run"])
+            result = await self.core.auto_dispatch_campaign_run(run.runId)
+            if result.get("status") == "DISPATCHED":
+                return {"autoDispatched": True}
+            return {
+                "autoDispatched": False,
+                "output": self._safe_flag_output(
+                    "발송 직전 설정 또는 대상 상태가 바뀌어 자동 발송하지 않았습니다.",
+                    "변경된 설정과 대상 수를 확인한 뒤 발송 여부를 결정하세요.",
+                ).model_dump(),
+            }
+
+        async def notify(state: CampaignRunGraphState) -> CampaignRunGraphState:
+            run = ClaimedCampaignRun.model_validate(state["run"])
+            output = CampaignRunReviewOutput.model_validate(state["output"])
+            message_ts = await self.notifier.send_campaign_run(
+                run, output, state["facts"], update=state.get("reanalysis", False)
+            )
+            if message_ts:
+                await self.core.record_campaign_run_slack_message(run.runId, message_ts)
+            return {}
+
+        def await_operator(state: CampaignRunGraphState) -> CampaignRunGraphState:
+            resume = interrupt({
+                "runId": state["run"]["runId"],
+                "threadId": f"campaign-run:{state['run']['runId']}",
+                "status": "AWAITING_APPROVAL",
+            })
+            if isinstance(resume, dict) and resume.get("action") == "reanalyze":
+                return {"run": resume["run"], "reanalysis": True}
+            return {"reanalysis": False}
+
+        def operator_route(state: CampaignRunGraphState) -> str:
+            return "reanalyze" if state.get("reanalysis") else "end"
+
+        def review_route(state: CampaignRunGraphState) -> str:
+            return "notify" if state.get("saved", {}).get("recommendation") == "FLAG" else "auto_dispatch"
+
+        def auto_dispatch_route(state: CampaignRunGraphState) -> str:
+            return "end" if state.get("autoDispatched") else "notify"
+
+        workflow.add_node("load_context", load_context)
+        workflow.add_node("analyze", analyze)
+        workflow.add_node("save", save)
+        workflow.add_node("auto_dispatch", auto_dispatch)
+        workflow.add_node("notify", notify)
+        workflow.add_node("await_operator", await_operator)
+        workflow.add_edge(START, "load_context")
+        workflow.add_edge("load_context", "analyze")
+        workflow.add_edge("analyze", "save")
+        workflow.add_conditional_edges("save", review_route,
+                                       {"notify": "notify", "auto_dispatch": "auto_dispatch"})
+        workflow.add_conditional_edges("auto_dispatch", auto_dispatch_route,
+                                       {"notify": "notify", "end": END})
+        workflow.add_edge("notify", "await_operator")
+        workflow.add_conditional_edges("await_operator", operator_route,
+                                       {"reanalyze": "load_context", "end": END})
+        return workflow.compile(checkpointer=checkpointer)
+
+    async def process(self, run: ClaimedCampaignRun) -> None:
+        with bind_log_context(campaign_run_id=run.runId):
+            with triage_span("campaign_run_review.process", campaign_run_id=run.runId):
+                await self._invoke({"run": run.model_dump(), "reanalysis": False}, run)
+
+    async def reanalyze(self, run_id: int, feedback: str) -> None:
+        with bind_log_context(campaign_run_id=run_id):
+            await self.core.add_campaign_run_feedback(run_id, feedback)
+            run = await self.core.claim_campaign_run(run_id)
+            if run is None:
+                raise RuntimeError("Campaign activity run is not available for re-analysis")
+            config = self._config(run.runId)
+            checkpoint = await self.graph.aget_state(config)
+            if checkpoint.next != ("await_operator",):
+                await self.checkpointer.adelete_thread(f"campaign-run:{run.runId}")
+                await self._invoke({"run": run.model_dump(), "reanalysis": True}, run)
+                return
+            await self._invoke(Command(resume={"action": "reanalyze", "run": run.model_dump()}), run)
+
+    async def decide(self, run_id: int, decision: str, user_id: str,
+                     reason: str | None = None) -> dict[str, Any]:
+        with bind_log_context(campaign_run_id=run_id):
+            result = await self.core.decide_campaign_run(run_id, decision, user_id, reason)
+            config = self._config(run_id)
+            checkpoint = await self.graph.aget_state(config)
+            if checkpoint.next == ("await_operator",):
+                await self.graph.ainvoke(Command(resume={"action": decision.lower()}), config)
+            return result
+
+    async def _invoke(self, command: Any, run: ClaimedCampaignRun) -> None:
+        try:
+            await self._ensure_checkpointer_connection()
+            await self.graph.ainvoke(command, self._config(run.runId))
+        except Exception as error:
+            try:
+                await self.core.fail_campaign_run_analysis(run.runId, run.analysisClaimToken, str(error))
+            except Exception:
+                pass
+            logger.exception("campaign run analysis failed", extra={"event": "campaign_run_analysis_failed"})
+            raise
+
+    def _config(self, run_id: int) -> dict[str, Any]:
+        return {"configurable": {"thread_id": f"campaign-run:{run_id}"}}
+
+    async def _ensure_checkpointer_connection(self) -> None:
+        connection = getattr(self.checkpointer, "conn", None)
+        ping = getattr(connection, "ping", None)
+        if ping:
+            await ping(reconnect=True)
+
+    @staticmethod
+    def _safe_flag_output(summary: str, operator_next_step: str) -> CampaignRunReviewOutput:
+        return CampaignRunReviewOutput(
+            recommendation="FLAG",
+            summary=summary,
+            operator_next_step=operator_next_step,
+        )
 
 
 async def create_checkpointer(database_url: str):

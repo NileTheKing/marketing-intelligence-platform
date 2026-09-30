@@ -7,7 +7,7 @@ import httpx
 
 from .config import Settings
 from .observability import TRIAGE_SLACK_OPERATIONS, triage_span
-from .schemas import AnalysisOutput, ClaimedCase, SlackInteraction
+from .schemas import AnalysisOutput, CampaignRunReviewOutput, ClaimedCampaignRun, ClaimedCase, SlackInteraction
 
 
 def extract_interaction(payload: dict[str, Any]) -> SlackInteraction:
@@ -21,6 +21,7 @@ def extract_interaction(payload: dict[str, Any]) -> SlackInteraction:
         dedupe_key = payload.get("trigger_id") or payload.get("container", {}).get("message_ts")
         feedback = None
         trigger_id = payload.get("trigger_id")
+        subject_type = "run" if str(action_id).startswith("run_") else "case"
     elif payload_type == "view_submission":
         view = payload.get("view", {})
         action_id = view.get("callback_id")
@@ -35,6 +36,10 @@ def extract_interaction(payload: dict[str, Any]) -> SlackInteraction:
                 break
         dedupe_key = view.get("id") or view.get("hash")
         trigger_id = None
+        subject_type = "case"
+        if isinstance(case_id, str) and case_id.startswith("run:"):
+            subject_type = "run"
+            case_id = case_id.removeprefix("run:")
     else:
         raise ValueError(f"Unsupported Slack interaction type: {payload_type}")
     if not user_id or not action_id or case_id is None:
@@ -44,7 +49,8 @@ def extract_interaction(payload: dict[str, Any]) -> SlackInteraction:
     except (TypeError, ValueError) as error:
         raise ValueError("Slack interaction has an invalid case id") from error
     return SlackInteraction(user_id=user_id, action_id=action_id, case_id=parsed_case_id,
-                            feedback=feedback, trigger_id=trigger_id, dedupe_key=dedupe_key)
+                            feedback=feedback, trigger_id=trigger_id, dedupe_key=dedupe_key,
+                            subject_type=subject_type)
 
 
 class SlackNotifier:
@@ -114,7 +120,79 @@ class SlackNotifier:
             TRIAGE_SLACK_OPERATIONS.labels(operation=operation, outcome="failure").inc()
             raise
 
-    async def open_reanalysis_modal(self, trigger_id: str, case_id: int, mode: str) -> None:
+    async def send_campaign_run(self, run: ClaimedCampaignRun, output: CampaignRunReviewOutput,
+                                context: dict[str, Any], update: bool = False) -> str | None:
+        if not self.settings.slack_bot_token or not self.settings.slack_channel_id:
+            raise RuntimeError("SLACK_BOT_TOKEN and SLACK_CHANNEL_ID are required")
+        decision_label = "관리자 확인 필요"
+        facts = context.get("facts") or {}
+        fact_lines = [f"• 이번 발송 대상은 {run.targetCount}명입니다."]
+        if facts.get("expectedRecipientCount") is not None:
+            fact_lines.append(f"• 설정한 예상 대상 수는 {facts['expectedRecipientCount']}명입니다.")
+        if facts.get("issuanceLimit") is not None:
+            fact_lines.append(f"• 쿠폰 발급 한도는 {facts['issuanceLimit']}명입니다.")
+        if facts.get("predictedFixedCouponCost") is not None:
+            fact_lines.append("• 정액 할인 기준 예상 비용이 예산 범위 안에 있습니다.")
+        flag_labels = {
+            "EXPECTED_RECIPIENT_COUNT_MISSING": "예상 대상 수가 설정되지 않았습니다.",
+            "TARGET_COUNT_EXCEEDS_EXPECTATION": "실제 대상 수가 설정한 예상 대상 수보다 많습니다.",
+            "CAMPAIGN_PURPOSE_MISSING": "캠페인 목적이 설정되지 않았습니다.",
+            "OPERATOR_MEMO_MISSING": "운영 메모가 입력되지 않았습니다.",
+            "PURPOSE_AND_TARGET_SEGMENT_MISMATCH": "캠페인 목적과 대상 세그먼트가 맞지 않습니다.",
+        }
+        for flag in facts.get("codeFlags") or []:
+            fact_lines.append(f"• {flag_labels.get(flag, '코드 기준 추가 확인이 필요합니다.')}")
+        text = (f"*캠페인 발송 사전 검토*\n"
+                f"판단: *{decision_label}*\n\n"
+                f"*AI 판단*\n{output.summary}\n\n"
+                f"*확인된 사실*\n{'\n'.join(fact_lines)}\n\n"
+                f"*다음 조치*\n{output.operator_next_step}\n\n"
+                f"추적 ID: run #{run.runId}")
+        actions = [
+            {"type": "button", "text": {"type": "plain_text", "text": "발송 승인"},
+             "style": "primary", "action_id": "run_approve", "value": str(run.runId)},
+            {"type": "button", "text": {"type": "plain_text", "text": "추가 확인 요청"},
+             "action_id": "run_request_investigation", "value": str(run.runId)},
+            {"type": "button", "text": {"type": "plain_text", "text": "확인 결과 입력"},
+             "action_id": "run_record_confirmation", "value": str(run.runId)},
+            {"type": "button", "text": {"type": "plain_text", "text": "종료"},
+             "style": "danger", "action_id": "run_close", "value": str(run.runId)},
+        ]
+        payload: dict[str, Any] = {
+            "channel": self.settings.slack_channel_id,
+            "text": text,
+            "blocks": [
+                {"type": "section", "text": {"type": "mrkdwn", "text": text}},
+                {"type": "actions", "elements": actions},
+            ],
+        }
+        if update:
+            if not run.slackMessageTs:
+                raise RuntimeError("Cannot update a campaign run message without its Slack ts")
+            endpoint = "https://slack.com/api/chat.update"
+            payload["ts"] = run.slackMessageTs
+        else:
+            endpoint = "https://slack.com/api/chat.postMessage"
+        operation = "update" if update else "post"
+        try:
+            with triage_span(f"campaign_run_review.slack.{operation}", campaign_run_id=run.runId):
+                response = await self.client.post(
+                    endpoint,
+                    headers={"Authorization": f"Bearer {self.settings.slack_bot_token}"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                body = response.json()
+                if not body.get("ok"):
+                    raise RuntimeError(f"Slack API request failed: {body.get('error', 'unknown_error')}")
+            TRIAGE_SLACK_OPERATIONS.labels(operation=operation, outcome="success").inc()
+            return body.get("ts") or run.slackMessageTs
+        except Exception:
+            TRIAGE_SLACK_OPERATIONS.labels(operation=operation, outcome="failure").inc()
+            raise
+
+    async def open_reanalysis_modal(self, trigger_id: str, case_id: int, mode: str,
+                                    subject_type: str = "case") -> None:
         if not self.settings.slack_bot_token:
             raise RuntimeError("SLACK_BOT_TOKEN is required for re-analysis feedback")
         modal = {
@@ -138,8 +216,8 @@ class SlackNotifier:
                         "trigger_id": trigger_id,
                         "view": {
                             "type": "modal",
-                            "callback_id": f"{mode}_modal",
-                            "private_metadata": str(case_id),
+                            "callback_id": f"{subject_type}_{mode}_modal" if subject_type == "run" else f"{mode}_modal",
+                            "private_metadata": f"run:{case_id}" if subject_type == "run" else str(case_id),
                             "title": {"type": "plain_text", "text": modal["title"]},
                             "submit": {"type": "plain_text", "text": "제출"},
                             "close": {"type": "plain_text", "text": "취소"},

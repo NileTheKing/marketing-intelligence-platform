@@ -6,6 +6,8 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRequest
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityResponse;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivityentry.CampaignActivityEntryCount;
+import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.domain.product.Product;
 import com.axon.core_service.exception.BusinessConflictException;
 import com.axon.core_service.exception.ResourceNotFoundException;
@@ -13,6 +15,7 @@ import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.CouponRepository;
+import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.ProductRepository;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +35,7 @@ public class CampaignActivityService {
     private final CampaignActivityEntryRepository campaignActivityEntryRepository;
     private final ProductRepository productRepository;
     private final CouponRepository couponRepository;
+    private final MarketingActionRepository marketingActionRepository;
     private final StringRedisTemplate redisTemplate;
 
     /**
@@ -61,6 +65,10 @@ public class CampaignActivityService {
         }
 
         validateFcfsProductPolicy(request.getActivityType(), request.getStatus(), product, null);
+        validateCouponCampaignPolicy(request, coupon);
+        validateCouponReviewIntentOnCreate(request);
+
+        MarketingAction marketingAction = createDirectCampaignAction(coupon);
 
         CampaignActivity campaignActivity = CampaignActivity.builder()
                 .campaign(campaign)
@@ -75,8 +83,13 @@ public class CampaignActivityService {
                 .quantity(request.getQuantity())
                 .product(product)
                 .coupon(coupon)
+                .marketingAction(marketingAction)
                 .imageUrl(request.getImageUrl())
                 .budget(request.getBudget())
+                .expectedRecipientCount(request.getExpectedRecipientCount())
+                .maxRecipientCount(request.getMaxRecipientCount())
+                .purpose(request.getPurpose())
+                .operatorMemo(request.getOperatorMemo())
                 .build();
         CampaignActivity saved = campaignActivityRepository.save(campaignActivity);
         return CampaignActivityResponse.from(saved);
@@ -133,9 +146,14 @@ public class CampaignActivityService {
             if (request.getCouponId() != null) {
                 newCoupon = findCoupon(request.getCouponId());
             }
+            validateCouponCampaignPolicy(request, newCoupon);
             campaignActivity.updateCouponInfo(newCoupon);
+            updateDirectCampaignAction(campaignActivity, newCoupon);
         } else {
             campaignActivity.updateProductInfo(requestedProduct, request.getPrice(), request.getQuantity());
+            if (campaignActivity.getMarketingAction() != null) {
+                campaignActivity.getMarketingAction().deactivate();
+            }
         }
 
         // Update Image URL
@@ -143,6 +161,8 @@ public class CampaignActivityService {
 
         // Update Budget
         campaignActivity.updateBudget(request.getBudget());
+        campaignActivity.updateRecipientPolicy(request.getExpectedRecipientCount(), request.getMaxRecipientCount());
+        campaignActivity.updateReviewIntent(request.getPurpose(), request.getOperatorMemo());
 
         // Invalidate Cache
         evictMetaCache(campaignActivityId);
@@ -341,6 +361,54 @@ public class CampaignActivityService {
         if (activeProductAlreadyUsed) {
             throw new BusinessConflictException("A campaign-only product can belong to only one ACTIVE FCFS activity");
         }
+    }
+
+    private void validateCouponCampaignPolicy(CampaignActivityRequest request,
+                                              com.axon.core_service.domain.coupon.Coupon coupon) {
+        if (request.getActivityType() != com.axon.messaging.CampaignActivityType.COUPON) {
+            return;
+        }
+        if (coupon == null) {
+            throw new BusinessConflictException("A coupon activity requires a coupon");
+        }
+        if (request.getLimitCount() == null || request.getLimitCount() <= 0) {
+            throw new BusinessConflictException("A coupon activity requires a positive issuance limit");
+        }
+        if (request.getMaxRecipientCount() != null && request.getMaxRecipientCount() <= 0) {
+            throw new BusinessConflictException("Maximum recipient count must be positive");
+        }
+    }
+
+    private void validateCouponReviewIntentOnCreate(CampaignActivityRequest request) {
+        if (request.getActivityType() != com.axon.messaging.CampaignActivityType.COUPON) {
+            return;
+        }
+        if (request.getPurpose() == null || request.getOperatorMemo() == null
+                || request.getOperatorMemo().isBlank()) {
+            throw new BusinessConflictException("A coupon activity requires a purpose and operator memo");
+        }
+    }
+
+    private MarketingAction createDirectCampaignAction(com.axon.core_service.domain.coupon.Coupon coupon) {
+        if (coupon == null) {
+            return null;
+        }
+        return marketingActionRepository.save(MarketingAction.builder()
+                .marketingRule(null)
+                .actionType(RewardType.COUPON)
+                .referenceId(coupon.getId())
+                .isActive(true)
+                .build());
+    }
+
+    private void updateDirectCampaignAction(CampaignActivity activity,
+                                            com.axon.core_service.domain.coupon.Coupon coupon) {
+        MarketingAction action = activity.getMarketingAction();
+        if (action == null) {
+            activity.assignMarketingAction(createDirectCampaignAction(coupon));
+            return;
+        }
+        action.updateDirectCampaignAction(RewardType.COUPON, coupon.getId(), true);
     }
 
     private void evictMetaCache(Long campaignActivityId) {

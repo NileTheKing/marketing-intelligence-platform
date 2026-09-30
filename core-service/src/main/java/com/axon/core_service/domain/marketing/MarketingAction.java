@@ -29,7 +29,7 @@ public class MarketingAction {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "marketing_rule_id", nullable = false)
+    @JoinColumn(name = "marketing_rule_id")
     private MarketingRule marketingRule;
 
     @Enumerated(EnumType.STRING)
@@ -55,5 +55,15 @@ public class MarketingAction {
         this.actionType = actionType;
         this.referenceId = referenceId;
         this.isActive = isActive;
+    }
+
+    public void updateDirectCampaignAction(RewardType actionType, Long referenceId, boolean isActive) {
+        this.actionType = actionType;
+        this.referenceId = referenceId;
+        this.isActive = isActive;
+    }
+
+    public void deactivate() {
+        this.isActive = false;
     }
 }

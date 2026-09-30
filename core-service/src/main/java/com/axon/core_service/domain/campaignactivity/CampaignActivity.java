@@ -6,6 +6,7 @@ import com.axon.core_service.domain.coupon.Coupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.core_service.domain.dto.campaignactivity.filter.converter.FilterDetailConverter;
+import com.axon.core_service.domain.marketing.MarketingAction;
 import com.axon.core_service.domain.product.Product;
 import com.axon.messaging.CampaignActivityType;
 import jakarta.persistence.*;
@@ -36,6 +37,10 @@ public class CampaignActivity extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "coupon_id")
     private Coupon coupon;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "marketing_action_id", unique = true)
+    private MarketingAction marketingAction;
 
     @Column(name = "name", nullable = false)
     private String name;
@@ -70,6 +75,19 @@ public class CampaignActivity extends BaseTimeEntity {
     @Column(name = "budget", precision = 12, scale = 2)
     private BigDecimal budget;
 
+    @Column(name = "expected_recipient_count")
+    private Integer expectedRecipientCount;
+
+    @Column(name = "max_recipient_count")
+    private Integer maxRecipientCount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose", length = 50)
+    private CampaignActivityPurpose purpose;
+
+    @Column(name = "operator_memo", length = 2000)
+    private String operatorMemo;
+
     @Column(name = "image_url")
     private String imageUrl;
 
@@ -91,6 +109,11 @@ public class CampaignActivity extends BaseTimeEntity {
             BigDecimal budget,
             String imageUrl,
             Coupon coupon,
+            MarketingAction marketingAction,
+            Integer expectedRecipientCount,
+            Integer maxRecipientCount,
+            CampaignActivityPurpose purpose,
+            String operatorMemo,
             Integer syncedCount) {
         this.campaign = campaign;
         this.product = product;
@@ -106,6 +129,11 @@ public class CampaignActivity extends BaseTimeEntity {
         this.quantity = quantity;
         this.imageUrl = imageUrl;
         this.budget = budget;
+        this.marketingAction = marketingAction;
+        this.expectedRecipientCount = expectedRecipientCount;
+        this.maxRecipientCount = maxRecipientCount;
+        this.purpose = purpose;
+        this.operatorMemo = operatorMemo;
         this.syncedCount = syncedCount != null ? syncedCount : 0;
     }
 
@@ -147,6 +175,20 @@ public class CampaignActivity extends BaseTimeEntity {
         this.product = null;
         this.price = BigDecimal.ZERO;
         this.quantity = 0;
+    }
+
+    public void assignMarketingAction(MarketingAction marketingAction) {
+        this.marketingAction = marketingAction;
+    }
+
+    public void updateRecipientPolicy(Integer expectedRecipientCount, Integer maxRecipientCount) {
+        this.expectedRecipientCount = expectedRecipientCount;
+        this.maxRecipientCount = maxRecipientCount;
+    }
+
+    public void updateReviewIntent(CampaignActivityPurpose purpose, String operatorMemo) {
+        this.purpose = purpose;
+        this.operatorMemo = operatorMemo;
     }
 
     public void updateActivityType(CampaignActivityType activityType) {

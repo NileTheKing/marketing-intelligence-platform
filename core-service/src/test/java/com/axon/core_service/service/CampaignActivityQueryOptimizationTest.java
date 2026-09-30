@@ -13,6 +13,7 @@ import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.CouponRepository;
+import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.ProductRepository;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +37,7 @@ class CampaignActivityQueryOptimizationTest {
                 entryRepository,
                 mock(ProductRepository.class),
                 mock(CouponRepository.class),
+                mock(MarketingActionRepository.class),
                 mock(StringRedisTemplate.class));
     }
 

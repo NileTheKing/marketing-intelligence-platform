@@ -6,8 +6,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import com.axon.messaging.CampaignActivityType;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -41,6 +43,11 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
     @EntityGraph(attributePaths = {"product", "coupon"})
     @Query("SELECT ca FROM CampaignActivity ca WHERE ca.id = :id")
     Optional<CampaignActivity> findWithProductAndCouponById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"campaign", "coupon", "marketingAction"})
+    @Query("SELECT ca FROM CampaignActivity ca WHERE ca.id = :id")
+    Optional<CampaignActivity> findWithCampaignCouponAndActionByIdForUpdate(@Param("id") Long id);
 
     /**
      * Finds campaigns that already ended and still have the given status.

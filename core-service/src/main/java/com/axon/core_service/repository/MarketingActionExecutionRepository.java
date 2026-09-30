@@ -14,4 +14,6 @@ public interface MarketingActionExecutionRepository extends JpaRepository<Market
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from MarketingActionExecution e where e.id = :id")
     Optional<MarketingActionExecution> findByIdForUpdate(@Param("id") Long id);
+
+    boolean existsByCampaignActivityRunIdAndUserId(Long campaignActivityRunId, Long userId);
 }

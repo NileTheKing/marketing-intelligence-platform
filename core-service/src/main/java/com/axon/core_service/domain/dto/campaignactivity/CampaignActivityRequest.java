@@ -2,11 +2,13 @@ package com.axon.core_service.domain.dto.campaignactivity;
 
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.messaging.CampaignActivityType;
+import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,6 +61,17 @@ public class CampaignActivityRequest {
     @PositiveOrZero
     private BigDecimal budget;
 
+    @PositiveOrZero
+    private Integer expectedRecipientCount;
+
+    @PositiveOrZero
+    private Integer maxRecipientCount;
+
+    private CampaignActivityPurpose purpose;
+
+    @Size(max = 2000)
+    private String operatorMemo;
+
     private String imageUrl;
 
     @JsonIgnore
@@ -75,4 +88,5 @@ public class CampaignActivityRequest {
                 || activityType == CampaignActivityType.COUPON
                 || quantity > 0;
     }
+
 }

@@ -52,6 +52,7 @@ public class MarketingActionExecutionService {
                 .actionReferenceId(actionReferenceId)
                 .userId(userId)
                 .productId(productId)
+                .campaignActivityRunId(null)
                 .channel(channel)
                 .build());
         return dispatchRepository.saveAndFlush(MarketingActionDispatch.builder()
@@ -60,6 +61,27 @@ public class MarketingActionExecutionService {
                 .initiatedBy(MarketingActionDispatchInitiatedBy.SYSTEM)
                 .build());
     }
+
+    @Transactional
+    public MarketingActionDispatch createCampaignRunPending(Long actionId, Long actionReferenceId,
+                                                             Long userId, Long campaignActivityRunId,
+                                                             RewardType channel) {
+        MarketingActionExecution execution = executionRepository.save(MarketingActionExecution.builder()
+                .actionId(actionId)
+                .ruleId(null)
+                .actionReferenceId(actionReferenceId)
+                .userId(userId)
+                .productId(null)
+                .campaignActivityRunId(campaignActivityRunId)
+                .channel(channel)
+                .build());
+        return dispatchRepository.saveAndFlush(MarketingActionDispatch.builder()
+                .execution(execution)
+                .sequence(1L)
+                .initiatedBy(MarketingActionDispatchInitiatedBy.SYSTEM)
+                .build());
+    }
+
 
     @Transactional
     public boolean markDispatching(Long dispatchId) {

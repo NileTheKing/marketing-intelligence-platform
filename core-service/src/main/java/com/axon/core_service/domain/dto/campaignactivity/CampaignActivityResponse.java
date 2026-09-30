@@ -1,6 +1,7 @@
 package com.axon.core_service.domain.dto.campaignactivity;
 
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.messaging.CampaignActivityType;
 import java.time.LocalDateTime;
@@ -33,6 +34,10 @@ public class CampaignActivityResponse {
     private final Integer price;
     private final Integer quantity;
     private final java.math.BigDecimal budget; // Added budget field
+    private final Integer expectedRecipientCount;
+    private final Integer maxRecipientCount;
+    private final CampaignActivityPurpose purpose;
+    private final String operatorMemo;
 
     /**
      * Create a CampaignActivityResponse from a CampaignActivity with no participant
@@ -83,6 +88,10 @@ public class CampaignActivityResponse {
                 .price(campaignActivity.getPrice() != null ? campaignActivity.getPrice().intValue() : null)
                 .quantity(campaignActivity.getQuantity())
                 .budget(campaignActivity.getBudget()) // Populate budget
+                .expectedRecipientCount(campaignActivity.getExpectedRecipientCount())
+                .maxRecipientCount(campaignActivity.getMaxRecipientCount())
+                .purpose(campaignActivity.getPurpose())
+                .operatorMemo(campaignActivity.getOperatorMemo())
                 .build();
     }
 }
