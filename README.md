@@ -10,46 +10,60 @@
 
 ```mermaid
 flowchart LR
-    Browser[브라우저] --> SDK[행동 수집 SDK]
-    Browser --> Entry[요청 수신 서비스]
-    SDK --> Entry
+    Browser[브라우저] -->|선착순, 결제 요청| Entry[선착순 판정, 결제 처리]
+    SDK[JS SDK] -->|행동 이벤트| Entry
+    Entry <--> Redis[(Redis Lua<br/>선착순 수량 판정)]
 
-    Entry <--> Redis[(Redis Lua 선착순 판정)]
-    Entry -->|결제 완료, 행동 이벤트| Kafka[(Kafka)]
+    subgraph Kafka[Kafka]
+        direction TB
+        PaymentTopic[결제 완료 topic]
+        BehaviorTopic[행동 이벤트 topic]
+        WebhookTopic[Webhook topic]
+        DLT[최종 실패 topic]
+    end
 
-    Kafka -->|결제 처리 topic| Core[후속 처리 서비스]
-    Kafka -->|Webhook topic| Webhook[외부 알림 처리]
+    Entry -->|결제 완료 이벤트| PaymentTopic
+    Entry -->|행동 이벤트| BehaviorTopic
 
-    Core --> MySQL[(MySQL 참여, 구매, 쿠폰)]
-    Core --> ES[(Elasticsearch 행동 로그)]
-    Core --> Dashboard[마케팅 대시보드]
+    PaymentTopic --> Processor[참여, 구매 저장<br/>쿠폰과 알림 처리]
+    BehaviorTopic --> ES
+    Processor --> MySQL[(MySQL)]
+    Processor --> Dashboard[마케팅 대시보드]
+    Processor -->|외부 알림 요청| WebhookTopic --> Webhook[외부 Webhook]
 
-    Webhook --> External[외부 Webhook]
-    Core -->|최종 실패| DLT[실패 메시지 topic]
+    Processor -->|최종 실패| DLT
     Webhook -->|최종 실패| DLT
-    DLT --> AI[FastAPI, LangGraph 실패 원인 분석]
-    AI --> Slack[Slack 관리자 승인]
-    Slack -->|승인 후 재발행| Core
+    DLT --> AI[AI 실패 분석] --> Slack[Slack 관리자 승인]
+    Slack -->|승인 후 재실행| Processor
+
+    classDef request fill:#E8F0FE,stroke:#4285F4,color:#202124;
+    classDef event fill:#FEF7E0,stroke:#F9AB00,color:#202124;
+    classDef data fill:#E6F4EA,stroke:#188038,color:#202124;
+    classDef failure fill:#FCE8E6,stroke:#D93025,color:#202124;
+    class Entry,Browser,SDK request;
+    class PaymentTopic,BehaviorTopic,WebhookTopic event;
+    class Redis,MySQL,ES,Dashboard,Processor data;
+    class DLT,AI,Slack failure;
 ```
 
 ## 설계와 문제 해결
 
 ### 설계 이유
 
-- **요청 수신 서비스와 후속 처리 서비스 분리**: 선착순 판정과 결제 준비는 바로 응답하고, 참여 기록, 구매 기록, 행동 로그, 쿠폰과 알림 처리는 Kafka를 통해 뒤에서 처리합니다.
+- **요청 수신 서비스와 후속 처리 서비스 분리**: 선착순 판정과 결제 처리는 바로 응답하고, 참여 기록, 구매 기록, 행동 로그, 쿠폰과 알림 처리는 Kafka를 통해 뒤에서 처리합니다.
 - **Redis Lua 선착순 판정**: 중복 참여 확인, 수량 증가, 한도 초과 시 되돌리기를 한 번에 처리해 정원 초과 당첨을 막습니다.
 - **Kafka 후속 처리**: 결제 완료 뒤 필요한 저장과 발송 작업을 요청 응답과 분리하고, 처리에 실패한 메시지는 다른 정상 메시지와 분리합니다.
 - **Entry Virtual Thread**: 동시에 몰린 요청에서 토큰 발급과 내부 서비스 호출처럼 기다림이 있는 작업이 플랫폼 스레드를 오래 점유하지 않도록 처리합니다.
 
 ### 문제 해결
 
-- 선착순 구매 이벤트에서 정원 초과 당첨과 응답 지연이 발생해 Redis 기반 선착순 처리와 Virtual Thread를 적용했습니다. 3,000 VU, 정원 800명 이벤트 오픈 시나리오에서 정원 초과 당첨 없이 선착순 API 성공 응답 p95 0.8s, peak 1,108 req/s를 처리했습니다.
-- 이벤트 유입 고객의 구매를 추적하는 배치 분석에서 조회가 느려 복합 인덱스를 추가했습니다. `EXPLAIN ANALYZE`에서 range scan을 확인하고 쿼리 실행시간을 약 75% 단축했습니다.
-- 선착순 결제 완료 뒤 Kafka consumer가 재고를 갱신하면서 DB 커넥션이 고갈돼, 재고 반영을 5분 주기 동기화로 바꿨습니다. 요청 응답시간을 80% 개선했습니다.
-- 선착순 결제 성공 이벤트를 Kafka로 비동기 처리하고, 참여 기록과 구매 기록을 같은 트랜잭션으로 저장한 뒤 사용자 요약 정보는 별도로 갱신했습니다. 요청 응답을 저장 처리와 분리하고 메시지 중복 처리와 실패 복구를 구현했습니다.
-- 선착순 결제 완료 메시지와 외부 Webhook 호출 메시지를 같은 topic에서 처리해, 느린 외부 호출이 결제 완료 처리까지 지연시켰습니다. Kafka topic과 consumer group을 분리해 외부 호출 지연이 선착순 구매 처리에 전파되지 않게 했습니다.
-- 선착순 이벤트에서 수집한 고객 행동 로그를 MySQL과 Elasticsearch에 적재하고, 마케팅 성과 대시보드와 쿠폰, 알림 발송 조건에 사용했습니다.
-- 쿠폰 발급과 알림 전송의 최종 실패를 DLT에 남기고, LangGraph 기반 AI 분석과 Slack 관리자 승인 흐름을 연결했습니다. 실패 원인과 이력을 요약한 뒤 관리자 승인으로만 재실행합니다.
+- 선착순 구매 이벤트시, 선착순 오버부킹 및 응답 지연 문제 발생. Redis 기반 선착순 처리와 Virtual Thread 도입 → 3,000 VU, 정원 800명 시나리오에서 오버부킹 0건, 선착순 API p95 0.8s, peak 1,108 req/s
+- 이벤트 유입 고객의 구매를 추적하는 배치 분석에서, 쿼리 지연 발생. 복합 인덱스 도입 → `EXPLAIN ANALYZE`로 range scan 확인, 쿼리 실행시간 약 75% 단축
+- 선착순 결제완료 이후 메시지를 처리하던 Kafka consumer에서 재고 반영 중 커넥션 풀 고갈 발생, 재고 반영을 지연 동기화로 변경 → 요청 응답시간 80% 개선
+- 선착순 결제 성공 이벤트를 Kafka로 비동기 처리하고, 원장과 파생 정보 기록의 트랜잭션 경계를 분리 → 요청 빠른 응답, 후속 메시지 처리 멱등성 및 실패 복구 처리 구현
+- 선착순 결제완료 메시지와 Webhook 호출 메시지를 공유 topic으로 처리하던 중, 결제완료 메시지 처리 지연 문제 발생. Kafka topic, consumer group 분리 → 호출 지연 중에도 선착순 구매건 처리 지연 해결
+- 선착순 이벤트 중 수집한 고객 행동 로그를 MySQL 및 Elasticsearch로 적재하고, 마케팅 성과 대시보드와 쿠폰, 알림 발송 등에 활용하는 파이프라인 구현
+- 쿠폰 발급과 알림 전송 실패를 DLT로 추적하고 LangGraph 기반 AI 분석과 Slack Human-in-the-Loop 승인 흐름 연동 → 실패 원인 및 이력 자동 요약 후 관리자 승인 재실행
 
 ## 주요 화면
 
