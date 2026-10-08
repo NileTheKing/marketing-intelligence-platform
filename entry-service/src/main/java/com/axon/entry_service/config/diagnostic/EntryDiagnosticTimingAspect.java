@@ -5,16 +5,13 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-@Slf4j
 @Aspect
 @Component
 @Profile("diagnostic")
@@ -22,9 +19,6 @@ import org.springframework.stereotype.Component;
 public class EntryDiagnosticTimingAspect {
 
     private final MeterRegistry meterRegistry;
-
-    @Value("${axon.diagnostic.entry.slow-threshold-ms:100}")
-    private long slowThresholdMs;
 
     @Around("""
             execution(* com.axon.entry_service.service.entry.EntryApplicationService.createEntry(..)) ||
@@ -61,11 +55,6 @@ public class EntryDiagnosticTimingAspect {
                 .tag("outcome", outcome)
                 .register(meterRegistry)
                 .record(elapsedNanos, TimeUnit.NANOSECONDS);
-
-        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
-        if (elapsedMs >= slowThresholdMs) {
-            log.info("entry_diagnostic_stage stage={} outcome={} elapsedMs={}", stage, outcome, elapsedMs);
-        }
     }
 
     private String resolveStage(ProceedingJoinPoint joinPoint) {

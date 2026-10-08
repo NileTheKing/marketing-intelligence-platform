@@ -8,11 +8,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
+import com.axon.entry_service.config.diagnostic.EntryDiagnosticStageRecorder;
 import com.axon.entry_service.domain.CampaignActivityMeta;
 import com.axon.entry_service.domain.CampaignActivityStatus;
 import com.axon.entry_service.domain.ReservationResult;
 import com.axon.entry_service.domain.ReservationStatus;
 import com.axon.entry_service.event.ReservationApprovedEvent;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import java.util.List;
 import java.util.Collections;
@@ -38,10 +40,14 @@ class EntryReservationServiceTest {
     @InjectMocks
     private EntryReservationService reservationService;
 
+    private SimpleMeterRegistry meterRegistry;
+
     private CampaignActivityMeta activeMeta;
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
+        reservationService.setDiagnosticStageRecorder(new EntryDiagnosticStageRecorder(meterRegistry));
         activeMeta = new CampaignActivityMeta(1L, 1L, 3, CampaignActivityStatus.ACTIVE, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
     }
 
@@ -53,6 +59,34 @@ class EntryReservationServiceTest {
 
         assertThat(result.status()).isEqualTo(ReservationStatus.SUCCESS);
         assertThat(result.order()).isEqualTo(1L);
+        assertThat(meterRegistry.get("axon.entry.diagnostic.stage")
+                .tag("stage", "redis_lua_execute")
+                .tag("outcome", "success")
+                .timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("axon.entry.diagnostic.stage")
+                .tag("stage", "application_event_publish")
+                .tag("outcome", "success")
+                .timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void earlyReservationOutcomesDoNotRecordEventPublishTiming() {
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any())).thenReturn(-1L, -2L);
+
+        reservationService.reserve(1L, 100L, activeMeta, Instant.now());
+        reservationService.reserve(1L, 101L, activeMeta, Instant.now());
+        reservationService.reserve(1L, 102L, null, Instant.now());
+
+        assertThat(meterRegistry.get("axon.entry.diagnostic.stage")
+                .tag("stage", "redis_lua_execute")
+                .tag("outcome", "duplicated")
+                .timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("axon.entry.diagnostic.stage")
+                .tag("stage", "redis_lua_execute")
+                .tag("outcome", "sold_out")
+                .timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.find("axon.entry.diagnostic.stage")
+                .tag("stage", "application_event_publish").timer()).isNull();
     }
 
     @Test
@@ -65,6 +99,8 @@ class EntryReservationServiceTest {
 
         assertThat(result.status()).isEqualTo(ReservationStatus.SUCCESS);
         assertThat(result.order()).isEqualTo(1L);
+        assertThat(meterRegistry.find("axon.entry.diagnostic.stage")
+                .tag("stage", "application_event_publish").timer()).isNull();
     }
 
     @Test

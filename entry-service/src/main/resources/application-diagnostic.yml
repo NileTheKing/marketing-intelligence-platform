@@ -1,0 +1,5 @@
+management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        axon.entry.diagnostic.stage: true
