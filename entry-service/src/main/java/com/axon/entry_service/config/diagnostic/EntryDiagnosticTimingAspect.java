@@ -9,12 +9,12 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Aspect
 @Component
-@Profile("diagnostic")
+@ConditionalOnProperty(prefix = "axon.diagnostic.entry", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class EntryDiagnosticTimingAspect {
 

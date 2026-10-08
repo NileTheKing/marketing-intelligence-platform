@@ -46,6 +46,9 @@ payment:
     secret: ${PAYMENT_TOKEN_SECRET:changeme}
 
 axon:
+  diagnostic:
+    entry:
+      enabled: ${AXON_DIAGNOSTIC_ENTRY_ENABLED:false}
   observability:
     environment: ${AXON_OBSERVABILITY_ENV:local}
   core-service:
@@ -73,3 +76,4 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true # publish _bucket series so Prometheus can compute server-side p95 per endpoint
+        axon.entry.diagnostic.stage: ${AXON_DIAGNOSTIC_ENTRY_ENABLED:false}

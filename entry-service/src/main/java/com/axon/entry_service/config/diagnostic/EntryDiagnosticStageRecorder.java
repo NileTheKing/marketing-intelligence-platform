@@ -4,11 +4,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("diagnostic")
+@ConditionalOnProperty(prefix = "axon.diagnostic.entry", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class EntryDiagnosticStageRecorder {
 
