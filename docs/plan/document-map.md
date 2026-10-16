@@ -31,6 +31,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/rest-api-route-clean-cutover-plan.md` | active (implemented) | current SSR/API route contract and 2026-07-14 clean-cutover record |
 | `docs/plan/marketing-rule-multi-action-handoff.md` | active (implemented) | implemented MarketingRule 1:N action expansion; records the bounded scope, acceptance tests, and required VM schema cutover |
 | `docs/plan/marketing-action-execution-dispatch-history-plan.md` | active | split behavior-triggered marketing execution business obligations from per-dispatch Kafka/DLT history; replaces the one-row `dispatchVersion` model |
+| `docs/plan/kafka-command-routing-error-handling-fact-check-2026-10-16.md` | reference (code snapshot checked 2026-10-16) | factual inventory of FCFS/Coupon/Webhook command topics, producers, listeners, error paths, and items to verify before changing routing |
 | `docs/plan/dlq-failure-triage-agent-v1-plan.md` | active | Core-owned marketing action final-failure triage case, FastAPI/LangGraph read-only analysis, Slack human approval, and no automatic replay boundary |
 | `docs/plan/campaign-activity-run-review-v1-plan.md` | active | campaign coupon run target snapshot, hard policy block, AI summary, Slack approval, and reuse of the existing Execution/Dispatch delivery pipeline |
 | `docs/plan/observability-correlation-v1-plan.md` | active | Oracle Compose logs/metrics/traces correlation: Loki/Alloy, sampled Jaeger traces, AI triage observability, and Golden Signals dashboards |
