@@ -167,3 +167,11 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 - OCI 데이터 규모가 작으므로 이번 쿼리 수 개선을 응답시간 단축 수치로 표현하지 않았다.
 - FK가 없는 scalar ID를 일괄 연관관계로 바꾸지 않았다. 이벤트 원장과 삭제 정책을 먼저 정해야 한다.
 - 현재 실패 사례가 없는 범용 Repository·도메인 이벤트·Inbox/Outbox 계층을 추가하지 않았다.
+
+### 일반 상품 목록 API 및 Store 조회 범위
+
+`GET /api/v1/products`는 일반 상품만 반환하며 `category`(대소문자 무시), `page`(기본 0), `size`(기본 20, 1–100)를 받는다. 결과는 `id ASC`로 안정 정렬하고 `items/page/size/hasNext`만 제공한다. DTO에는 카드용 식별자·이름·브랜드·카테고리·이미지·정상가·판매가·할인율을 담고, 금액은 BigDecimal JSON 숫자이며 재고와 내부 campaignOnly 값은 노출하지 않는다. 잘못된 페이지/크기는 공통 `INVALID_REQUEST` 400 응답이다. 목록 GET만 공개했고 기존 `/api/v1/products/search` ADMIN 권한은 그대로다.
+
+목록과 `/shop` 카테고리 화면은 repository `Slice` 조회에서 `campaignOnly=false` 및 선택 카테고리를 DB 조건으로 적용하고 `id ASC` 페이지 범위를 읽는다. category 일치는 trim 후 대소문자를 무시한다. 홈페이지는 TECH/FOOD/HOME/FASHION별 첫 4개를 각각 조회하며 지정 랭킹 ID만 조회해 기존 순서를 복원한다. 카테고리 SSR 페이지의 이전/다음 링크는 category와 page를 유지한다. 기존 화면 가격 포맷과 이미지 경로 변환은 유지한다.
+
+대상 테스트: `ProductCatalogRepositoryTest`는 카테고리·campaign 전용 제외·페이지 경계/hasNext를, `StoreViewServiceTest`는 API 페이지 정렬·금액 DTO·입력 경계와 홈 카테고리 제한/랭킹 순서를, `SecurityConfigTest`는 익명 목록 공개와 search 관리자 권한을 확인한다. Core `compileJava`와 위 세 클래스 대상 13 tests가 통과했다. 전체 Core 테스트 suite는 실행하지 않았다. 목록 API는 새 기능이며 운영 사용량·인덱스 필요성은 측정하지 않았다. 구현은 서비스 조회 구조를 제한할 뿐, 성능 개선 측정이나 운영 장애 해결 근거가 아니다.

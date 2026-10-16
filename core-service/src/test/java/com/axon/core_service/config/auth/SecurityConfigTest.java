@@ -42,6 +42,18 @@ class SecurityConfigTest {
     }
 
     @Test
+    void onlyProductListIsPublicWhileAdminSearchRemainsProtected() throws Exception {
+        mockMvc.perform(get("/api/v1/products"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/products/search?keyword=phone"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/products/search?keyword=phone").with(user("1").roles("USER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void anonymousBrowserRequestStillStartsOAuthLogin() throws Exception {
         mockMvc.perform(get("/products/1"))
                 .andExpect(status().isFound())

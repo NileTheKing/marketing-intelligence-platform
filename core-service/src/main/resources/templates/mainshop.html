@@ -36,6 +36,13 @@
                 <i class="ph ph-warning-circle text-4xl mb-2"></i>
                 <p>해당 카테고리에 등록된 상품이 없습니다.</p>
             </div>
+            <nav th:if="${hasPrevious or hasNext}" class="flex justify-center gap-4 mt-10" aria-label="상품 목록 페이지">
+                <a th:if="${hasPrevious}" th:href="@{/shop(category=${selectedCategory},page=${page - 1})}"
+                    class="px-4 py-2 border rounded">이전</a>
+                <span class="px-4 py-2" th:text="${page + 1}">1</span>
+                <a th:if="${hasNext}" th:href="@{/shop(category=${selectedCategory},page=${page + 1})}"
+                    class="px-4 py-2 border rounded">다음</a>
+            </nav>
         </div>
 
         <!-- Main View (Rankings & Sections) -->

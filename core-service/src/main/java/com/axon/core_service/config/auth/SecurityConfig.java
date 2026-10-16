@@ -66,6 +66,8 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/events/active")
                                                 .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/products")
+                                                .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/campaign-activities/{campaignActivityId:[0-9]+}")
                                                 .hasAnyAuthority(Role.ADMIN.getKey(), "ROLE_SYSTEM")
                                                 .requestMatchers("/internal/v1/marketing-triage/**",
