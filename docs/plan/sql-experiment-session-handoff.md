@@ -1,14 +1,23 @@
 # SQL experiment session handoff
 
-Status: active, temporary handoff. Updated: 2026-10-15.
+Status: active, temporary handoff. Updated: 2026-10-19.
 
 ## Start Here
 
-- Repository: `/Users/yangnail/dev/projects/skusw/axon`, branch `main` at handoff.
+- Repository: `/Users/yangnail/dev/projects/skusw/axon`, branch `feat/customer-profile` after the 2026-10-19 working-tree cleanup (`main` at the original handoff).
 - Read `AGENTS.md`, `docs/architecture-map.md`, and `docs/plan/document-map.md` first.
 - Current source: `docs/plan/abandoned-cart-coupon-candidate-query-v1-plan.md`.
-- There are MANY modified and untracked files, including earlier campaign, load-test, and SQL work. Preserve all of them. Do not reset, delete, commit, or push without user instruction.
+- The user authorized grouping the accumulated changes into commits on 2026-10-19. Preserve later work by other sessions; do not reset, delete, or push without user instruction.
 - This handoff was prepared without running new benchmarks or changing application logic.
+
+### Cleanup Status (2026-10-19)
+
+- A pre-cleanup bundle, tracked-file patch and untracked-file archive are retained under `.git/axon-safety-backups/axon-before-cleanup-20261019-Zbb0Yf/`. Bundle verification and patch application checks passed.
+- Product reviews, participation history, AI campaign review, campaign automation/analysis, Kafka configuration and experiment tooling were grouped into separate commits. No push or deployment was performed.
+- Core full suite: 296 tests, 3 failures, 8 skipped. All three failing Kafka tests also fail in a separate baseline copy without the pending campaign/config/tool changes: `KafkaBatchListenerConfigurationTest`, `MarketingActionExecutionLifecycleTest`, and the poison-message case in `PurchaseFlowIntegrationTest`. Do not describe the full suite as passing.
+- Isolated review/history/campaign focused tests, Entry tests, AI tests (24), and frontend tests (2) passed. Database migrations and large SQL benchmarks were not rerun during cleanup.
+- The HTTP history benchmark now requires `CAMPAIGN_ENTRY_HISTORY_BENCHMARK=true`; its Spring configuration is restricted to the benchmark profile so it cannot replace other tests' application configuration.
+- Historical SQL and issuance results below retain their original measurement boundaries. Cleanup did not remeasure them.
 
 ## User Goal And Decisions
 

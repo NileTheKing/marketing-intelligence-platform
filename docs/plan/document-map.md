@@ -28,14 +28,20 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/spike-traffic-observability-plan.md` | active | Oracle VM Docker Compose based spike bottleneck analysis |
 | `docs/plan/otel-jaeger-apm-plan.md` | active | current OpenTelemetry/Jaeger APM setup and FCFS trace diagnosis plan |
 | `docs/plan/oracle-compose-baseline-runbook.md` | active | current Oracle VM Compose FCFS baseline execution steps and artifact boundary |
+| `docs/plan/fcfs-ingress-operating-window-ab-plan.md` | active | controlled cumulative ingress A/B: fixed 3,000-user payment flow, rate selection, server-side winner p95, and acceptance gates; separate from flash-crowd capacity validation |
 | `docs/plan/rest-api-route-clean-cutover-plan.md` | active (implemented) | current SSR/API route contract and 2026-07-14 clean-cutover record |
 | `docs/plan/marketing-rule-multi-action-handoff.md` | active (implemented) | implemented MarketingRule 1:N action expansion; records the bounded scope, acceptance tests, and required VM schema cutover |
 | `docs/plan/marketing-action-execution-dispatch-history-plan.md` | active | split behavior-triggered marketing execution business obligations from per-dispatch Kafka/DLT history; replaces the one-row `dispatchVersion` model |
 | `docs/plan/kafka-command-routing-error-handling-fact-check-2026-10-16.md` | reference (code snapshot checked 2026-10-16) | factual inventory of FCFS/Coupon/Webhook command topics, producers, listeners, error paths, and items to verify before changing routing |
 | `docs/plan/dlq-failure-triage-agent-v1-plan.md` | active | Core-owned marketing action final-failure triage case, FastAPI/LangGraph read-only analysis, Slack human approval, and no automatic replay boundary |
 | `docs/plan/campaign-activity-run-review-v1-plan.md` | active | campaign coupon run target snapshot, hard policy block, AI summary, Slack approval, and reuse of the existing Execution/Dispatch delivery pipeline |
+| `docs/plan/campaign-incrementality-analysis-v1-plan.md` | active | coupon campaign treatment/holdout assignment, post-dispatch incremental revenue query, and index benchmark |
+| `docs/plan/campaign-incrementality-benchmark-handoff.md` | active (in progress) | current campaign performance SQL/index and concurrent Purchase-write benchmark state; use before continuing measurement |
 | `docs/plan/observability-correlation-v1-plan.md` | active | Oracle Compose logs/metrics/traces correlation: Loki/Alloy, sampled Jaeger traces, AI triage observability, and Golden Signals dashboards |
 | `docs/plan/rfm-audience-segment-v1-plan.md` | active (implemented) | RFM repair and RFM-only AudienceSegment filter for MarketingRule; excludes generic segment DSL and membership pre-computation |
+| `docs/plan/dormant-customer-reengagement-query-v1-plan.md` | active | dormant-customer CRM campaign, anti-join delivery suppression, and reverse lookup index benchmark |
+| `docs/plan/abandoned-cart-coupon-candidate-query-v1-plan.md` | active | candidate state; 5M-row index/query comparisons and issuance measurements; reusable local SQL Lab with persistent candidate/purchase fixtures; historical measurement limits |
+| `docs/plan/sql-experiment-session-handoff.md` | active (temporary handoff) | SQL experiment decisions, artifact boundaries, persistent MySQL Lab setup status, and remaining checks; remove after verified handoff and preservation in the existing active plan |
 | `docs/plan/behavior-event-schema-v1.md` | active (implemented, ES cutover pending) | Behavior-event property contract, Entry normalization, MarketingRule condition boundary, and ES strict/flattened mapping |
 | `docs/plan/purchase-cancellation-and-campaign-product-v1-plan.md` | active (implemented) | campaign-only product policy, post-payment cancellation state, and MySQL commercial projection correction |
 | `docs/plan/reconciliation-issue-v1-plan.md` | active (implemented) | durable FCFS reconciliation issue history; daily UserSummary projection repair from the Purchase ledger, with failed repairs retained for operator review |
@@ -63,7 +69,6 @@ These are still useful, but code must win if there is a conflict.
 | `docs/cohort-analysis-optimization-plan.md` | reference | cohort optimization background; T9 is newer for portfolio facts |
 | `docs/behavior-tracker.md` | reference | behavior tracking background; contains Fluentd transition wording, so T3/code is newer for portfolio facts |
 | `docs/code-improvements.md` | reference | code cleanup notes |
-| `docs/Filter_System_Architecture.md` | reference | filter system design context; verify current usage before reuse |
 | `docs/devlog/dev-log-2025-11-18-dashboard-architecture.md` | reference | dashboard architecture development log |
 | `docs/devlog/dev-log-2026-07-15-external-load-generator-boundary.md` | reference | external 3000-VU/800 measurement boundary, host-nginx observability, and stable-network retest criteria |
 | `docs/devlog/dev-log-2026-08-06-webhook-topic-isolation-ab.md` | active evidence | controlled shared-topic vs isolated-topic Webhook delay A/B, FCFS completion and offset boundary |
@@ -79,7 +84,6 @@ These are still useful, but code must win if there is a conflict.
 |---|---|---|
 | `docs/plan/remaining-tasks-and-improvements.md` | legacy backlog | contains old plans, completed items, and outdated claims such as Redisson-based load-test wording |
 | `docs/plan/pinpoint-actuator-k6-prep.md` | legacy/reference | superseded by OTel/Jaeger plan after Pinpoint Docker HBase path failed on ARM Oracle VM |
-| `docs/FCFS_Refactor.md` | legacy/reference | verify against current Redis Lua implementation before reuse |
 | `docs/FLUENT_BIT_DEPLOYMENT.md` | legacy/reference | useful for old K8s log collection context, not current Oracle VM plan |
 | `docs/MONITORING_DEPLOYMENT.md` | legacy/reference | older monitoring stack; first-pass plan now prefers OTel/Jaeger + Actuator for tracing diagnosis |
 | `docs/infrastructure-status-report.md` | legacy/reference | old infrastructure state; do not mix with Oracle VM/k3s plan without rechecking |

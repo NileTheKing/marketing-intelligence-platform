@@ -14,6 +14,7 @@ Keep the existing `JS SDK -> Entry -> Kafka -> Elasticsearch` topology while pre
 - Entry normalizes numeric values to `long`; malformed values for known fields return `400`.
 - Unknown SDK metadata remains accepted under `attributes` and is mapped as Elasticsearch `flattened`.
 - `MarketingRule.propertyConditions` can only use numeric `depth` and `durationSec`, which are the fields currently supported by the range-query implementation.
+- `CART_ITEM_ADDED` and `CART_ITEM_REMOVED` can use the existing numeric `productId` property. The Core abandoned-cart consumer ignores anonymous events and events without this property.
 
 ## Runtime Flow
 
@@ -25,7 +26,9 @@ JS SDK -> Entry identity/normalize -> Kafka axon.event.behavior -> Kafka Connect
                  +-> attributes                 +-> attributes: flattened
 ```
 
-The schema does not add a new consumer, topic, or synchronous ES/DB call to the Entry request path.
+The schema does not add a synchronous ES/DB call to the Entry request path. Kafka Connect consumes every
+behavior event for Elasticsearch. Core also has a separate consumer group for the three abandoned-cart trigger
+types; it materializes coupon candidates in MySQL without changing the Entry request path.
 
 ## ES Cutover
 
