@@ -138,7 +138,9 @@ services:
       MYSQL_PASSWORD: ${AI_TRIAGE_DB_PASSWORD:-change-me}
     command:
       - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
+      # langgraph-checkpoint-mysql joins checkpoint_blobs.channel against a JSON_TABLE
+      # column that always takes utf8mb4's default collation (0900_ai_ci); tables must match.
+      - --collation-server=utf8mb4_0900_ai_ci
     volumes:
       - ai_triage_mysql_data:/var/lib/mysql
     healthcheck:
