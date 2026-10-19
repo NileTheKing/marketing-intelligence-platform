@@ -322,11 +322,19 @@ class Seeder:
             ("블랙프라이데이", 34, 41, None, [
                 ("COUPON", "블랙프라이데이 사전 쿠폰", 34, 0.0, 15)]),
         ]
+        # Audience segments let a coupon activity prepare a new dispatch run from the console.
+        segments = {rfm: self.add("audience_segments", {"name": label, "target_rfm_segment": rfm, "is_active": 1,
+                                                        "created_at": self.day(-120), "updated_at": self.day(-120)})
+                    for rfm, label in [("VIP", "VIP 고객"), ("LOYAL", "충성 고객"),
+                                       ("AT_RISK", "이탈 우려 고객"), ("DORMANT", "휴면 고객")]}
+        campaign_segments = {"가을 테크 위크": "LOYAL", "블랙프라이데이": "AT_RISK"}
         self.campaigns = []
         for name, s, e, target_roas, activities in plan:
+            segment = segments.get(campaign_segments.get(name))
             campaign = self.add("campaigns", {
                 "name": name, "start_at": self.day(s).replace(hour=10), "end_at": self.day(e).replace(hour=23, minute=59),
-                "budget": 0, "reward_type": None, "reward_payload": None, "target_segment_id": None,
+                "budget": 0, "reward_type": None, "reward_payload": None,
+                "target_segment_id": segment["id"] if segment else None,
                 "created_at": self.day(min(s, 0) - 7), "updated_at": self.day(min(s, 0) - 7)})
             campaign["_activities"], campaign["_start"], campaign["_end"] = [], s, e
             campaign["_target_roas"] = target_roas
@@ -379,8 +387,8 @@ class Seeder:
                                                     "updated_at": campaign["created_at"]})
             activity = self.add("campaign_activities", {**base, "name": name, "activity_type": "COUPON",
                                                         "coupon_id": coupon["id"], "marketing_action_id": action["id"],
-                                                        "limit_count": None, "price": 0, "quantity": 0,
-                                                        "budget": 0,
+                                                        "limit_count": 20_000, "price": 0, "quantity": 0,
+                                                        "budget": 0, "coupon_delivery_mode": "DIRECT",
                                                         "holdout_rate_percent": 10, "purpose": "GENERAL_PROMOTION"})
             activity.update(_coupon=coupon, _action=action, _dispatch=self.day(dispatch_offset).replace(hour=10),
                             _treatment_rate=treatment_rate, _discount=discount)
@@ -605,7 +613,7 @@ class Seeder:
                                       "last_login_at": user["_last_seen"], "rfm_segment": segment})
 
     # ── load ────────────────────────────────────────────────────────────────────────────
-    TABLES = ["users", "user_summary", "products", "campaigns", "coupons", "marketing_rules", "marketing_actions",
+    TABLES = ["users", "user_summary", "products", "audience_segments", "campaigns", "coupons", "marketing_rules", "marketing_actions",
               "campaign_activities", "campaign_activity_entries", "campaign_activity_runs",
               "marketing_action_executions", "campaign_activity_run_targets", "user_coupons", "purchases"]
     # Tables that reference the ones above; emptied so nothing points at old ids.
