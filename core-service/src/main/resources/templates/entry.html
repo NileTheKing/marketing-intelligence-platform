@@ -379,20 +379,25 @@
                     const applyButton = document.getElementById('entryButton');
                     const modalButton = document.getElementById('confirm-payment-btn');
 
-                    fetch('/core/api/v1/payments/process', {
+                    // Entry-service payment is two-step: trade the reservation token for an
+                    // approval token, then confirm with the approval token.
+                    const postPayment = (path, reservationToken) => fetch(window.ENTRY_SERVICE_BASE + '/api/v1/payments/' + path, {
                         method: 'POST',
+                        credentials: 'include',
                         headers: {
                             'Authorization': 'Bearer ' + accessToken,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ token: token })
-                    })
-                        .then(response => {
-                            if (!response.ok) {
-                                return response.text().then(text => { throw new Error(text || '결제 처리 중 오류가 발생했습니다.'); });
-                            }
-                            return response.text();
-                        })
+                        body: JSON.stringify({ reservationToken: reservationToken })
+                    }).then(response => response.json().catch(() => ({})).then(body => {
+                        if (!response.ok) {
+                            throw new Error(body.reason || body.message || '결제 처리 중 오류가 발생했습니다.');
+                        }
+                        return body;
+                    }));
+
+                    postPayment('prepare', token)
+                        .then(prepared => postPayment('confirm', prepared.approvalToken))
                         .then(data => {
                             closePaymentModal();
                             showResult('success', '응모 완료!', '결제가 성공적으로 완료되었습니다. 상품을 곧 받아보실 수 있습니다.');
