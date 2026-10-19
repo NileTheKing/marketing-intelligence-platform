@@ -9,6 +9,7 @@
     <nav class="nav">
         <div class="nav-label">분석</div>
         <a href="/admin/dashboard/overview" th:classappend="${active == 'overview'} ? 'active'">개요</a>
+        <a href="/admin/incrementality" th:classappend="${active == 'incrementality'} ? 'active'">증분 효과</a>
         <div class="nav-label">운영</div>
         <a href="/admin/campaigns" th:classappend="${active == 'campaigns'} ? 'active'">캠페인</a>
         <a href="/admin/coupons" th:classappend="${active == 'coupons'} ? 'active'">쿠폰</a>
