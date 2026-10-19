@@ -54,6 +54,24 @@ class SecurityConfigTest {
     }
 
     @Test
+    void productReviewReadIsPublicAndWriteRequiresAuthenticationBeforeAdminProductRule() throws Exception {
+        mockMvc.perform(get("/api/v1/products/42/reviews"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/products/42/reviews")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/products/42/reviews")
+                        .with(user("1").roles("USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/products/search?keyword=phone")
+                        .with(user("1").roles("USER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void anonymousBrowserRequestStillStartsOAuthLogin() throws Exception {
         mockMvc.perform(get("/products/1"))
                 .andExpect(status().isFound())
