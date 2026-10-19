@@ -1,7 +1,6 @@
 package com.axon.core_service.commandprocessing;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,40 +13,46 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.BatchListenerFailedException;
 
 class CampaignActivityCommandDispatcherTest {
 
     @Test
-    void dispatchSendsFailedBatchToDlt() {
+    void reportsFailedMessageIndexInsteadOfRoutingWholeBatchToDlt() {
         CampaignStrategy strategy = new FailingCampaignStrategy();
         KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
         CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
         CampaignActivityKafkaProducerDto message = message();
-        when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message))
-                .thenReturn(CompletableFuture.completedFuture(null));
-        CampaignActivityCommandDispatcher dispatcher =
-                new CampaignActivityCommandDispatcher(List.of(strategy), kafkaTemplate, pipelineMetrics);
-
-        dispatcher.dispatch(List.of(message));
-
-        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), eq(message));
-        verify(pipelineMetrics).recordDltRouted("campaign-command", 1);
-    }
-
-    @Test
-    void dispatchPropagatesDltFailureSoListenerCannotCommitOffset() {
-        CampaignStrategy strategy = new FailingCampaignStrategy();
-        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
-        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
-        CampaignActivityKafkaProducerDto message = message();
-        when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message))
-                .thenReturn(CompletableFuture.failedFuture(
-                        new IllegalStateException("dlt unavailable")));
         CampaignActivityCommandDispatcher dispatcher =
                 new CampaignActivityCommandDispatcher(List.of(strategy), kafkaTemplate, pipelineMetrics);
 
         assertThatThrownBy(() -> dispatcher.dispatch(List.of(message)))
-                .hasRootCauseMessage("dlt unavailable");
+                .isInstanceOf(BatchListenerFailedException.class)
+                .satisfies(failure -> org.assertj.core.api.Assertions.assertThat(
+                        ((BatchListenerFailedException) failure).getIndex()).isZero());
+
+        org.mockito.Mockito.verifyNoInteractions(kafkaTemplate);
+    }
+
+    @Test
+    void dispatchPropagatesDltFailureWithFailingMessageIndex() {
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        CorePipelineMetrics pipelineMetrics = mock(CorePipelineMetrics.class);
+        CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(CampaignActivityType.GIVEAWAY)
+                .userId(10L)
+                .build();
+        when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new IllegalStateException("dlt unavailable")));
+        CampaignActivityCommandDispatcher dispatcher =
+                new CampaignActivityCommandDispatcher(List.of(), kafkaTemplate, pipelineMetrics);
+
+        assertThatThrownBy(() -> dispatcher.dispatch(List.of(message)))
+                .isInstanceOf(BatchListenerFailedException.class)
+                .hasRootCauseMessage("dlt unavailable")
+                .satisfies(failure -> org.assertj.core.api.Assertions.assertThat(
+                        ((BatchListenerFailedException) failure).getIndex()).isZero());
     }
 
     @Test
@@ -59,7 +64,8 @@ class CampaignActivityCommandDispatcherTest {
                 new CampaignActivityCommandDispatcher(List.of(strategy), kafkaTemplate, pipelineMetrics);
 
         assertThatThrownBy(() -> dispatcher.dispatch(List.of(message())))
-                .isInstanceOf(OffsetCommitBlockedException.class);
+                .isInstanceOf(BatchListenerFailedException.class)
+                .hasCauseInstanceOf(OffsetCommitBlockedException.class);
         org.mockito.Mockito.verifyNoInteractions(kafkaTemplate);
     }
 
@@ -121,11 +127,81 @@ class CampaignActivityCommandDispatcherTest {
         verify(pipelineMetrics).recordDltRouted("campaign-command", 1);
     }
 
+    @Test
+    void mapsStrategyFailureIndexBackToOriginalListenerBatch() {
+        CampaignStrategy couponStrategy = new CampaignStrategy() {
+            @Override
+            public void process(CampaignActivityKafkaProducerDto event) {
+            }
+
+            @Override
+            public CampaignActivityType getType() {
+                return CampaignActivityType.COUPON;
+            }
+        };
+        BatchStrategy fcfsStrategy = new BatchStrategy() {
+            @Override
+            public void process(CampaignActivityKafkaProducerDto event) {
+            }
+
+            @Override
+            public void processBatch(List<CampaignActivityKafkaProducerDto> messages) {
+                throw new BatchListenerFailedException("record failed", new IllegalStateException("db"), 1);
+            }
+
+            @Override
+            public CampaignActivityType getType() {
+                return CampaignActivityType.FIRST_COME_FIRST_SERVE;
+            }
+        };
+        CampaignActivityKafkaProducerDto coupon = message(CampaignActivityType.COUPON, 1L);
+        CampaignActivityKafkaProducerDto firstFcfs = message(CampaignActivityType.FIRST_COME_FIRST_SERVE, 2L);
+        CampaignActivityKafkaProducerDto secondFcfs = message(CampaignActivityType.FIRST_COME_FIRST_SERVE, 3L);
+        CampaignActivityCommandDispatcher dispatcher = new CampaignActivityCommandDispatcher(
+                List.of(couponStrategy, fcfsStrategy), mock(KafkaTemplate.class), mock(CorePipelineMetrics.class));
+
+        assertThatThrownBy(() -> dispatcher.dispatch(List.of(coupon, firstFcfs, secondFcfs)))
+                .isInstanceOf(BatchListenerFailedException.class)
+                .satisfies(failure -> org.assertj.core.api.Assertions.assertThat(
+                        ((BatchListenerFailedException) failure).getIndex()).isEqualTo(2));
+    }
+
+    @Test
+    void propagatesUnindexedBatchFailureInsteadOfReprocessingMessagesIndividually() {
+        BatchStrategy strategy = new BatchStrategy() {
+            @Override
+            public void process(CampaignActivityKafkaProducerDto event) {
+                throw new AssertionError("batch failure must not trigger per-message processing");
+            }
+
+            @Override
+            public void processBatch(List<CampaignActivityKafkaProducerDto> messages) {
+                throw new IllegalStateException("batch database failure");
+            }
+
+            @Override
+            public CampaignActivityType getType() {
+                return CampaignActivityType.COUPON;
+            }
+        };
+        CampaignActivityCommandDispatcher dispatcher = new CampaignActivityCommandDispatcher(
+                List.of(strategy), mock(KafkaTemplate.class), mock(CorePipelineMetrics.class));
+
+        assertThatThrownBy(() -> dispatcher.dispatch(List.of(
+                message(CampaignActivityType.COUPON, 1L), message(CampaignActivityType.COUPON, 2L))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("batch database failure");
+    }
+
     private static CampaignActivityKafkaProducerDto message() {
+        return message(CampaignActivityType.FIRST_COME_FIRST_SERVE, 10L);
+    }
+
+    private static CampaignActivityKafkaProducerDto message(CampaignActivityType type, Long userId) {
         return CampaignActivityKafkaProducerDto.builder()
-                .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .campaignActivityType(type)
                 .campaignActivityId(1L)
-                .userId(10L)
+                .userId(userId)
                 .build();
     }
 

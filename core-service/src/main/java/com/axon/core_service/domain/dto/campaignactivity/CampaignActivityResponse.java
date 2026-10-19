@@ -2,6 +2,7 @@ package com.axon.core_service.domain.dto.campaignactivity;
 
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
+import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.messaging.CampaignActivityType;
 import java.time.LocalDateTime;
@@ -36,8 +37,12 @@ public class CampaignActivityResponse {
     private final java.math.BigDecimal budget; // Added budget field
     private final Integer expectedRecipientCount;
     private final Integer maxRecipientCount;
+    private final Integer holdoutRatePercent;
     private final CampaignActivityPurpose purpose;
     private final String operatorMemo;
+    private final CouponDeliveryMode couponDeliveryMode;
+    private final Integer delayMinutes;
+    private final Integer dormantDays;
 
     /**
      * Create a CampaignActivityResponse from a CampaignActivity with no participant
@@ -90,8 +95,14 @@ public class CampaignActivityResponse {
                 .budget(campaignActivity.getBudget()) // Populate budget
                 .expectedRecipientCount(campaignActivity.getExpectedRecipientCount())
                 .maxRecipientCount(campaignActivity.getMaxRecipientCount())
+                .holdoutRatePercent(campaignActivity.getHoldoutRatePercent())
                 .purpose(campaignActivity.getPurpose())
                 .operatorMemo(campaignActivity.getOperatorMemo())
+                .couponDeliveryMode(campaignActivity.getCouponDeliveryMode())
+                .delayMinutes(campaignActivity.getAbandonedCartCouponCampaign() == null ? null
+                        : campaignActivity.getAbandonedCartCouponCampaign().getDelayMinutes())
+                .dormantDays(campaignActivity.getDormantCustomerCampaign() == null ? null
+                        : campaignActivity.getDormantCustomerCampaign().getDormantDays())
                 .build();
     }
 }

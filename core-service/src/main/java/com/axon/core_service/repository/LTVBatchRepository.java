@@ -14,7 +14,8 @@ public interface LTVBatchRepository extends JpaRepository<LTVBatch, Long> {
     /**
      * 특정 캠페인 활동의 모든 월별 통계 조회 (그래프용)
      */
-    @EntityGraph(attributePaths = "campaignActivity")
+    @EntityGraph(attributePaths = {"campaignActivity", "campaignActivity.abandonedCartCouponCampaign",
+            "campaignActivity.dormantCustomerCampaign"})
     List<LTVBatch> findByCampaignActivityIdOrderByMonthOffsetAsc(Long campaignActivityId);
 
     /**

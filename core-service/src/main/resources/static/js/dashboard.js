@@ -1,356 +1,156 @@
 document.addEventListener('DOMContentLoaded', function () {
+    const ACCENT = '#2b5cd6';
+    const MUTED = '#dcdad4';
+    const PERIOD_LABELS = { '1d': '최근 24시간', '7d': '최근 7일', '30d': '최근 30일' };
+    const FUNNEL_LABELS = { VISIT: '방문', ENGAGE: '참여 클릭', QUALIFY: '당첨', PURCHASE: '결제' };
     const activityId = document.getElementById('activityId').value;
-    let currentPeriod = '7d'; // Default
-    let funnelChart = null;
+    let currentPeriod = '7d';
     let trafficChart = null;
 
-    // Initialize Dashboard
-    initDashboard();
-
-    // Make functions available globally for HTML onclick handlers
-    window.togglePeriodDropdown = function () {
-        document.getElementById('periodDropdownMenu').classList.toggle('hidden');
-    }
-
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function (event) {
-        const dropdown = document.getElementById('periodDropdownMenu');
-        const btn = document.getElementById('periodDropdownBtn');
-        if (!dropdown.contains(event.target) && !btn.contains(event.target)) {
-            dropdown.classList.add('hidden');
-        }
+    document.querySelectorAll('#periodSeg button').forEach(button => {
+        button.addEventListener('click', () => {
+            currentPeriod = button.dataset.period;
+            document.querySelectorAll('#periodSeg button').forEach(b => b.classList.toggle('on', b === button));
+            setText('periodLabel', `${PERIOD_LABELS[currentPeriod]} · 결제 확정 기준`);
+            fetchDashboardData();
+        });
     });
 
-    window.changePeriod = function (period, label) {
-        currentPeriod = period;
-        document.getElementById('currentPeriodLabel').textContent = label;
-        togglePeriodDropdown(); // Close menu
-
-        // Refresh data immediately
-        fetchDashboardData();
-    }
-
-    function initDashboard() {
-        fetchDashboardData();
-        // Poll every 5 seconds for real-time updates
-        setInterval(fetchRealtimeData, 5000);
-    }
+    fetchDashboardData();
+    // Poll every 5 seconds for real-time updates
+    setInterval(fetchDashboardData, 5000);
 
     async function fetchDashboardData() {
         try {
             const response = await fetch(`/api/v1/dashboard/activity/${activityId}?period=${currentPeriod}`);
             const data = await response.json();
-
-            updateOverviewCards(data.overview, data.previousOverview);
-            updateRealtimeStatus(data.realtime);
-            renderFunnelChart(data.funnel);
-            renderTrafficChart(data.trafficTrend);
-            updateLastUpdatedTime();
+            updateOverview(data.overview, data.previousOverview);
+            updateStock(data.realtime);
+            renderFunnel(data.funnel || []);
+            renderTrafficChart(data.trafficTrend || []);
+            setText('lastUpdated', `${new Date().toLocaleTimeString('ko-KR', { hour12: false })} 갱신`);
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         }
     }
 
-    async function fetchRealtimeData() {
-        try {
-            // Realtime data might not need period, but keeping it consistent or fetching only realtime endpoint
-            // The controller for activity dashboard uses period for overview/graphs
-            // For strict realtime status, period matters less, but let's keep it consistent
-            const response = await fetch(`/api/v1/dashboard/activity/${activityId}?period=${currentPeriod}`);
-            const data = await response.json();
-
-            updateOverviewCards(data.overview, data.previousOverview);
-            updateRealtimeStatus(data.realtime);
-            // Update charts every 5 seconds for real-time visualization
-            renderFunnelChart(data.funnel);
-            renderTrafficChart(data.trafficTrend);
-            updateLastUpdatedTime();
-        } catch (error) {
-            console.error('Error fetching realtime data:', error);
-        }
+    function updateOverview(overview, previous) {
+        if (!overview) return;
+        setText('gmv', formatWon(overview.gmv));
+        setHtml('gmvSub', `구매 ${formatNumber(overview.purchaseCount)}건${change(overview.gmv, previous?.gmv)}`);
+        setText('aov', formatWon(overview.averageOrderValue));
+        setText('aovSub', '거래액 ÷ 구매');
+        setText('conversionRate', `${(overview.conversionRate || 0).toFixed(1)}%`);
+        setText('conversionSub', `방문 ${formatNumber(overview.totalVisits)}명 중 ${formatNumber(overview.purchaseCount)}명`);
+        const roas = document.getElementById('roas');
+        roas.textContent = `${Math.round(overview.roas || 0)}%`;
+        roas.classList.toggle('low', overview.budget > 0 && overview.roas < 100);
+        setText('budget', overview.budget ? `예산 ${formatWon(overview.budget)}` : '예산 미설정');
     }
 
-    function updateOverviewCards(overview, previous) {
-        // Helper to calculate percentage change
-        const calcChange = (current, prev) => {
-            if (!prev || prev === 0) return { value: '-', type: 'neutral' };
-            const change = ((current - prev) / prev) * 100;
-            return {
-                value: (change > 0 ? '+' : '') + change.toFixed(1) + '%',
-                type: change > 0 ? 'up' : (change < 0 ? 'down' : 'neutral')
-            };
-        };
-
-        // Update Funnel KPIs
-        animateValue('totalVisits', overview.totalVisits);
-        updateTrend('totalVisits', calcChange(overview.totalVisits, previous?.totalVisits));
-
-        animateValue('totalEngages', overview.totalEngages);
-        updateTrend('totalEngages', calcChange(overview.totalEngages, previous?.totalEngages));
-
-        animateValue('totalQualifies', overview.totalQualifies);
-        updateTrend('totalQualifies', calcChange(overview.totalQualifies, previous?.totalQualifies));
-
-        animateValue('purchaseCount', overview.purchaseCount);
-        updateTrend('purchaseCount', calcChange(overview.purchaseCount, previous?.purchaseCount));
-
-        // Update Marketing KPIs
-        updateCurrencyValue('gmv', overview.gmv);
-        updateTrend('gmv', calcChange(overview.gmv, previous?.gmv));
-
-        updatePercentageValue('engagementRate', overview.engagementRate);
-        updateTrend('engagementRate', calcChange(overview.engagementRate, previous?.engagementRate));
-
-        updatePercentageValue('conversionRate', overview.conversionRate);
-        updateTrend('conversionRate', calcChange(overview.conversionRate, previous?.conversionRate));
-
-        updateCurrencyValue('aov', overview.averageOrderValue);
-        updateTrend('aov', calcChange(overview.averageOrderValue, previous?.averageOrderValue));
-
-        updatePercentageValue('roas', overview.roas);
-        updateTrend('roas', calcChange(overview.roas, previous?.roas));
+    // Previous period with no traffic (e.g. before the activity opened) has nothing to compare with.
+    function change(current, prev) {
+        if (!prev) return '';
+        const pct = (current - prev) / prev * 100;
+        return ` · <span class="${pct >= 0 ? 'up' : 'low'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
     }
 
-    function updateCurrencyValue(id, value) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const formatted = '₩' + Math.round(value || 0).toLocaleString();
-        el.textContent = formatted;
+    function updateStock(realtime) {
+        const activity = realtime?.activity;
+        if (!activity) return;
+        const total = activity.totalStock || 0;
+        const remaining = activity.remainingStock || 0;
+        const confirmed = activity.participantCount || 0;
+        const soldPct = total ? Math.min(100, confirmed / total * 100) : 0;
+        const leftPct = total ? Math.min(100 - soldPct, remaining / total * 100) : 0;
+
+        setText('realtimeParticipants', formatNumber(confirmed));
+        setText('realtimeTotal', `/ ${formatNumber(total)}`);
+        document.getElementById('soldBar').style.width = `${soldPct}%`;
+        document.getElementById('leftBar').style.width = `${leftPct}%`;
+        setText('soldLegend', `참여 확정 ${formatNumber(confirmed)}`);
+        setText('leftLegend', `남은 수량 ${formatNumber(remaining)}`);
+        // Unpaid reservations return to stock when their 5-minute token expires.
+        const pending = Math.max(0, total - confirmed - remaining);
+        document.getElementById('stockState').innerHTML = remaining === 0
+            ? '<span class="sold-out">매진</span>'
+            : `${pending ? `결제 대기 ${formatNumber(pending)} · ` : ''}${Math.round(remaining / total * 100)}% 남음`;
     }
 
-    function updatePercentageValue(id, value) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const formatted = (value || 0).toFixed(1) + '%';
-        el.textContent = formatted;
-    }
-
-    function updateTrend(id, change) {
-        const el = document.getElementById(id + '-trend');
-        if (el) {
-            el.textContent = change.value;
-            el.className = `kpi-trend ${change.type}`;
-            // Update icon if needed
-        }
-    }
-
-    function updateRealtimeStatus(realtime) {
-        if (!realtime || !realtime.activity) return;
-
-        const participants = realtime.activity.participantCount || 0;
-        const remaining = realtime.activity.remainingStock || 0;
-        const total = realtime.activity.totalStock || 100; // Fallback to 100 to avoid div by zero
-
-        // Stock Percentage
-        const stockPercentage = Math.round((remaining / total) * 100);
-
-        // Participants Percentage
-        const participantsPercentage = Math.round((participants / total) * 100);
-
-        document.getElementById('realtimeParticipants').textContent = participants.toLocaleString();
-
-        const stockEl = document.getElementById('realtimeStock');
-        stockEl.textContent = `${remaining.toLocaleString()} (${stockPercentage}%)`;
-
-        // Update Stock Bar
-        const stockProgressBar = document.getElementById('stockProgressBar');
-        if (stockProgressBar) {
-            stockProgressBar.style.width = `${stockPercentage}%`;
-        }
-
-        // Update Participants Bar
-        const participantsProgressBar = document.getElementById('participantsProgressBar');
-        if (participantsProgressBar) {
-            participantsProgressBar.style.width = `${participantsPercentage}%`;
-        }
-
-        // Change color based on stock level
-        if (stockPercentage < 10) {
-            stockEl.className = 'text-lg font-bold text-red-600';
-            stockProgressBar.className = 'bg-red-600 h-2.5 rounded-full';
-        } else if (stockPercentage < 50) {
-            stockEl.className = 'text-lg font-bold text-yellow-600';
-            stockProgressBar.className = 'bg-yellow-500 h-2.5 rounded-full';
-        } else {
-            stockEl.className = 'text-lg font-bold text-green-600';
-            stockProgressBar.className = 'bg-green-600 h-2.5 rounded-full';
-        }
-    }
-
-    function animateValue(id, end) {
-        const obj = document.getElementById(id);
-        if (!obj) return;
-
-        const start = parseInt(obj.textContent.replace(/,/g, '')) || 0;
-        if (start === end) return;
-
-        const duration = 1000;
-        const range = end - start;
-        let startTime = null;
-
-        function step(timestamp) {
-            if (!startTime) startTime = timestamp;
-            const progress = Math.min((timestamp - startTime) / duration, 1);
-            const value = Math.floor(progress * range + start);
-            obj.textContent = value.toLocaleString();
-            if (progress < 1) {
-                window.requestAnimationFrame(step);
-            }
-        }
-        window.requestAnimationFrame(step);
-    }
-
-    function renderFunnelChart(funnelData) {
-        const ctx = document.getElementById('funnelChart').getContext('2d');
-
-        const labels = funnelData.map(step => step.step); // Enum name
-        const data = funnelData.map(step => step.count);
-
-        if (funnelChart) {
-            funnelChart.data.labels = labels;
-            funnelChart.data.datasets[0].data = data;
-            funnelChart.update('active');
-        } else {
-            funnelChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Users',
-                        data: data,
-                        // Professional Blue Gradient equivalent steps or distinct slate/blue shades
-                        backgroundColor: [
-                            '#2563eb', // Blue 600
-                            '#3b82f6', // Blue 500
-                            '#60a5fa', // Blue 400
-                            '#93c5fd'  // Blue 300
-                        ],
-                        borderRadius: 3,
-                        barPercentage: 0.5
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: '#1e293b',
-                            padding: 10,
-                            cornerRadius: 4,
-                            callbacks: {
-                                label: function (context) {
-                                    const value = context.raw;
-                                    const total = data[0];
-                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                    return `${value.toLocaleString()} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { display: false, drawBorder: false },
-                            ticks: { display: false }
-                        },
-                        y: {
-                            grid: { display: false, drawBorder: false },
-                            ticks: {
-                                font: { size: 12, family: "-apple-system, BlinkMacSystemFont, 'Segoe UI'" },
-                                color: '#64748b'
-                            }
-                        }
-                    }
-                }
-            });
-        }
+    function renderFunnel(steps) {
+        const top = steps[0]?.count || 0;
+        document.getElementById('funnel').innerHTML = steps.map((step, i) => {
+            const prev = i === 0 ? null : steps[i - 1].count;
+            const rate = prev ? `${(step.count / prev * 100).toFixed(1)}%` : '';
+            const width = top ? Math.max(1, step.count / top * 100) : 0;
+            return `<div class="funnel-row">
+                <div class="funnel-label">${FUNNEL_LABELS[step.step] || step.step}</div>
+                <div class="funnel-bar"><i style="width:${width}%"></i></div>
+                <div class="funnel-count num">${formatNumber(step.count)}</div>
+                <div class="funnel-rate num">${rate}</div>
+            </div>`;
+        }).join('');
     }
 
     function renderTrafficChart(trafficData) {
-        const ctx = document.getElementById('trafficChart').getContext('2d');
-
-        const labels = trafficData.map(d => {
-            const date = new Date(d.timestamp);
-            return date.getHours() + ':00';
-        });
+        const labels = trafficData.map(d => `${new Date(d.timestamp).getHours()}시`);
         const data = trafficData.map(d => d.count);
+        const peak = Math.max(0, ...data);
+        const peakIndex = data.indexOf(peak);
+        const colors = data.map((v, i) => (peak > 0 && i === peakIndex ? ACCENT : MUTED));
+        setText('peakLabel', peak > 0 ? `최대 ${labels[peakIndex]} · ${formatNumber(peak)}명` : '');
 
         if (trafficChart) {
             trafficChart.data.labels = labels;
             trafficChart.data.datasets[0].data = data;
-            trafficChart.update('active');
-        } else {
-            trafficChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Visitors',
-                        data: data,
-                        borderColor: '#2563eb', // Blue 600
-                        backgroundColor: 'rgba(37, 99, 235, 0.05)', // Very subtle fill
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: 0,
-                        pointHoverRadius: 4,
-                        pointHoverBackgroundColor: '#2563eb',
-                        pointHoverBorderColor: '#fff',
-                        pointHoverBorderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: '#1e293b',
-                            titleColor: '#f8fafc',
-                            bodyColor: '#f8fafc',
-                            padding: 10,
-                            cornerRadius: 4,
-                            displayColors: false,
-                            intersect: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                borderDash: [4, 4],
-                                color: '#e2e8f0',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                maxTicksLimit: 5,
-                                color: '#94a3b8',
-                                font: { size: 11 }
-                            }
-                        },
-                        x: {
-                            grid: { display: false, drawBorder: false },
-                            ticks: {
-                                maxTicksLimit: 8,
-                                color: '#94a3b8',
-                                font: { size: 11 }
-                            }
-                        }
-                    }
-                }
-            });
+            trafficChart.data.datasets[0].backgroundColor = colors;
+            trafficChart.update('none');
+            return;
         }
+        trafficChart = new Chart(document.getElementById('trafficChart'), {
+            type: 'bar',
+            data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 2, barPercentage: 0.8, categoryPercentage: 0.9 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `${formatNumber(ctx.raw)}명` } }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        border: { color: '#e7e6e2' },
+                        ticks: { font: { size: 10 }, color: '#93918b', autoSkip: false, maxRotation: 0,
+                            callback: (v, i) => (i % 6 === 0 ? labels[i] : '') }
+                    },
+                    y: { display: false, beginAtZero: true }
+                }
+            }
+        });
     }
 
-    function updateLastUpdatedTime() {
-        const now = new Date();
-        const timeString = now.toLocaleTimeString();
-        const el = document.getElementById('lastUpdated');
-        if (el) el.textContent = `Last updated: ${timeString}`;
+    function setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function setHtml(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = value;
+    }
+
+    function formatNumber(num) {
+        if (num === undefined || num === null || Number.isNaN(Number(num))) return '-';
+        return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 }).format(num);
+    }
+
+    // Exact won below 1억; 억/만 above so large totals stay scannable.
+    function formatWon(amount) {
+        if (amount === undefined || amount === null) return '-';
+        const v = Math.round(Number(amount) || 0);
+        if (v < 1e8) return `${v.toLocaleString('ko-KR')}원`;
+        const man = Math.round((v % 1e8) / 1e4);
+        return `${Math.floor(v / 1e8)}억${man ? ` ${man.toLocaleString('ko-KR')}만` : ''}원`;
     }
 });

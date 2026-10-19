@@ -124,7 +124,10 @@ class SlackNotifier:
                                 context: dict[str, Any], update: bool = False) -> str | None:
         if not self.settings.slack_bot_token or not self.settings.slack_channel_id:
             raise RuntimeError("SLACK_BOT_TOKEN and SLACK_CHANNEL_ID are required")
-        decision_label = "관리자 확인 필요"
+        decision_label = {
+            "FLAG": "구체적인 위험 신호 발견 · 관리자 확인 필요",
+            "REVIEW_REQUIRED": "판단 근거 부족 · 관리자 확인 필요",
+        }.get(output.recommendation, "관리자 확인 필요")
         facts = context.get("facts") or {}
         fact_lines = [f"• 이번 발송 대상은 {run.targetCount}명입니다."]
         if facts.get("expectedRecipientCount") is not None:

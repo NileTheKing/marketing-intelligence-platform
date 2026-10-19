@@ -1,4 +1,28 @@
 window.CampaignActivityModule = {
+    serializeCouponDelivery(activityType, deliveryMode, delayMinutes, dormantDays, purpose, operatorMemo, holdoutRatePercent) {
+        if (activityType !== 'COUPON') return {};
+        return {
+            couponDeliveryMode: deliveryMode,
+            delayMinutes: deliveryMode === 'ABANDONED_CART' ? Number(delayMinutes) : null,
+            dormantDays: deliveryMode === 'DORMANT_CUSTOMER' ? Number(dormantDays) : null,
+            purpose,
+            operatorMemo: operatorMemo.trim(),
+            holdoutRatePercent: holdoutRatePercent === '' || holdoutRatePercent == null
+                ? null
+                : Number(holdoutRatePercent)
+        };
+    },
+
+    applyCouponEdit(activity, controls) {
+        controls.deliveryMode.value = activity.couponDeliveryMode || 'DIRECT';
+        controls.delayMinutes.value = activity.delayMinutes ?? '';
+        controls.dormantDays.value = activity.dormantDays ?? '';
+        controls.purpose.value = activity.purpose || '';
+        controls.operatorMemo.value = activity.operatorMemo || '';
+        controls.holdoutRatePercent.value = activity.holdoutRatePercent ?? '';
+        controls.deliveryMode.disabled = true;
+    },
+
     // ==========================================
     // Filter Registry & Handlers
     // ==========================================

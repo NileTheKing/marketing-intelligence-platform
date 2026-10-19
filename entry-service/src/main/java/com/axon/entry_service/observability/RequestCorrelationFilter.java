@@ -3,6 +3,7 @@ package com.axon.entry_service.observability;
 import java.io.IOException;
 import java.util.UUID;
 import org.slf4j.MDC;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -14,6 +15,12 @@ import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
+@ConditionalOnProperty(
+        prefix = "axon.observability.request-correlation",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class RequestCorrelationFilter extends OncePerRequestFilter {
 
     private static final String REQUEST_ID = "request_id";
@@ -35,4 +42,3 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
         }
     }
 }
-

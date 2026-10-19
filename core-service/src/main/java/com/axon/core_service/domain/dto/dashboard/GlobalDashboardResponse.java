@@ -9,5 +9,8 @@ public record GlobalDashboardResponse(
         List<CampaignRankData> topVisitCampaigns,
         List<CampaignEfficiencyData> campaignEfficiency,
         HeatmapData hourlyTraffic,
+        // Coupon purchases not tied to a campaign run (behavior rules, abandoned cart, re-engagement);
+        // reported separately and not included in overview or campaign totals.
+        PurchaseAggregate unattributedCouponPurchases,
         LocalDateTime calculatedAt
 ) {}

@@ -2,11 +2,14 @@ import asyncio
 import json
 import logging
 import re
+from contextlib import nullcontext
 from typing import Any, TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
+import langsmith as ls
+from langsmith import Client
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from openai import BadRequestError
@@ -28,6 +31,22 @@ from .schemas import AnalysisOutput, CampaignRunReviewOutput, ClaimedCampaignRun
 
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_trace_fields(value: Any) -> Any:
+    """Remove credentials and claim tokens before campaign traces leave the service."""
+    sensitive_fragments = ("token", "secret", "password", "authorization", "api_key")
+    if isinstance(value, dict):
+        return {
+            key: "[REDACTED]" if any(fragment in str(key).lower() for fragment in sensitive_fragments)
+            else _redact_trace_fields(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_trace_fields(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_trace_fields(item) for item in value)
+    return value
 
 
 class GraphState(TypedDict, total=False):
@@ -472,7 +491,27 @@ class CampaignRunReviewRuntime:
         self.core = core
         self.notifier = notifier
         self.checkpointer = checkpointer
+        self.langsmith_client = (
+            Client(
+                api_key=settings.langsmith_api_key,
+                api_url=settings.langsmith_api_url,
+                hide_inputs=_redact_trace_fields,
+                hide_outputs=_redact_trace_fields,
+            )
+            if settings.langsmith_api_key else None
+        )
         self.graph = self._build_graph(checkpointer)
+
+    def _tracing_context(self, run_id: int, operation: str):
+        if self.langsmith_client is None:
+            return nullcontext()
+        return ls.tracing_context(
+            client=self.langsmith_client,
+            enabled=True,
+            project_name=self.settings.langsmith_project,
+            tags=["campaign-run-review", operation],
+            metadata={"workflow": "bulk-coupon-review", "campaign_run_id": run_id},
+        )
 
     def _build_graph(self, checkpointer: Any):
         workflow = StateGraph(CampaignRunGraphState)
@@ -502,10 +541,12 @@ class CampaignRunReviewRuntime:
                 "and may attach codeFlags that you cannot clear. "
                 "Only look for a mismatch between campaignPurpose or operatorMemo and the target segment, recipient "
                 "count, or coupon settings. Do not invent anomalies, recipient attributes, or historical trends. "
-                "Choose FLAG when a manager should review a concrete mismatch or when purpose or memo is missing. "
-                "Choose NO_FLAG only when the supplied facts do not show a mismatch. "
+                "Choose FLAG when the supplied facts show a concrete, supported mismatch. "
+                "Choose REVIEW_REQUIRED when relevant facts are missing, contradictory, or insufficient to decide "
+                "whether the campaign intent matches its settings. Do not guess in these cases. "
+                "Choose NO_FLAG only when the supplied facts are sufficient and show no concrete mismatch. "
                 "Write concise Korean for a manager. Do not expose JSON field names, internal IDs, or enum names. "
-                "Return only JSON with recommendation NO_FLAG|FLAG, summary, and operator_next_step."
+                "Return only JSON with recommendation NO_FLAG|FLAG|REVIEW_REQUIRED, summary, and operator_next_step."
             )
             messages = [
                 SystemMessage(content=system),
@@ -526,7 +567,7 @@ class CampaignRunReviewRuntime:
                 )
                 TRIAGE_LLM_CALLS.labels(outcome="failure").inc()
                 logger.exception("campaign run LLM analysis failed", extra={"event": "campaign_run_llm_failed"})
-                return {"output": self._safe_flag_output(
+                return {"output": self._safe_review_output(
                     "AI 분석을 완료하지 못해 자동 발송하지 않았습니다.",
                     "설정과 대상 수를 확인한 뒤 발송 여부를 결정하세요.",
                 ).model_dump()}
@@ -537,12 +578,22 @@ class CampaignRunReviewRuntime:
             saved = await self.core.save_campaign_run_analysis(
                 run.runId, run.analysisClaimToken, output
             )
-            if saved.get("recommendation") == "FLAG" and output.recommendation != "FLAG":
+            saved_recommendation = saved.get("recommendation")
+            if saved_recommendation == "FLAG" and output.recommendation != "FLAG":
                 return {
                     "saved": saved,
-                    "output": self._safe_flag_output(
+                    "output": self._safe_review_output(
                         "코드 기준에서 추가 확인이 필요한 설정이 발견되었습니다.",
                         "대상 수, 운영 목적과 설정을 확인한 뒤 발송 여부를 결정하세요.",
+                        recommendation="FLAG",
+                    ).model_dump(),
+                }
+            if saved_recommendation == "REVIEW_REQUIRED" and output.recommendation == "NO_FLAG":
+                return {
+                    "saved": saved,
+                    "output": self._safe_review_output(
+                        "검토에 필요한 사실이 충분하지 않아 자동 발송하지 않았습니다.",
+                        "캠페인 설정과 대상 정보를 확인한 뒤 발송 여부를 결정하세요.",
                     ).model_dump(),
                 }
             return {"saved": saved}
@@ -554,7 +605,7 @@ class CampaignRunReviewRuntime:
                 return {"autoDispatched": True}
             return {
                 "autoDispatched": False,
-                "output": self._safe_flag_output(
+                "output": self._safe_review_output(
                     "발송 직전 설정 또는 대상 상태가 바뀌어 자동 발송하지 않았습니다.",
                     "변경된 설정과 대상 수를 확인한 뒤 발송 여부를 결정하세요.",
                 ).model_dump(),
@@ -584,7 +635,8 @@ class CampaignRunReviewRuntime:
             return "reanalyze" if state.get("reanalysis") else "end"
 
         def review_route(state: CampaignRunGraphState) -> str:
-            return "notify" if state.get("saved", {}).get("recommendation") == "FLAG" else "auto_dispatch"
+            return ("notify" if state.get("saved", {}).get("recommendation") in {"FLAG", "REVIEW_REQUIRED"}
+                    else "auto_dispatch")
 
         def auto_dispatch_route(state: CampaignRunGraphState) -> str:
             return "end" if state.get("autoDispatched") else "notify"
@@ -633,13 +685,15 @@ class CampaignRunReviewRuntime:
             config = self._config(run_id)
             checkpoint = await self.graph.aget_state(config)
             if checkpoint.next == ("await_operator",):
-                await self.graph.ainvoke(Command(resume={"action": decision.lower()}), config)
+                with self._tracing_context(run_id, "operator-decision"):
+                    await self.graph.ainvoke(Command(resume={"action": decision.lower()}), config)
             return result
 
     async def _invoke(self, command: Any, run: ClaimedCampaignRun) -> None:
         try:
             await self._ensure_checkpointer_connection()
-            await self.graph.ainvoke(command, self._config(run.runId))
+            with self._tracing_context(run.runId, "analysis"):
+                await self.graph.ainvoke(command, self._config(run.runId))
         except Exception as error:
             try:
                 await self.core.fail_campaign_run_analysis(run.runId, run.analysisClaimToken, str(error))
@@ -658,9 +712,10 @@ class CampaignRunReviewRuntime:
             await ping(reconnect=True)
 
     @staticmethod
-    def _safe_flag_output(summary: str, operator_next_step: str) -> CampaignRunReviewOutput:
+    def _safe_review_output(summary: str, operator_next_step: str,
+                            recommendation: str = "REVIEW_REQUIRED") -> CampaignRunReviewOutput:
         return CampaignRunReviewOutput(
-            recommendation="FLAG",
+            recommendation=recommendation,
             summary=summary,
             operator_next_step=operator_next_step,
         )

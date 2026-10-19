@@ -1,0 +1,5 @@
+services:
+  entry-service:
+    environment:
+      AXON_OBSERVABILITY_REQUEST_CORRELATION_ENABLED: "false"
+      LOGGING_CONFIG: classpath:logback-loadtest-minimal.xml

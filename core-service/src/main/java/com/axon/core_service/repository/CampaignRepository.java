@@ -10,7 +10,9 @@ import java.util.Optional;
 public interface CampaignRepository extends JpaRepository<Campaign, Long> {
 
     @Query("SELECT DISTINCT campaign FROM Campaign campaign " +
-            "LEFT JOIN FETCH campaign.campaignActivities")
+            "LEFT JOIN FETCH campaign.campaignActivities activity " +
+            "LEFT JOIN FETCH activity.abandonedCartCouponCampaign " +
+            "LEFT JOIN FETCH activity.dormantCustomerCampaign")
     List<Campaign> findAllWithActivities();
 
     /**

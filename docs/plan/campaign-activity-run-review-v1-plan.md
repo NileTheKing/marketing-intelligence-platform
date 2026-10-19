@@ -10,7 +10,53 @@ AI는 코드가 확인할 수 없는 의도와 설정의 어긋남만 표시한�
 
 ## Scope
 
-v1은 `COUPON` 활동만 다룬다.
+v1은 `COUPON` 활동 중 일괄 지급(`couponDeliveryMode=DIRECT`)만 다룬다.
+장바구니 이탈과 휴면 고객 쿠폰은 같은 활동 등록 경로와 발급 파이프라인을 사용하지만,
+대상 선정과 실행 시점은 각각의 이벤트/스케줄러가 담당한다. 이 자동 활동에 일괄 Run을
+추가로 만들지 않는다.
+
+### Activity Settings Integration (2026-10-19)
+
+상태: 코드 반영, 집중 Java 테스트 통과, migration 실행 전. 기존 Kafka 명령 종류 `COUPON`은 그대로 유지하고, Core의
+`CouponDeliveryMode`로 `DIRECT`, `ABANDONED_CART`, `DORMANT_CUSTOMER`를 구분한다.
+
+- `Campaign`은 큰 행사, `CampaignActivity`는 소속 활동과 기간/상태의 관리 단위다.
+- 장바구니와 휴면 전용 설정은 `campaign_activity_id` UNIQUE FK로 Activity와 1:1 관계를 가진다.
+- 기존 등록/수정 API에서 활동과 유형에 맞는 설정을 한 트랜잭션으로 저장한다.
+- 자동 실행은 MarketingAction의 활성 여부와 Activity의 상태/기간, 상위 Campaign의
+  지정된 기간도 확인한다. 중지된 장바구니 후보는 삭제/취소하지 않고 재개할 수 있게 유지한다.
+- 중지는 새 작업의 선정과 발행을 막는 경계다. 이미 Kafka에 전달된 명령을 회수하거나
+  실행 중인 발급을 취소하는 기능은 아니다. 설정 테이블의 기존 `is_active`는 이전 데이터
+  호환을 위해 남기되, 운영자가 관리하는 상태의 정본은 Activity다.
+- 일괄 지급만 기존 Run 대상 스냅샷, AI 검토와 승인 흐름을 사용한다. 자동 활동에 대한
+  AI 사전 검토, 발급 예산/누적 한도의 통합 설계는 이번 연결 작업으로 새로 구현하지 않는다.
+- 선착순 필드의 별도 테이블 추출은 보류한다. Entry와 기존 구매 경로의 호환성을 유지하며
+  설정 관계를 추가하는 범위로 한정한다. JPA 상속은 사용하지 않는다.
+- 기존 독립 설정은 migration에서 소속 활동을 부여하되 자동 활성화하지 않는다. 운영자가
+  기간과 설정을 확인하고 활성화해야 한다. 구체적인 이전 절차는 새 migration 주석을 따른다.
+- JS SDK의 장바구니 이벤트 발행, 성과 대시보드 화면, Kafka 전달 보장의 변경은 범위 밖이다.
+
+검증 상태: 프론트 설정 직렬화/수정값 복원 Node 테스트 2개와 JS 문법 검사는 통과했다.
+사용자가 직접 실행한 아래 집중 Java 테스트는 2026-10-19 최종 결과 69개 중 63개 성공,
+실패 0, 제외 6개로 BUILD SUCCESSFUL이었다. 제외는 Kafka consumer 통합 1개,
+MySQL HTTP 통합 4개, 인덱스 벤치마크 1개다. 새 H2 등록/연관관계 테스트는 통과했다.
+최초 실행에서 발견된 LTV의 inverse 1:1 추가 조회는 fetch graph로 해결했고, 일반 JPA
+테스트에 벤치마크 Repository가 중복 등록되는 문제와 불필요한 mock 설정도 수정했다.
+DB migration은 작성 및 코드 검토만 했고 실제 실행하지 않았다. 자동 명령 승인 시스템은
+모델 혼잡으로 실행을 거부했으며 우회하지 않았다.
+
+집중 Java 확인은 `core-service` 디렉터리에서 다음처럼 수행한다(저장소 루트에는 wrapper가 없다).
+
+```sh
+./gradlew test --tests '*CampaignActivity*' --tests '*AbandonedCartCouponCandidate*' \
+  --tests '*AbandonedCartCouponSchedulerTest' --tests '*DormantCustomerCampaignSchedulerTest' \
+  --tests '*StoreViewServiceTest' --tests '*CampaignQueryOptimizationRepositoryTest' \
+  --tests '*JpaAssociationQueryCountTest'
+```
+
+`CampaignActivityCouponDeliveryModeJpaTest`는 실제 서비스 등록 후 전용 설정 FK와
+중지/재개/상위 행사 기간의 후보 조회 반영을 확인한다. 발급 벤치마크의 설정 fixture도
+활성 Activity와 관계를 갖도록 갱신했지만, 대량 실험은 재실행하지 않았다.
 
 ```text
 Campaign
@@ -56,7 +102,7 @@ Campaign
 2. 현재 `UserSummary.rfmSegment`로 대상 사용자 ID를 조회해 `CampaignActivityRunTarget`에 저장한다. `(run_id, user_id)`는 유일하다.
 3. 실제 대상 수, 쿠폰 ID와 할인 정보, 활동 기간, 한도와 예산을 `CampaignActivityRun`의 사실 스냅샷으로 저장한다.
 4. 아래 하드 규칙에 걸리면 `BLOCKED`로 끝낸다. Kafka 메시지는 0건이다.
-5. 통과하면 `PENDING_ANALYSIS`로 두고 AI review를 요청한다. 코드 위험 신호와 AI `FLAG` 중 하나라도 있으면 Slack 검토로 보낸다.
+5. 통과하면 `PENDING_ANALYSIS`로 두고 AI review를 요청한다. 코드 위험 신호와 AI `FLAG` 또는 `REVIEW_REQUIRED` 중 하나라도 있으면 Slack 검토로 보낸다.
 6. 코드 위험 신호가 없고 AI 결과가 `NO_FLAG`이면 Core가 같은 정책을 다시 확인한 뒤 기존 Kafka 발송 경로로 넘긴다.
 
 ### Hard rules
@@ -101,11 +147,11 @@ AI는 아래 정형 사실만 읽는다.
 - 같은 활동의 최근 Run 결과
 - 코드 위험 신호, 목적 선택값, 운영 메모
 
-AI는 `NO_FLAG`, `FLAG` 중 하나와 근거 요약을 만든다. 숫자 계산이나 정책 위반 판단은 새로 하지 않고, 운영 메모의 의도와 대상 세그먼트, 쿠폰 설정이 어긋나는지만 본다. AI 호출 실패나 응답 형식 오류는 안전하게 `FLAG`로 처리한다.
+AI는 `NO_FLAG`, `FLAG`, `REVIEW_REQUIRED` 중 하나와 근거 요약을 만든다. 숫자 계산이나 정책 위반 판단은 새로 하지 않고, 운영 메모의 의도와 대상 세그먼트, 쿠폰 설정이 어긋나는지만 본다. 구체적이고 근거가 있는 불일치는 `FLAG`, 사실이 부족하거나 서로 모순되어 판단할 수 없으면 `REVIEW_REQUIRED`, 충분한 사실에서 불일치가 없을 때만 `NO_FLAG`를 선택한다. `FLAG`와 `REVIEW_REQUIRED`는 모두 자동 발송을 막고 Slack 운영자 검토로 보낸다. AI 호출 실패나 응답 형식 오류도 `REVIEW_REQUIRED`로 안전하게 처리한다.
 
 Slack에서는 운영자가 다음 중 하나를 고른다.
 
-- 승인: `FLAG` Run만 Core가 마지막 상태 확인 뒤 발송한다.
+- 승인: `FLAG` 또는 `REVIEW_REQUIRED` Run은 운영자 승인 뒤 Core가 마지막 상태 확인을 거쳐 발송한다.
 - 추가 확인 요청 또는 확인 결과 입력: 같은 LangGraph thread에서 사실을 다시 읽고 요약을 갱신한다.
 - 종료: Run을 종료하고 Kafka 메시지를 만들지 않는다.
 
@@ -157,7 +203,7 @@ AI와 FastAPI는 Core MySQL 업무 테이블, Kafka, Redis에 직접 접근하�
 
 1. 대상 수가 한도보다 큰 `100장 / 120명` Run은 `BLOCKED`이며 Kafka 메시지가 없다.
 2. 비활성 또는 만료 쿠폰 Run은 `BLOCKED`이며 Kafka 메시지가 없다.
-3. 코드 위험 신호나 AI `FLAG` Run은 Slack 승인 전에는 Kafka 메시지가 없다.
+3. 코드 위험 신호나 AI `FLAG`/`REVIEW_REQUIRED` Run은 Slack 승인 전에는 Kafka 메시지가 없다.
 4. 코드 위험 신호가 없고 AI `NO_FLAG` Run은 Core 재검증 뒤 기존 Kafka 메시지를 만든다.
 5. 승인 전 활동 또는 쿠폰 설정이 바뀌면 발송하지 않고 Slack 검토로 되돌린다.
 6. 중복 승인 요청은 사용자별 Execution, Dispatch, Kafka publish를 각각 한 번만 만든다.

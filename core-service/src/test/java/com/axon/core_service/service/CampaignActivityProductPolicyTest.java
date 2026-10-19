@@ -14,6 +14,8 @@ import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
+import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
+import com.axon.core_service.repository.DormantCustomerCampaignRepository;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.messaging.CampaignActivityType;
 import java.math.BigDecimal;
@@ -63,7 +65,8 @@ class CampaignActivityProductPolicyTest {
             CampaignActivityRepository activityRepository) {
         return new CampaignActivityService(campaignRepository, activityRepository,
                 mock(CampaignActivityEntryRepository.class), productRepository, mock(CouponRepository.class),
-                mock(MarketingActionRepository.class),
+                mock(MarketingActionRepository.class), mock(AbandonedCartCouponCampaignRepository.class),
+                mock(DormantCustomerCampaignRepository.class),
                 mock(StringRedisTemplate.class));
     }
 

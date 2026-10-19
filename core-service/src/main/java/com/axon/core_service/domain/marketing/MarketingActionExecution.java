@@ -25,6 +25,8 @@ import java.time.LocalDateTime;
 @Table(name = "marketing_action_executions", indexes = {
         @Index(name = "idx_marketing_execution_action_target", columnList = "marketing_action_id,user_id,product_id")
 }, uniqueConstraints = {
+        @UniqueConstraint(name = "uk_marketing_execution_reengagement_target",
+                columnNames = {"reengagement_campaign_id", "user_id"}),
         @UniqueConstraint(name = "uk_marketing_execution_campaign_run_target",
                 columnNames = {"campaign_activity_run_id", "user_id"})
 })
@@ -52,6 +54,9 @@ public class MarketingActionExecution {
     @Column(name = "product_id")
     private Long productId;
 
+    @Column(name = "reengagement_campaign_id")
+    private Long reengagementCampaignId;
+
     @Column(name = "campaign_activity_run_id")
     private Long campaignActivityRunId;
 
@@ -68,13 +73,15 @@ public class MarketingActionExecution {
 
     @Builder
     private MarketingActionExecution(Long actionId, Long ruleId, Long actionReferenceId,
-                                     Long userId, Long productId, Long campaignActivityRunId,
+                                     Long userId, Long productId, Long reengagementCampaignId,
+                                     Long campaignActivityRunId,
                                      RewardType channel) {
         this.actionId = actionId;
         this.ruleId = ruleId;
         this.actionReferenceId = actionReferenceId;
         this.userId = userId;
         this.productId = productId;
+        this.reengagementCampaignId = reengagementCampaignId;
         this.campaignActivityRunId = campaignActivityRunId;
         this.channel = channel;
     }

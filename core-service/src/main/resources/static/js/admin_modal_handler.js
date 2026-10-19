@@ -62,19 +62,31 @@ window.adminModalHandler = {
         const existingModal = document.getElementById('edit-modal-backdrop');
         if (existingModal) existingModal.remove();
 
-        const [activityDetails, campaigns] = await Promise.all([
-            fetch(`/api/v1/campaign-activities/${campaignActivityId}`).then(res => res.ok ? res.json() : Promise.reject('캠페인 활동 정보를 불러오는데 실패했습니다.')),
-            fetch('/api/v1/campaigns').then(res => res.ok ? res.json() : Promise.reject('캠페인 목록을 불러오는데 실패했습니다.'))
-        ]).catch(error => {
-            console.error('Error fetching data for edit modal:', error);
-            alert(error);
-            return [null, null];
-        });
+        const activityDetails = await fetch(`/api/v1/campaign-activities/${campaignActivityId}`)
+            .then(res => res.ok ? res.json() : Promise.reject('캠페인 활동 정보를 불러오는데 실패했습니다.'))
+            .catch(error => {
+                console.error('Error fetching data for edit modal:', error);
+                alert(error);
+                return null;
+            });
 
-        if (!activityDetails || !campaigns) return;
+        if (!activityDetails) return;
 
         // Determine initial visibility
         const isCouponType = activityDetails.activityType === 'COUPON';
+        if (isCouponType) {
+            window.location.href = `/admin/campaign-activities/new?activityId=${encodeURIComponent(campaignActivityId)}`;
+            return;
+        }
+
+        const campaigns = await fetch('/api/v1/campaigns')
+            .then(res => res.ok ? res.json() : Promise.reject('캠페인 목록을 불러오는데 실패했습니다.'))
+            .catch(error => {
+                console.error('Error fetching campaign list for edit modal:', error);
+                alert(error);
+                return null;
+            });
+        if (!campaigns) return;
 
         // Fix for name mapping issues (Backend Refactor support)
         if (isCouponType && activityDetails.couponName) {

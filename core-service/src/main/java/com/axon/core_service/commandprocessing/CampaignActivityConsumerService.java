@@ -18,7 +18,8 @@ public class CampaignActivityConsumerService {
     private final CampaignActivityCommandDispatcher dispatcher;
     private final CorePipelineMetrics pipelineMetrics;
 
-    @KafkaListener(topics = KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, groupId = "axon-group")
+    @KafkaListener(topics = KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, groupId = "axon-group",
+            containerFactory = "campaignCommandKafkaListenerContainerFactory")
     public void consume(List<CampaignActivityKafkaProducerDto> messages) {
         if (messages.isEmpty()) {
             return;

@@ -16,6 +16,7 @@ def test_optional_ai_upstream_is_lazy_and_ai_service_has_no_host_port():
     assert "ai-triage-mysql:\n        condition: service_healthy" in ai_service
     assert "healthcheck:" in ai_mysql
     assert "mysqladmin ping" in ai_mysql
+    assert "--collation-server=utf8mb4_0900_ai_ci" in ai_mysql
     assert "resolver 127.0.0.11" in nginx
     assert "set $ai_triage_upstream ai-triage-service:8000;" in nginx
     assert "proxy_pass http://$ai_triage_upstream;" in nginx

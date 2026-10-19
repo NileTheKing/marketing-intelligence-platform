@@ -29,13 +29,17 @@ public class StoreController {
     private String entryServiceUrl;
 
     @GetMapping("/shop")
-    public String mainshop(@RequestParam(required = false) String category, Model model) {
-        StoreViewService.MainShopViewData viewData = storeViewService.getMainShopViewData(category);
+    public String mainshop(@RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "0") int page, Model model) {
+        StoreViewService.MainShopViewData viewData = storeViewService.getMainShopViewData(category, page);
 
         model.addAttribute("rankings", viewData.getRankings());
-        if (category != null && !category.isEmpty()) {
+        if (viewData.getSelectedCategory() != null) {
             model.addAttribute("categoryProducts", viewData.getCategoryProducts());
             model.addAttribute("selectedCategory", viewData.getSelectedCategory());
+            model.addAttribute("page", viewData.getPage());
+            model.addAttribute("hasPrevious", viewData.getPage() > 0);
+            model.addAttribute("hasNext", viewData.isHasNext());
         } else {
             model.addAttribute("techDeals", viewData.getTechDeals());
             model.addAttribute("foodDeals", viewData.getFoodDeals());
@@ -109,14 +113,14 @@ public class StoreController {
 
     @GetMapping("/payment/success")
     public String paymentSuccess(
-            @RequestParam(required = false) Long couponId,
+            @RequestParam(name = "couponId", required = false) Long userCouponId,
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false) BigDecimal finalPrice,
             @CookieValue(value = "accessToken", required = false) String accessToken) {
         Long userId = extractUser(accessToken).userId();
 
         try {
-            storeViewService.recordPaymentSuccess(userId, productId, couponId, finalPrice);
+            storeViewService.recordPaymentSuccess(userId, productId, userCouponId, finalPrice);
         } catch (Exception e) {
             log.error("Failed to record payment success", e);
         }

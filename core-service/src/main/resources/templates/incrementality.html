@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axon - 증분 효과</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <!-- Tailwind is kept only for the chatbot fragment's utility classes. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <style>
+        .head-right { display: flex; align-items: center; gap: 8px; }
+        .head-right select { height: 30px; border: 1px solid var(--border); border-radius: 7px; padding: 0 8px; font: 12px Pretendard, sans-serif; background: var(--surface); color: var(--text); max-width: 280px; }
+        .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 2px; }
+        .seg button { border: 0; background: none; font: 600 12px Pretendard, sans-serif; color: var(--text-3); padding: 3px 10px; border-radius: 5px; cursor: pointer; }
+        .seg button.on { background: #f1f0ec; color: var(--text); }
+
+        .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+        .hero > div { padding: 16px 18px; }
+        .hero > div + div { border-left: 1px solid var(--border); }
+        .hero-val { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin-top: 4px; }
+        .hero-val.pos { color: var(--ok); }
+        .hero-val.neg { color: var(--low); }
+        .hero-formula { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+        .verdict { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+        .verdict.pos { background: #e8f5ee; color: var(--ok); }
+        .verdict.neg { background: var(--low-soft); color: var(--low); }
+        .verdict.weak { background: var(--track); color: var(--text-2); }
+
+        .cmp-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) 78px; gap: 10px; align-items: center; padding: 6px 0; }
+        .cmp-row b { font-size: 12px; font-weight: 600; }
+        .cmp-bar { height: 14px; background: var(--track); border-radius: 3px; overflow: hidden; }
+        .cmp-bar i { display: block; height: 100%; border-radius: 3px; }
+        .cmp-bar.t i { background: var(--accent); }
+        .cmp-bar.h i { background: #b9b7b0; }
+        .cmp-row .num { text-align: right; font-size: 12px; font-weight: 600; }
+        .cmp-title { font-size: 11px; color: var(--text-3); margin: 8px 0 2px; }
+        .cmp-title:first-child { margin-top: 0; }
+
+        .group-h { display: inline-flex; align-items: center; gap: 6px; }
+        .group-h::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+        td.diff { font-weight: 600; }
+        .pos-t { color: var(--ok); }
+        .note { font-size: 11px; color: var(--text-3); margin: 10px 2px 0; line-height: 1.6; }
+    </style>
+</head>
+<body class="console">
+<input type="hidden" id="runId" th:value="${runId}">
+<div class="shell">
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('incrementality')}"></aside>
+
+    <main>
+        <div class="topbar">
+            <div>
+                <div class="crumb">분석 / 증분 효과 / <span th:text="${campaignName} ?: '캠페인'">캠페인</span></div>
+                <h1 th:text="${activityName}">쿠폰 발송</h1>
+            </div>
+            <div class="head-right">
+                <select id="runPicker" aria-label="발송 선택">
+                    <option th:each="run : ${runs}" th:value="${run.runId}" th:text="${run.label}"
+                            th:selected="${run.runId == runId}"></option>
+                </select>
+                <div class="seg" id="windowSeg">
+                    <button data-window="7" class="on">7일</button>
+                    <button data-window="30">30일</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="cat"><b>결과</b><span id="observedLabel">-</span></div>
+        <section class="card hero">
+            <div>
+                <div class="kpi-label">증분 매출</div>
+                <div class="hero-val num" id="incremental">-</div>
+                <div class="hero-formula num" id="formula">-</div>
+                <span class="verdict weak" id="verdict">-</span>
+            </div>
+            <div>
+                <div class="cmp-title">고객 1인당 매출</div>
+                <div class="cmp-row"><b class="group-h" style="--c: var(--accent)">받은 그룹</b><div class="cmp-bar t"><i id="rpuTBar"></i></div><span class="num" id="rpuT">-</span></div>
+                <div class="cmp-row"><b class="group-h" style="--c: #b9b7b0">안 받은 그룹</b><div class="cmp-bar h"><i id="rpuHBar"></i></div><span class="num" id="rpuH">-</span></div>
+                <div class="cmp-title">구매 전환율</div>
+                <div class="cmp-row"><b class="group-h" style="--c: var(--accent)">받은 그룹</b><div class="cmp-bar t"><i id="cvrTBar"></i></div><span class="num" id="cvrT">-</span></div>
+                <div class="cmp-row"><b class="group-h" style="--c: #b9b7b0">안 받은 그룹</b><div class="cmp-bar h"><i id="cvrHBar"></i></div><span class="num" id="cvrH">-</span></div>
+            </div>
+        </section>
+
+        <div class="cat"><b>그룹 비교</b><span>대상 고객을 무작위로 나눠 한쪽에만 쿠폰을 보냄</span></div>
+        <section class="card">
+            <table>
+                <thead><tr><th>지표</th><th class="r"><span class="group-h" style="--c: var(--accent)">받은 그룹</span></th><th class="r"><span class="group-h" style="--c: #b9b7b0">안 받은 그룹</span></th><th class="r">차이</th></tr></thead>
+                <tbody id="compareBody"></tbody>
+            </table>
+        </section>
+        <p class="note">증분 매출 = (받은 그룹 1인당 매출 − 안 받은 그룹 1인당 매출) × 받은 그룹 인원. 안 받은 그룹은 쿠폰이 없었어도 샀을 구매를 보여 주므로, 쿠폰으로 산 매출 전체가 아니라 쿠폰 때문에 늘어난 매출만 셉니다.</p>
+    </main>
+</div>
+
+<script th:src="@{/js/incrementality.js}"></script>
+<div th:replace="~{fragments/chatbot :: chatbot}"></div>
+<script th:src="@{/js/chatbot.js}"></script>
+</body>
+</html>

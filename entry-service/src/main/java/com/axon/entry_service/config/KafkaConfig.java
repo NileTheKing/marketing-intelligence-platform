@@ -40,30 +40,12 @@ public class KafkaConfig {
     }
 
     /**
-     * Create a ProducerFactory specialized for transactional messaging.
-     */
-    @Bean
-    public ProducerFactory<String, Object> transactionalProducerFactory() {
-        DefaultKafkaProducerFactory<String, Object> factory = new DefaultKafkaProducerFactory<>(producerFactory().getConfigurationProperties());
-        factory.setTransactionIdPrefix("entry-tx-");
-        return factory;
-    }
-
-    /**
      * Default KafkaTemplate for high-throughput, non-transactional messages (e.g., behavior logs).
      */
     @Bean
     @Primary
     public KafkaTemplate<String, Object> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
-    }
-
-    /**
-     * Transactional KafkaTemplate for critical business commands (e.g., purchases, inventory).
-     */
-    @Bean(name = "transactionalKafkaTemplate")
-    public KafkaTemplate<String, Object> transactionalKafkaTemplate() {
-        return new KafkaTemplate<>(transactionalProducerFactory());
     }
 
     /**
@@ -79,7 +61,7 @@ public class KafkaConfig {
     @Bean
     public ConsumerFactory<String, Object> consumerFactory() {
         JsonDeserializer<Object> deserializer = new JsonDeserializer<>();
-        deserializer.addTrustedPackages("*");
+        deserializer.addTrustedPackages("com.axon.messaging.dto");
 
         Map<String, Object> config = new HashMap<>();
         config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker_port);

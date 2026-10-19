@@ -6,7 +6,7 @@
       "properties": {
         "eventId": { "type": "long" },
         "eventName": { "type": "keyword" },
-        "triggerType": { "type": "keyword" },
+        "triggerType": { "type": "keyword", "fields": { "keyword": { "type": "keyword" } } },
         "occurredAt": { "type": "date" },
         "userId": { "type": "long" },
         "sessionId": { "type": "keyword" },

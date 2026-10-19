@@ -63,6 +63,7 @@ class CouponStrategyTest {
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getUserId()).isEqualTo(1L);
         assertThat(saved.get(0).getCoupon().getId()).isEqualTo(10L);
+        assertThat(saved.get(0).getMarketingActionExecutionId()).isEqualTo(701L);
     }
 
     @Test
@@ -94,6 +95,7 @@ class CouponStrategyTest {
                 .campaignActivityId(100L)
                 .userId(userId)
                 .couponId(couponId)
+                .executionId(701L)
                 .timestamp(1234L)
                 .build();
     }

@@ -8,9 +8,11 @@ import com.axon.core_service.domain.dto.dashboard.DashboardResponse;
 import com.axon.core_service.domain.dto.dashboard.GlobalDashboardResponse;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.repository.CouponAttributionRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.domain.dto.dashboard.PurchaseAggregate;
 import com.axon.core_service.domain.dto.dashboard.PurchaseAggregateByActivity;
+import com.axon.core_service.domain.dto.dashboard.PurchaseAggregateByCampaign;
 import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
 import org.junit.jupiter.api.DisplayName;
@@ -45,13 +47,15 @@ class DashboardServiceTest {
         CampaignRepository campaignRepository = mock(CampaignRepository.class);
         CampaignActivityRepository campaignActivityRepository = mock(CampaignActivityRepository.class);
         PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
+        CouponAttributionRepository couponAttributionRepository = mock(CouponAttributionRepository.class);
         DashboardService dashboardService = new DashboardService(
                 realtimeMetricsService,
                 behaviorEventService,
                 campaignRepository,
                 campaignActivityRepository,
                 purchaseRepository,
-                new DashboardMetricCalculator());
+                new DashboardMetricCalculator(),
+                couponAttributionRepository);
 
         Campaign firstCampaign = campaign(1L, "first", BigDecimal.TEN);
         Campaign secondCampaign = campaign(2L, "second", BigDecimal.valueOf(20));
@@ -77,6 +81,52 @@ class DashboardServiceTest {
     }
 
     @Test
+    @DisplayName("Global Dashboard는 캠페인이 발송한 쿠폰 구매를 그 캠페인 거래액에 더하고, 미귀속 쿠폰 구매는 따로 낸다")
+    void getGlobalDashboardAttributesCouponPurchasesToCampaign() throws Exception {
+        BehaviorEventService behaviorEventService = mock(BehaviorEventService.class);
+        CampaignRepository campaignRepository = mock(CampaignRepository.class);
+        PurchaseRepository purchaseRepository = mock(PurchaseRepository.class);
+        CouponAttributionRepository couponAttributionRepository = mock(CouponAttributionRepository.class);
+        DashboardService dashboardService = new DashboardService(
+                mock(RealtimeMetricsService.class),
+                behaviorEventService,
+                campaignRepository,
+                mock(CampaignActivityRepository.class),
+                purchaseRepository,
+                new DashboardMetricCalculator(),
+                couponAttributionRepository);
+
+        Campaign fcfsCampaign = campaign(1L, "fcfs", BigDecimal.valueOf(100));
+        Campaign couponCampaign = campaign(2L, "coupon", BigDecimal.valueOf(100));
+        fcfsCampaign.getCampaignActivities().add(activity(11L, fcfsCampaign));
+        couponCampaign.getCampaignActivities().add(activity(21L, couponCampaign));
+
+        when(campaignRepository.findAllWithActivities()).thenReturn(List.of(fcfsCampaign, couponCampaign));
+        when(behaviorEventService.getAllCampaignStats(any(), any())).thenReturn(Map.of());
+        when(behaviorEventService.getHourlyTraffic(any(), any(), any())).thenReturn(Map.of());
+        when(purchaseRepository.findConfirmedAggregatesByActivityIdsAndPeriod(any(), any(), any()))
+                .thenReturn(List.of(new PurchaseAggregateByActivity(11L, 2L, BigDecimal.valueOf(200))));
+        when(couponAttributionRepository.findCouponPurchasesByCampaign(any(), any()))
+                .thenReturn(List.of(new PurchaseAggregateByCampaign(2L, 4L, BigDecimal.valueOf(300))));
+        when(couponAttributionRepository.findUnattributedCouponPurchases(any(), any()))
+                .thenReturn(new PurchaseAggregate(5L, BigDecimal.valueOf(700)));
+
+        GlobalDashboardResponse response = dashboardService.getGlobalDashboard();
+
+        assertThat(response.campaignEfficiency())
+                .filteredOn(data -> data.campaignId().equals(2L))
+                .singleElement()
+                .satisfies(data -> {
+                    assertThat(data.gmv()).isEqualByComparingTo("300");
+                    assertThat(data.roas()).isEqualTo(300.0);
+                });
+        assertThat(response.overview().purchaseCount()).isEqualTo(6L);
+        assertThat(response.overview().gmv()).isEqualByComparingTo("500");
+        assertThat(response.unattributedCouponPurchases().purchaseCount()).isEqualTo(5L);
+        assertThat(response.unattributedCouponPurchases().gmv()).isEqualByComparingTo("700");
+    }
+
+    @Test
     @DisplayName("CUSTOM Activity Dashboard는 지정한 종료 시각과 같은 길이의 이전 구간을 사용한다")
     void getDashboardByActivityUsesExactCustomWindow() throws Exception {
         RealtimeMetricsService realtimeMetricsService = mock(RealtimeMetricsService.class);
@@ -90,7 +140,8 @@ class DashboardServiceTest {
                 campaignRepository,
                 campaignActivityRepository,
                 purchaseRepository,
-                new DashboardMetricCalculator());
+                new DashboardMetricCalculator(),
+                mock(CouponAttributionRepository.class));
 
         Long activityId = 9L;
         LocalDateTime start = LocalDateTime.of(2026, 8, 1, 10, 0);
@@ -130,7 +181,8 @@ class DashboardServiceTest {
                 campaignRepository,
                 campaignActivityRepository,
                 purchaseRepository,
-                new DashboardMetricCalculator());
+                new DashboardMetricCalculator(),
+                mock(CouponAttributionRepository.class));
 
         Long activityId = 1L;
         CampaignActivity activity = CampaignActivity.builder()
@@ -183,7 +235,8 @@ class DashboardServiceTest {
                 campaignRepository,
                 campaignActivityRepository,
                 purchaseRepository,
-                new DashboardMetricCalculator());
+                new DashboardMetricCalculator(),
+                mock(CouponAttributionRepository.class));
 
         Long activityId = 2L;
         CampaignActivity activity = CampaignActivity.builder()

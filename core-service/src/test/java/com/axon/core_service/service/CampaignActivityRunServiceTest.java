@@ -12,6 +12,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
+import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
 import com.axon.core_service.domain.coupon.Coupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRunAnalysisRequest;
@@ -58,6 +59,8 @@ class CampaignActivityRunServiceTest {
                         .name("VIP").targetRfmSegment(RfmSegment.VIP).isActive(true).build()));
         when(userSummaryRepository.countCouponCampaignTargets(RfmSegment.VIP, 30L)).thenReturn(120L);
         when(runRepository.sumReservedTargetCount(org.mockito.ArgumentMatchers.eq(1L), anyList())).thenReturn(0L);
+        when(userSummaryRepository.findCouponCampaignTargetUserIds(any(), any(), any()))
+                .thenReturn(java.util.stream.LongStream.rangeClosed(1, 120).boxed().toList());
         when(runRepository.save(any(CampaignActivityRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service().prepare(1L);
@@ -65,6 +68,21 @@ class CampaignActivityRunServiceTest {
         assertThat(response.status()).isEqualTo(CampaignActivityRunStatus.BLOCKED.name());
         assertThat(response.blockedReason()).isEqualTo("Target count exceeds maximum recipient count");
         verify(targetRepository, never()).saveAll(any());
+        verify(kafkaTemplate, never()).send(any(String.class), any());
+    }
+
+    @Test
+    void blocksAutomatedCouponActivityFromManualRunPreparation() {
+        CampaignActivity activity = couponActivity(100);
+        ReflectionTestUtils.setField(activity, "couponDeliveryMode",
+                com.axon.core_service.domain.campaignactivity.CouponDeliveryMode.ABANDONED_CART);
+        when(activityRepository.findWithCampaignCouponAndActionByIdForUpdate(1L)).thenReturn(Optional.of(activity));
+        when(runRepository.save(any(CampaignActivityRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service().prepare(1L);
+
+        assertThat(response.status()).isEqualTo(CampaignActivityRunStatus.BLOCKED.name());
+        verify(userSummaryRepository, never()).countCouponCampaignTargets(any(), any());
         verify(kafkaTemplate, never()).send(any(String.class), any());
     }
 
@@ -77,6 +95,8 @@ class CampaignActivityRunServiceTest {
                         .name("VIP").targetRfmSegment(RfmSegment.VIP).isActive(true).build()));
         when(userSummaryRepository.countCouponCampaignTargets(RfmSegment.VIP, 30L)).thenReturn(20L);
         when(runRepository.sumReservedTargetCount(org.mockito.ArgumentMatchers.eq(1L), anyList())).thenReturn(90L);
+        when(userSummaryRepository.findCouponCampaignTargetUserIds(any(), any(), any()))
+                .thenReturn(java.util.stream.LongStream.rangeClosed(1, 20).boxed().toList());
         when(runRepository.save(any(CampaignActivityRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service().prepare(1L);
@@ -89,13 +109,15 @@ class CampaignActivityRunServiceTest {
     @Test
     void blocksDiscountMistakeWhenActualRecipientsExceedTheCampaignBudget() {
         CampaignActivity activity = couponActivity(200, BigDecimal.valueOf(50_000), BigDecimal.valueOf(1_000_000));
-        activity.updateRecipientPolicy(120, 200);
+        activity.updateRecipientPolicy(120, 200, 10);
         when(activityRepository.findWithCampaignCouponAndActionByIdForUpdate(1L)).thenReturn(Optional.of(activity));
         when(audienceSegmentRepository.findById(10L)).thenReturn(Optional.of(
                 com.axon.core_service.domain.marketing.AudienceSegment.builder()
                         .name("VIP").targetRfmSegment(RfmSegment.VIP).isActive(true).build()));
         when(userSummaryRepository.countCouponCampaignTargets(RfmSegment.VIP, 30L)).thenReturn(120L);
         when(runRepository.sumReservedTargetCount(org.mockito.ArgumentMatchers.eq(1L), anyList())).thenReturn(0L);
+        when(userSummaryRepository.findCouponCampaignTargetUserIds(any(), any(), any()))
+                .thenReturn(java.util.stream.LongStream.rangeClosed(1, 120).boxed().toList());
         when(runRepository.save(any(CampaignActivityRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service().prepare(1L);
@@ -105,7 +127,7 @@ class CampaignActivityRunServiceTest {
         assertThat(response.status()).isEqualTo(CampaignActivityRunStatus.BLOCKED.name());
         assertThat(response.blockedReason()).isEqualTo("Predicted coupon cost exceeds campaign budget");
         assertThat(captor.getValue().getFactSnapshot().get("predictedFixedCouponCost"))
-                .isEqualTo("6000000");
+                .isEqualTo("5400000");
         verify(targetRepository, never()).saveAll(any());
     }
 
@@ -124,7 +146,7 @@ class CampaignActivityRunServiceTest {
         facts.put("couponDiscountRate", null);
         facts.put("targetSegmentId", 10L);
         facts.put("codeFlags", java.util.List.of());
-        CampaignActivityRun run = CampaignActivityRun.pendingAnalysis(activity, 80, facts);
+        CampaignActivityRun run = CampaignActivityRun.pendingAnalysis(activity, 80, 72, 8, facts);
         run.claimAnalysis("claim", LocalDateTime.now().plusMinutes(1));
         run.saveAnalysis("ready", "NO_FLAG");
         activity.updateInfo("coupon campaign", 50);
@@ -138,7 +160,8 @@ class CampaignActivityRunServiceTest {
         assertThat(run.getStatus()).isEqualTo(CampaignActivityRunStatus.AWAITING_APPROVAL);
         assertThat(run.getRecommendation()).isEqualTo("FLAG");
         assertThat(run.getBlockedReason()).isEqualTo("Campaign activity configuration changed after review");
-        verify(targetRepository, never()).findAllByRunIdAndExecutionIdIsNullOrderByUserIdAsc(any());
+        verify(targetRepository, never())
+                .findAllByRunIdAndAssignmentGroupAndExecutionIdIsNullOrderByUserIdAsc(any(), any());
     }
 
     @Test
@@ -146,7 +169,7 @@ class CampaignActivityRunServiceTest {
         CampaignActivity activity = couponActivity(100);
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("codeFlags", java.util.List.of("TARGET_COUNT_EXCEEDS_EXPECTATION"));
-        CampaignActivityRun run = CampaignActivityRun.pendingAnalysis(activity, 80, facts);
+        CampaignActivityRun run = CampaignActivityRun.pendingAnalysis(activity, 80, 72, 8, facts);
         run.claimAnalysis("claim", LocalDateTime.now().plusMinutes(1));
 
         when(runRepository.findByIdForUpdate(99L)).thenReturn(Optional.of(run));
@@ -179,6 +202,28 @@ class CampaignActivityRunServiceTest {
                 .isEqualTo(java.util.List.of("TARGET_COUNT_EXCEEDS_EXPECTATION"));
     }
 
+    @Test
+    void reservesHoldoutTargetsWithoutCountingThemTowardCouponIssuance() {
+        CampaignActivity activity = couponActivity(100);
+        when(activityRepository.findWithCampaignCouponAndActionByIdForUpdate(1L)).thenReturn(Optional.of(activity));
+        when(audienceSegmentRepository.findById(10L)).thenReturn(Optional.of(
+                com.axon.core_service.domain.marketing.AudienceSegment.builder()
+                        .name("VIP").targetRfmSegment(RfmSegment.VIP).isActive(true).build()));
+        when(userSummaryRepository.countCouponCampaignTargets(RfmSegment.VIP, 30L)).thenReturn(10L);
+        when(userSummaryRepository.findCouponCampaignTargetUserIds(any(), any(), any()))
+                .thenReturn(java.util.stream.LongStream.rangeClosed(1, 10).boxed().toList());
+        when(runRepository.sumReservedTargetCount(org.mockito.ArgumentMatchers.eq(1L), anyList())).thenReturn(0L);
+        when(runRepository.save(any(CampaignActivityRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service().prepare(1L);
+
+        ArgumentCaptor<CampaignActivityRun> captor = ArgumentCaptor.forClass(CampaignActivityRun.class);
+        verify(runRepository).save(captor.capture());
+        assertThat(captor.getValue().getTargetCount()).isEqualTo(10);
+        assertThat(captor.getValue().getTreatmentCount()).isEqualTo(9);
+        assertThat(captor.getValue().getHoldoutCount()).isEqualTo(1);
+    }
+
     private CampaignActivityRunService service() {
         return new CampaignActivityRunService(activityRepository, runRepository, targetRepository,
                 audienceSegmentRepository, userSummaryRepository, dispatchClaimService,
@@ -209,6 +254,7 @@ class CampaignActivityRunServiceTest {
                 .limitCount(limit)
                 .maxRecipientCount(limit)
                 .expectedRecipientCount(80)
+                .holdoutRatePercent(10)
                 .purpose(CampaignActivityPurpose.VIP_REWARD)
                 .operatorMemo("VIP 고객 감사 쿠폰")
                 .budget(budget)

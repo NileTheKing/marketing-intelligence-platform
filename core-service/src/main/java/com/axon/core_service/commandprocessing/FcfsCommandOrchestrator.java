@@ -4,7 +4,8 @@ import com.axon.core_service.event.CampaignActivityApprovedEvent;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.UserSummaryService;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
-import com.axon.messaging.topic.KafkaTopics;
+import java.sql.SQLRecoverableException;
+import java.sql.SQLTransientException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
@@ -14,7 +15,10 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.kafka.listener.BatchListenerFailedException;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -25,37 +29,60 @@ public class FcfsCommandOrchestrator {
     private final FcfsLedgerPersistenceService ledgerPersistenceService;
     private final UserSummaryService userSummaryService;
     private final UserSummaryProjectionFailurePublisher projectionFailurePublisher;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ApplicationEventPublisher eventPublisher;
     private final CorePipelineMetrics pipelineMetrics;
 
     public void process(List<CampaignActivityKafkaProducerDto> messages) {
-        List<CampaignActivityKafkaProducerDto> deduped = deduplicate(messages);
+        List<IndexedMessage> indexedMessages = deduplicate(messages);
+        List<CampaignActivityKafkaProducerDto> deduped = indexedMessages.stream()
+                .map(IndexedMessage::message)
+                .toList();
         List<FcfsLedgerPersistenceService.LedgerResult> successes;
         try {
             successes = persistLedger(deduped);
         } catch (Exception batchFailure) {
+            if (isTransientPersistenceFailure(batchFailure)) {
+                throw new BatchListenerFailedException("Transient FCFS ledger batch failure", batchFailure,
+                        indexedMessages.getFirst().originalIndex());
+            }
+            if (indexedMessages.size() == 1) {
+                throw new BatchListenerFailedException("FCFS ledger message failed", batchFailure,
+                        indexedMessages.getFirst().originalIndex());
+            }
             log.warn("FCFS ledger batch failed; retrying each message", batchFailure);
             pipelineMetrics.recordPurchaseIndividualRetry(deduped.size());
-            successes = deduped.stream().map(this::persistOneOrDlt).flatMap(java.util.Optional::stream).toList();
+            successes = new ArrayList<>();
+            for (int i = 0; i < indexedMessages.size(); i++) {
+                CampaignActivityKafkaProducerDto message = indexedMessages.get(i).message();
+                try {
+                    successes.add(persistLedger(List.of(message)).getFirst());
+                } catch (Exception failure) {
+                    message.setFailureReason(failure.getMessage());
+                    if (message.getFailureCategory() == null) {
+                        message.setFailureCategory(com.axon.messaging.MarketingActionFailureCategory.UNKNOWN);
+                    }
+                    updateProjection(successes);
+                    publishPurchaseEvents(successes);
+                    throw new BatchListenerFailedException(
+                            "FCFS ledger message failed", failure, indexedMessages.get(i).originalIndex());
+                }
+            }
         }
         updateProjection(successes);
         publishPurchaseEvents(successes);
     }
 
-    private java.util.Optional<FcfsLedgerPersistenceService.LedgerResult> persistOneOrDlt(
-            CampaignActivityKafkaProducerDto message) {
-        try {
-            return java.util.Optional.of(persistLedger(List.of(message)).getFirst());
-        } catch (Exception failure) {
-            try {
-                kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT, message).join();
-            } catch (RuntimeException dltFailure) {
-                throw new OffsetCommitBlockedException("command DLT publish failed", dltFailure);
+    private boolean isTransientPersistenceFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof TransientDataAccessException
+                    || cause instanceof RecoverableDataAccessException
+                    || cause instanceof DataAccessResourceFailureException
+                    || cause instanceof SQLTransientException
+                    || cause instanceof SQLRecoverableException) {
+                return true;
             }
-            pipelineMetrics.recordDltRouted("campaign-command", 1);
-            return java.util.Optional.empty();
         }
+        return false;
     }
 
     private void updateProjection(List<FcfsLedgerPersistenceService.LedgerResult> successes) {
@@ -103,17 +130,23 @@ public class FcfsCommandOrchestrator {
         return results;
     }
 
-    private List<CampaignActivityKafkaProducerDto> deduplicate(List<CampaignActivityKafkaProducerDto> messages) {
-        Map<com.axon.core_service.service.ActivityUserKey, CampaignActivityKafkaProducerDto> deduped = new LinkedHashMap<>();
-        for (CampaignActivityKafkaProducerDto message : messages) {
+    private List<IndexedMessage> deduplicate(List<CampaignActivityKafkaProducerDto> messages) {
+        Map<com.axon.core_service.service.ActivityUserKey, IndexedMessage> deduped = new LinkedHashMap<>();
+        for (int i = 0; i < messages.size(); i++) {
+            CampaignActivityKafkaProducerDto message = messages.get(i);
             com.axon.core_service.service.ActivityUserKey key = new com.axon.core_service.service.ActivityUserKey(
                     message.getCampaignActivityId(), message.getUserId());
-            CampaignActivityKafkaProducerDto previous = deduped.get(key);
-            if (previous == null || newer(message, previous)) {
-                deduped.put(key, message);
+            IndexedMessage previous = deduped.get(key);
+            if (previous == null) {
+                deduped.put(key, new IndexedMessage(message, i));
+            } else if (newer(message, previous.message())) {
+                deduped.put(key, new IndexedMessage(message, i));
             }
         }
         return List.copyOf(deduped.values());
+    }
+
+    private record IndexedMessage(CampaignActivityKafkaProducerDto message, int originalIndex) {
     }
 
     private boolean newer(CampaignActivityKafkaProducerDto candidate, CampaignActivityKafkaProducerDto current) {
