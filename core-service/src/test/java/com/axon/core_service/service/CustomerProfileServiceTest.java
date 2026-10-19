@@ -8,6 +8,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.ErrorResponse;
 import com.axon.core_service.domain.coupon.Coupon;
 import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.domain.dto.customer.CustomerBehaviorEvent;
@@ -110,6 +112,19 @@ class CustomerProfileServiceTest {
 
         assertThat(profile.name()).isEqualTo("김고객");
         assertThat(profile.recentEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Elasticsearch 서버 측 오류도 프로필은 빈 타임라인으로 응답한다")
+    void elasticsearchServerErrorLeavesTimelineEmpty() throws IOException {
+        when(purchaseRepository.findByUserId(USER_ID)).thenReturn(List.of());
+        when(userCouponRepository.findAllByUserId(USER_ID)).thenReturn(List.of());
+        when(productRepository.findAllById(anyList())).thenReturn(List.of());
+        when(behaviorEventService.getRecentEventsByUser(eq(USER_ID), anyInt()))
+                .thenThrow(new ElasticsearchException("es/search",
+                        ErrorResponse.of(r -> r.status(400).error(e -> e.type("search_phase_execution_exception")))));
+
+        assertThat(service.getProfile(USER_ID).recentEvents()).isEmpty();
     }
 
     @Test

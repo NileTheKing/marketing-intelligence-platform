@@ -1,5 +1,6 @@
 package com.axon.core_service.service;
 
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import com.axon.core_service.domain.coupon.CouponStatus;
 import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.domain.dto.customer.CustomerBehaviorEvent;
@@ -102,11 +103,11 @@ public class CustomerProfileService {
                 .toList();
     }
 
-    /** Behavior is supplementary: an Elasticsearch outage leaves the timeline empty instead of failing the page. */
+    /** Behavior is supplementary: an Elasticsearch failure leaves the timeline empty instead of failing the page. */
     private List<CustomerBehaviorEvent> recentEvents(Long userId) {
         try {
             return behaviorEventService.getRecentEventsByUser(userId, RECENT_EVENT_LIMIT);
-        } catch (IOException e) {
+        } catch (IOException | ElasticsearchException e) {
             log.error("Failed to load behavior events for userId={}", userId, e);
             return List.of();
         }
