@@ -93,6 +93,9 @@ class SecurityConfigTest {
 
         mockMvc.perform(get("/api/v1/campaign-activities/1/entries"))
                 .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/me/campaign-entries"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

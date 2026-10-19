@@ -10,6 +10,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -28,7 +29,8 @@ import lombok.NoArgsConstructor;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_campaign_activity_entry_activity_user",
                 columnNames = {"campaign_activity_id", "user_id"}
-        )
+        ),
+        indexes = @Index(name = "idx_campaign_entry_user_id", columnList = "user_id")
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CampaignActivityEntry extends BaseTimeEntity {
