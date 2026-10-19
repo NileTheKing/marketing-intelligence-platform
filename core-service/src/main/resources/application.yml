@@ -47,7 +47,7 @@ spring:
       isolation-level: read_committed
       properties:
         max.poll.records: 20
-        spring.json.trusted.packages: "*"
+        spring.json.trusted.packages: "com.axon.messaging.dto,com.axon.core_service.commandprocessing"
     listener:
       type: batch
       ack-mode: batch
