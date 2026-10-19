@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     otel_traces_sampler_arg: float = Field(default=1.0, ge=0, le=1)
     otel_service_name: str = "axon-ai-triage"
     axon_observability_env: str = "local"
+    langsmith_api_key: str = Field(default="", repr=False)
+    langsmith_api_url: str = "https://api.smith.langchain.com"
+    langsmith_project: str = "axon-campaign-run-review"
 
     @property
     def allowed_user_ids(self) -> set[str]:

@@ -36,7 +36,7 @@ class ClaimedCase(BaseModel):
 class CampaignRunReviewOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    recommendation: Literal["NO_FLAG", "FLAG"]
+    recommendation: Literal["NO_FLAG", "FLAG", "REVIEW_REQUIRED"]
     summary: str = Field(min_length=1, max_length=2000)
     operator_next_step: str = Field(min_length=1, max_length=1000)
 
