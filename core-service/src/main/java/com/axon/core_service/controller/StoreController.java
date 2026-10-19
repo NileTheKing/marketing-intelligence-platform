@@ -113,14 +113,14 @@ public class StoreController {
 
     @GetMapping("/payment/success")
     public String paymentSuccess(
-            @RequestParam(required = false) Long couponId,
+            @RequestParam(name = "couponId", required = false) Long userCouponId,
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false) BigDecimal finalPrice,
             @CookieValue(value = "accessToken", required = false) String accessToken) {
         Long userId = extractUser(accessToken).userId();
 
         try {
-            storeViewService.recordPaymentSuccess(userId, productId, couponId, finalPrice);
+            storeViewService.recordPaymentSuccess(userId, productId, userCouponId, finalPrice);
         } catch (Exception e) {
             log.error("Failed to record payment success", e);
         }

@@ -7,6 +7,8 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.core_service.domain.dto.campaignactivity.filter.converter.FilterDetailConverter;
 import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.AbandonedCartCouponCampaign;
+import com.axon.core_service.domain.marketing.DormantCustomerCampaign;
 import com.axon.core_service.domain.product.Product;
 import com.axon.messaging.CampaignActivityType;
 import jakarta.persistence.*;
@@ -41,6 +43,16 @@ public class CampaignActivity extends BaseTimeEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "marketing_action_id", unique = true)
     private MarketingAction marketingAction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "coupon_delivery_mode", nullable = false, length = 30)
+    private CouponDeliveryMode couponDeliveryMode = CouponDeliveryMode.DIRECT;
+
+    @OneToOne(mappedBy = "campaignActivity", fetch = FetchType.LAZY)
+    private AbandonedCartCouponCampaign abandonedCartCouponCampaign;
+
+    @OneToOne(mappedBy = "campaignActivity", fetch = FetchType.LAZY)
+    private DormantCustomerCampaign dormantCustomerCampaign;
 
     @Column(name = "name", nullable = false)
     private String name;
@@ -81,6 +93,9 @@ public class CampaignActivity extends BaseTimeEntity {
     @Column(name = "max_recipient_count")
     private Integer maxRecipientCount;
 
+    @Column(name = "holdout_rate_percent")
+    private Integer holdoutRatePercent;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "purpose", length = 50)
     private CampaignActivityPurpose purpose;
@@ -112,8 +127,10 @@ public class CampaignActivity extends BaseTimeEntity {
             MarketingAction marketingAction,
             Integer expectedRecipientCount,
             Integer maxRecipientCount,
+            Integer holdoutRatePercent,
             CampaignActivityPurpose purpose,
             String operatorMemo,
+            CouponDeliveryMode couponDeliveryMode,
             Integer syncedCount) {
         this.campaign = campaign;
         this.product = product;
@@ -132,8 +149,10 @@ public class CampaignActivity extends BaseTimeEntity {
         this.marketingAction = marketingAction;
         this.expectedRecipientCount = expectedRecipientCount;
         this.maxRecipientCount = maxRecipientCount;
+        this.holdoutRatePercent = holdoutRatePercent;
         this.purpose = purpose;
         this.operatorMemo = operatorMemo;
+        this.couponDeliveryMode = couponDeliveryMode != null ? couponDeliveryMode : CouponDeliveryMode.DIRECT;
         this.syncedCount = syncedCount != null ? syncedCount : 0;
     }
 
@@ -181,9 +200,19 @@ public class CampaignActivity extends BaseTimeEntity {
         this.marketingAction = marketingAction;
     }
 
-    public void updateRecipientPolicy(Integer expectedRecipientCount, Integer maxRecipientCount) {
+    public void assignAbandonedCartCouponCampaign(AbandonedCartCouponCampaign config) {
+        this.abandonedCartCouponCampaign = config;
+    }
+
+    public void assignDormantCustomerCampaign(DormantCustomerCampaign config) {
+        this.dormantCustomerCampaign = config;
+    }
+
+    public void updateRecipientPolicy(Integer expectedRecipientCount, Integer maxRecipientCount,
+                                      Integer holdoutRatePercent) {
         this.expectedRecipientCount = expectedRecipientCount;
         this.maxRecipientCount = maxRecipientCount;
+        this.holdoutRatePercent = holdoutRatePercent;
     }
 
     public void updateReviewIntent(CampaignActivityPurpose purpose, String operatorMemo) {

@@ -15,5 +15,7 @@ public interface MarketingActionExecutionRepository extends JpaRepository<Market
     @Query("select e from MarketingActionExecution e where e.id = :id")
     Optional<MarketingActionExecution> findByIdForUpdate(@Param("id") Long id);
 
+    boolean existsByReengagementCampaignIdAndUserId(Long reengagementCampaignId, Long userId);
+
     boolean existsByCampaignActivityRunIdAndUserId(Long campaignActivityRunId, Long userId);
 }

@@ -4,6 +4,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTarget;
+import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
 import com.axon.core_service.domain.coupon.Coupon;
 import com.axon.core_service.domain.marketing.MarketingActionDispatch;
 import com.axon.core_service.domain.marketing.RewardType;
@@ -63,7 +64,8 @@ public class CampaignActivityRunDispatchClaimService {
         }
 
         List<CampaignActivityRunTarget> targets = targetRepository
-                .findAllByRunIdAndExecutionIdIsNullOrderByUserIdAsc(runId);
+                .findAllByRunIdAndAssignmentGroupAndExecutionIdIsNullOrderByUserIdAsc(
+                        runId, CampaignActivityRunTargetGroup.TREATMENT);
         var audienceSegment = audienceSegmentRepository.findById(activity.getCampaign().getTargetSegmentId())
                 .orElseThrow(() -> new BusinessConflictException("Campaign audience segment is no longer available"));
         Set<Long> eligibleUserIds = Set.copyOf(userSummaryRepository.findCouponCampaignTargetUserIdsByUserIdIn(
@@ -114,6 +116,7 @@ public class CampaignActivityRunDispatchClaimService {
     private String currentPolicyChangeReason(CampaignActivityRun run, CampaignActivity activity, Coupon coupon) {
         LocalDateTime now = LocalDateTime.now();
         if (activity.getActivityType() != CampaignActivityType.COUPON
+                || activity.getCouponDeliveryMode() != com.axon.core_service.domain.campaignactivity.CouponDeliveryMode.DIRECT
                 || activity.getStatus() != com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus.ACTIVE
                 || coupon == null
                 || activity.getMarketingAction() == null
@@ -127,6 +130,7 @@ public class CampaignActivityRunDispatchClaimService {
         if (!same(facts, "couponId", coupon.getId())
                 || !same(facts, "issuanceLimit", activity.getLimitCount())
                 || !same(facts, "maxRecipientCount", activity.getMaxRecipientCount())
+                || !same(facts, "holdoutRatePercent", activity.getHoldoutRatePercent())
                 || !same(facts, "expectedRecipientCount", activity.getExpectedRecipientCount())
                 || !same(facts, "campaignPurpose", activity.getPurpose() == null ? null : activity.getPurpose().name())
                 || !same(facts, "operatorMemo", activity.getOperatorMemo())

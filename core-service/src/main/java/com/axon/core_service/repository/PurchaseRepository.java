@@ -37,6 +37,9 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
 
         java.util.Optional<Purchase> findFirstByUserIdAndStatusOrderByPurchaseAtDesc(Long userId, PurchaseStatus status);
 
+        boolean existsByUserIdAndProductIdAndStatusAndPurchaseAtGreaterThanEqual(
+                        Long userId, Long productId, PurchaseStatus status, LocalDateTime purchaseAt);
+
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // Cohort Analysis Queries
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

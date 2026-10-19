@@ -79,6 +79,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const productInfoContainer = document.getElementById("product-info-container");
     const couponInfoContainer = document.getElementById("coupon-info-container");
     const section4Title = document.getElementById("section-4-title");
+    const deliveryModeSelect = document.getElementById("couponDeliveryMode");
+    const delayInput = document.getElementById("couponDelayMinutes");
+    const dormantDaysInput = document.getElementById("couponDormantDays");
+    const holdoutInput = document.getElementById("couponHoldoutRatePercent");
+
+    function updateDeliveryModeUI() {
+        const mode = deliveryModeSelect.value;
+        const delaySection = document.getElementById("coupon-delay-setting");
+        const dormantSection = document.getElementById("coupon-dormant-setting");
+        const directPolicySection = document.getElementById("coupon-direct-policy");
+        delaySection.classList.toggle("hidden", mode !== "ABANDONED_CART");
+        dormantSection.classList.toggle("hidden", mode !== "DORMANT_CUSTOMER");
+        directPolicySection.classList.toggle("hidden", mode !== "DIRECT");
+        delayInput.required = mode === "ABANDONED_CART";
+        dormantDaysInput.required = mode === "DORMANT_CUSTOMER";
+        holdoutInput.required = mode === "DIRECT" && activityTypeInput.value === "COUPON";
+        if (mode !== "ABANDONED_CART") delayInput.value = "";
+        if (mode !== "DORMANT_CUSTOMER") dormantDaysInput.value = "";
+    }
+    deliveryModeSelect.addEventListener("change", updateDeliveryModeUI);
+    updateDeliveryModeUI();
 
     // Elements to Clear
     const productInputs = [
@@ -100,6 +121,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             productInfoContainer.classList.add("hidden");
             couponInfoContainer.classList.remove("hidden");
+            deliveryModeSelect.disabled = false;
+            updateDeliveryModeUI();
             section4Title.textContent = "쿠폰 정보";
 
             // Clear Product Info
@@ -119,6 +142,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (previewSection) previewSection.classList.remove("hidden");
 
             couponInfoContainer.classList.add("hidden");
+            deliveryModeSelect.disabled = true;
+            delayInput.required = false;
+            dormantDaysInput.required = false;
+            holdoutInput.required = false;
             productInfoContainer.classList.remove("hidden");
             section4Title.textContent = "상품 정보";
 
@@ -224,7 +251,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Basic Logic ---
     function loadCampaigns() {
-        fetch("/api/v1/campaigns")
+        return fetch("/api/v1/campaigns")
             .then(res => res.json())
             .then(campaigns => {
                 campaigns.forEach(campaign => {
@@ -238,11 +265,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (defaultOption) defaultOption.textContent = "캠페인을 선택하지 못했습니다.";
             });
     }
-    loadCampaigns();
+    const campaignsLoaded = loadCampaigns();
 
     const selectableTypes = document.querySelectorAll(".campaign-type-card.selectable");
     selectableTypes.forEach(button => {
         button.addEventListener("click", () => {
+            if (activityId && existingActivity) return;
             selectableTypes.forEach(btn => btn.classList.remove("selected"));
             button.classList.add("selected");
             const type = button.dataset.type;
@@ -400,6 +428,69 @@ document.addEventListener("DOMContentLoaded", () => {
     updateBasicPreview();
     updateFilterPreview();
 
+    const activityId = new URLSearchParams(window.location.search).get("activityId")
+        || new URLSearchParams(window.location.search).get("id");
+    let existingActivity = null;
+    if (activityId) {
+        submit.disabled = true;
+        submit.textContent = "수정 완료";
+        document.querySelector("header h1").textContent = "캠페인 활동 수정";
+        campaignsLoaded.then(async () => {
+            const response = await fetch(`/api/v1/campaign-activities/${encodeURIComponent(activityId)}`);
+            if (!response.ok) throw new Error("캠페인 활동 정보를 불러오지 못했습니다.");
+            const activity = await response.json();
+            existingActivity = activity;
+            campaignSelect.value = activity.campaignId;
+            document.getElementById("activityName").value = activity.name || "";
+            document.getElementById("startDate").value = activity.startDate?.slice(0, 16) || "";
+            document.getElementById("endDate").value = activity.endDate?.slice(0, 16) || "";
+            document.getElementById("limitCountInput").value = activity.limitCount ?? "";
+            document.getElementById("budgetInput").value = activity.budget ?? "";
+            const typeCard = document.querySelector(`.campaign-type-card[data-type="${activity.activityType}"]`);
+            if (typeCard) {
+                typeCard.classList.add("selected");
+                typeCard.setAttribute("aria-disabled", "true");
+            }
+            activityTypeInput.value = activity.activityType;
+            toggleActivityTypeUI(activity.activityType);
+            document.getElementById("selectedCouponId").value = activity.couponId ?? "";
+            document.getElementById("selectedCouponName").value = activity.couponName || "";
+            document.getElementById("selectedProductId").value = activity.productId ?? "";
+            document.getElementById("selectedProductName").value = activity.productName || "";
+            document.getElementById("salePrice").value = activity.price ?? "";
+            document.getElementById("saleQuantity").value = activity.quantity ?? "";
+            Helpers.applyCouponEdit(activity, {
+                deliveryMode: deliveryModeSelect,
+                delayMinutes: delayInput,
+                dormantDays: dormantDaysInput,
+                purpose: document.getElementById("couponPurpose"),
+                operatorMemo: document.getElementById("couponOperatorMemo"),
+                holdoutRatePercent: holdoutInput
+            });
+            updateDeliveryModeUI();
+            deliveryModeSelect.disabled = true;
+            selectableTypes.forEach(card => {
+                card.classList.add("opacity-60", "cursor-not-allowed");
+                card.setAttribute("aria-disabled", "true");
+            });
+            uploadedImageUrl = activity.imageUrl || "";
+            if (uploadedImageUrl) {
+                const imagePreview = document.getElementById("imagePreview");
+                imagePreview.src = uploadedImageUrl;
+                imagePreview.classList.remove("hidden");
+                document.getElementById("imagePlaceholder").classList.add("hidden");
+            }
+            FilterRegistry.populateAll(document.querySelector(".lg\\:col-span-8"), activity.filters);
+            updateFilterPreview();
+            updateBasicPreview();
+            submit.disabled = false;
+        }).catch(error => {
+            console.error(error);
+            alert(error.message);
+            submit.disabled = true;
+        });
+    }
+
     // --- Submit Logic ---
     if (submit) {
         submit.addEventListener("click", async () => {
@@ -439,6 +530,23 @@ document.addEventListener("DOMContentLoaded", () => {
                     alert("연동할 쿠폰을 선택해주세요.");
                     return;
                 }
+                const mode = deliveryModeSelect.value;
+                const conditionValue = mode === "ABANDONED_CART" ? delayInput.value
+                    : mode === "DORMANT_CUSTOMER" ? dormantDaysInput.value : "";
+                if (!document.getElementById("couponPurpose").value
+                    || !document.getElementById("couponOperatorMemo").value.trim()) {
+                    alert("쿠폰 캠페인의 목적과 운영 메모를 입력해주세요.");
+                    return;
+                }
+                if (mode !== "DIRECT" && (!/^[1-9]\d*$/.test(conditionValue) || !Number.isSafeInteger(Number(conditionValue)))) {
+                    alert(mode === "ABANDONED_CART" ? "대기 시간은 양의 정수로 입력해주세요." : "휴면 기준은 양의 정수로 입력해주세요.");
+                    return;
+                }
+                if (mode === "DIRECT" && (!/^[1-9]\d*$/.test(holdoutInput.value)
+                    || Number(holdoutInput.value) > 50)) {
+                    alert("비교군 비율은 1~50 사이의 양의 정수로 입력해주세요.");
+                    return;
+                }
                 finalCouponId = parseInt(couponId);
                 // Price and Quantity are 0 for types other than FCFS usually, or handled differently.
                 // Request mandates 0
@@ -464,6 +572,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (filters === null) return; // Validation error occurred in filters
 
             const payload = {
+                campaignId: parseInt(campaignId),
                 name: name,
                 activityType: type,
                 startDate: startDate,
@@ -473,21 +582,41 @@ document.addEventListener("DOMContentLoaded", () => {
                 imageUrl: (type === 'COUPON') ? null : uploadedImageUrl, // No image for coupon
                 productId: finalProductId,
                 couponId: finalCouponId,
+                ...Helpers.serializeCouponDelivery(
+                    type,
+                    deliveryModeSelect.value,
+                    delayInput.value,
+                    dormantDaysInput.value,
+                    document.getElementById("couponPurpose").value,
+                    document.getElementById("couponOperatorMemo").value,
+                    deliveryModeSelect.value === "DIRECT"
+                        ? holdoutInput.value
+                        : (existingActivity?.holdoutRatePercent ?? "")
+                ),
+                ...(type !== "COUPON" ? {
+                    holdoutRatePercent: existingActivity?.holdoutRatePercent ?? null
+                } : {}),
+                purpose: type === "COUPON" ? document.getElementById("couponPurpose").value
+                    : (existingActivity?.purpose ?? null),
+                operatorMemo: type === "COUPON" ? document.getElementById("couponOperatorMemo").value.trim()
+                    : (existingActivity?.operatorMemo ?? null),
                 price: finalPrice,
                 quantity: finalQuantity,
                 budget: budget ? parseInt(budget) : 0,
-                status: "DRAFT"
+                expectedRecipientCount: existingActivity?.expectedRecipientCount ?? null,
+                maxRecipientCount: existingActivity?.maxRecipientCount ?? null,
+                status: existingActivity?.status || "DRAFT"
             };
 
             try {
-                const response = await fetch(`/api/v1/campaigns/${campaignId}/activities`, {
-                    method: "POST",
+                const response = await fetch(activityId ? `/api/v1/campaign-activities/${encodeURIComponent(activityId)}` : `/api/v1/campaigns/${campaignId}/activities`, {
+                    method: activityId ? "PUT" : "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
 
                 if (response.ok) {
-                    alert("캠페인 활동이 성공적으로 생성되었습니다.");
+                    alert(activityId ? "캠페인 활동이 수정되었습니다." : "캠페인 활동이 성공적으로 생성되었습니다.");
                     window.location.href = "/admin/campaigns";
                 } else {
                     const errorText = await response.text();

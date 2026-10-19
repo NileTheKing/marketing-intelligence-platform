@@ -1,6 +1,7 @@
 package com.axon.core_service.service;
 
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
 import com.axon.core_service.domain.coupon.CouponStatus;
 import com.axon.core_service.domain.coupon.UserCoupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
@@ -175,6 +176,7 @@ public class StoreViewService {
         List<CampaignActivityDisplayDto> allActivities = campaignActivityRepository
                 .findAllByStatus(CampaignActivityStatus.ACTIVE)
                 .stream()
+                .filter(this::isDirectCouponOffer)
                 .map(this::safeConvertToCampaignActivityDto)
                 .filter(dto -> dto != null)
                 .collect(Collectors.toList());
@@ -207,8 +209,17 @@ public class StoreViewService {
         if (campaignActivity.getStatus() != CampaignActivityStatus.ACTIVE) {
             return null;
         }
+        if (!isDirectCouponOffer(campaignActivity)) {
+            return null;
+        }
 
         return convertToCampaignActivityDto(campaignActivity);
+    }
+
+    private boolean isDirectCouponOffer(CampaignActivity activity) {
+        return activity.getActivityType() != CampaignActivityType.COUPON
+                || activity.getCouponDeliveryMode() == null
+                || activity.getCouponDeliveryMode() == CouponDeliveryMode.DIRECT;
     }
 
     @Transactional

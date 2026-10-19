@@ -85,6 +85,21 @@ class WebhookStrategyTest {
     }
 
     @Test
+    void processBatch_DormantCustomerCampaignUsesCampaignSpecificWebhookIdentity() {
+        WebhookStrategy strategy = strategy();
+        CampaignActivityKafkaProducerDto message = CampaignActivityKafkaProducerDto.builder()
+                .campaignActivityType(CampaignActivityType.WEBHOOK)
+                .marketingActionId(5L).actionReferenceId(99L).userId(1L).timestamp(1234L).build();
+
+        strategy.processBatch(List.of(message));
+
+        ArgumentCaptor<WebhookRequest> captor = ArgumentCaptor.forClass(WebhookRequest.class);
+        verify(webhookClient).send(captor.capture());
+        assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("dormant-customer:5:99:1");
+        assertThat(captor.getValue().getEventType()).isEqualTo("DORMANT_CUSTOMER_REENGAGEMENT");
+    }
+
+    @Test
     @DisplayName("Webhook 전송이 계속 실패하면 3회 재시도 후 DLT로 격리해야 한다")
     void processBatch_WhenWebhookKeepsFailing_SendsToDlt() {
         WebhookStrategy strategy = strategy();

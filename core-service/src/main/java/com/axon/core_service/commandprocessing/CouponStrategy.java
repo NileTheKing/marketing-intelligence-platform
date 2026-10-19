@@ -149,6 +149,7 @@ public class CouponStrategy implements BatchStrategy {
                     return UserCoupon.builder()
                             .userId(userId)
                             .coupon(coupon)
+                            .marketingActionExecutionId(msg.getExecutionId())
                             .build();
                 })
                 .filter(java.util.Objects::nonNull)

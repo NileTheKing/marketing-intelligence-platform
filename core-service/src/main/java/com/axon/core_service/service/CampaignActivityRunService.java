@@ -5,6 +5,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTarget;
+import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
 import com.axon.core_service.domain.coupon.Coupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRunAnalysisRequest;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRunClaimResponse;
@@ -25,8 +26,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -66,7 +69,7 @@ public class CampaignActivityRunService {
         ValidationResult validation = validateBeforeSnapshot(activity, LocalDateTime.now());
         if (validation.blockedReason() != null) {
             return CampaignActivityRunResponse.from(runRepository.save(CampaignActivityRun.blocked(
-                    activity, 0, validation.blockedReason(), validation.facts())));
+                    activity, 0, 0, 0, validation.blockedReason(), validation.facts())));
         }
 
         long targetCount = userSummaryRepository.countCouponCampaignTargets(
@@ -74,20 +77,47 @@ public class CampaignActivityRunService {
         long reservedTargetCount = runRepository.sumReservedTargetCount(activityId, CAPACITY_RESERVING_STATUSES);
         Map<String, Object> facts = facts(activity, targetCount, reservedTargetCount);
         facts.put("targetSegment", validation.segment().getTargetRfmSegment().name());
-        String blockedReason = validateTargetCount(activity, targetCount, reservedTargetCount, facts);
+        if (targetCount < 2) {
+            return CampaignActivityRunResponse.from(runRepository.save(CampaignActivityRun.blocked(
+                    activity, boundedTargetCount(targetCount), 0, 0,
+                    "Coupon campaign requires at least two targets for a holdout comparison", facts)));
+        }
+
+        List<Long> userIds = userSummaryRepository.findCouponCampaignTargetUserIds(
+                validation.segment().getTargetRfmSegment(), activity.getCoupon().getId(),
+                PageRequest.of(0, boundedTargetCount(targetCount)));
+        long snapshotTargetCount = userIds.size();
+        facts.put("countedTargetCount", targetCount);
+        facts.put("targetCount", snapshotTargetCount);
+        if (snapshotTargetCount < 2) {
+            return CampaignActivityRunResponse.from(runRepository.save(CampaignActivityRun.blocked(
+                    activity, boundedTargetCount(snapshotTargetCount), 0, 0,
+                    "Coupon campaign requires at least two targets for a holdout comparison", facts)));
+        }
+        TargetAssignment assignment = assignTargets(userIds, activity.getHoldoutRatePercent());
+        facts.put("assignmentSeed", assignment.seed());
+        facts.put("treatmentCount", assignment.treatmentCount());
+        facts.put("holdoutCount", assignment.holdoutCount());
+        facts.put("holdoutRatePercent", activity.getHoldoutRatePercent());
+
+        String blockedReason = validateTargetCount(activity, snapshotTargetCount, assignment.treatmentCount(),
+                reservedTargetCount, facts);
         if (blockedReason != null) {
             return CampaignActivityRunResponse.from(runRepository.save(CampaignActivityRun.blocked(
-                    activity, boundedTargetCount(targetCount), blockedReason, facts)));
+                    activity, boundedTargetCount(snapshotTargetCount), assignment.treatmentCount(), assignment.holdoutCount(),
+                    blockedReason, facts)));
         }
         facts.put("codeFlags", codeFlags(activity, validation.segment().getTargetRfmSegment(), targetCount));
 
         CampaignActivityRun run = runRepository.save(CampaignActivityRun.pendingAnalysis(
-                activity, boundedTargetCount(targetCount), facts));
-        List<Long> userIds = userSummaryRepository.findCouponCampaignTargetUserIds(
-                validation.segment().getTargetRfmSegment(), activity.getCoupon().getId(),
-                PageRequest.of(0, boundedTargetCount(targetCount)));
-        targetRepository.saveAll(userIds.stream()
-                .map(userId -> CampaignActivityRunTarget.builder().runId(run.getId()).userId(userId).build())
+                activity, boundedTargetCount(snapshotTargetCount), assignment.treatmentCount(), assignment.holdoutCount(), facts));
+        targetRepository.saveAll(assignment.targets().stream()
+                .map(target -> CampaignActivityRunTarget.builder()
+                        .runId(run.getId())
+                        .userId(target.userId())
+                        .assignmentGroup(target.group())
+                        .baselineRfmSegment(validation.segment().getTargetRfmSegment())
+                        .build())
                 .toList());
         return CampaignActivityRunResponse.from(run);
     }
@@ -142,7 +172,7 @@ public class CampaignActivityRunService {
         if (!run.hasValidAnalysisClaim(request.claimToken(), LocalDateTime.now())) {
             throw new BusinessConflictException("Campaign run analysis claim is invalid or expired");
         }
-        if (!List.of("NO_FLAG", "FLAG").contains(request.recommendation())) {
+        if (!List.of("NO_FLAG", "FLAG", "REVIEW_REQUIRED").contains(request.recommendation())) {
             throw new BusinessConflictException("Unsupported campaign run recommendation");
         }
         String recommendation = hasCodeFlags(run.getFactSnapshot()) ? "FLAG" : request.recommendation();
@@ -181,7 +211,8 @@ public class CampaignActivityRunService {
         }
         CampaignActivityRun run = runRepository.findById(runId)
                 .orElseThrow(() -> new ResourceNotFoundException("campaign activity run", runId));
-        if (!"FLAG".equals(run.getRecommendation())) {
+        if (!"FLAG".equals(run.getRecommendation())
+                && !"REVIEW_REQUIRED".equals(run.getRecommendation())) {
             throw new BusinessConflictException("Campaign activity run does not require operator approval");
         }
         List<CampaignActivityKafkaProducerDto> messages = dispatchClaimService.claim(runId, request.decidedBy());
@@ -257,20 +288,26 @@ public class CampaignActivityRunService {
 
     private ValidationResult validateBeforeSnapshot(CampaignActivity activity, LocalDateTime now) {
         if (activity.getActivityType() != com.axon.messaging.CampaignActivityType.COUPON
+                || activity.getCouponDeliveryMode() != com.axon.core_service.domain.campaignactivity.CouponDeliveryMode.DIRECT
                 || activity.getStatus() != com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus.ACTIVE
                 || activity.getCoupon() == null
                 || activity.getMarketingAction() == null
                 || activity.getCampaign().getTargetSegmentId() == null
+                || activity.getHoldoutRatePercent() == null
+                || activity.getHoldoutRatePercent() < 1
+                || activity.getHoldoutRatePercent() > 50
                 || now.isBefore(activity.getStartDate()) || now.isAfter(activity.getEndDate())
                 || now.isBefore(activity.getCoupon().getStartDate()) || now.isAfter(activity.getCoupon().getEndDate())) {
-            return ValidationResult.blocked("Campaign activity or coupon is not active for dispatch", facts(activity, 0, 0));
+            return ValidationResult.blocked("Campaign activity, coupon, or holdout policy is not ready for dispatch",
+                    facts(activity, 0, 0));
         }
         return audienceSegmentRepository.findById(activity.getCampaign().getTargetSegmentId())
                 .map(segment -> ValidationResult.valid(segment))
                 .orElseGet(() -> ValidationResult.blocked("Campaign audience segment is unavailable", facts(activity, 0, 0)));
     }
 
-    private String validateTargetCount(CampaignActivity activity, long targetCount, long reservedTargetCount,
+    private String validateTargetCount(CampaignActivity activity, long targetCount, long treatmentCount,
+                                       long reservedTargetCount,
                                        Map<String, Object> facts) {
         if (activity.getLimitCount() == null || activity.getLimitCount() <= 0) {
             return "Coupon campaign requires a positive issuance limit";
@@ -278,7 +315,7 @@ public class CampaignActivityRunService {
         if (activity.getMaxRecipientCount() != null && targetCount > activity.getMaxRecipientCount()) {
             return "Target count exceeds maximum recipient count";
         }
-        long projectedRecipientCount = reservedTargetCount + targetCount;
+        long projectedRecipientCount = reservedTargetCount + treatmentCount;
         facts.put("projectedRecipientCount", projectedRecipientCount);
         if (projectedRecipientCount > activity.getLimitCount()) {
             return "Target count exceeds remaining coupon issuance limit";
@@ -304,6 +341,7 @@ public class CampaignActivityRunService {
         facts.put("operatorMemo", activity.getOperatorMemo());
         facts.put("issuanceLimit", activity.getLimitCount());
         facts.put("maxRecipientCount", activity.getMaxRecipientCount());
+        facts.put("holdoutRatePercent", activity.getHoldoutRatePercent());
         facts.put("budget", activity.getBudget() == null ? null : activity.getBudget().toPlainString());
         facts.put("couponId", coupon == null ? null : coupon.getId());
         facts.put("couponDiscountAmount", coupon == null || coupon.getDiscountAmount() == null
@@ -356,6 +394,21 @@ public class CampaignActivityRunService {
         return Math.toIntExact(Math.min(targetCount, Integer.MAX_VALUE));
     }
 
+    private TargetAssignment assignTargets(List<Long> userIds, int holdoutRatePercent) {
+        List<Long> shuffled = new ArrayList<>(userIds);
+        String seed = UUID.randomUUID().toString();
+        Collections.shuffle(shuffled, new Random(seed.hashCode()));
+        int holdoutCount = Math.max(1, (int) Math.round(shuffled.size() * (holdoutRatePercent / 100.0)));
+        List<AssignedTarget> targets = new ArrayList<>(shuffled.size());
+        for (int index = 0; index < shuffled.size(); index++) {
+            CampaignActivityRunTargetGroup group = index < holdoutCount
+                    ? CampaignActivityRunTargetGroup.HOLDOUT
+                    : CampaignActivityRunTargetGroup.TREATMENT;
+            targets.add(new AssignedTarget(shuffled.get(index), group));
+        }
+        return new TargetAssignment(seed, targets, shuffled.size() - holdoutCount, holdoutCount);
+    }
+
     private boolean canClaim(CampaignActivityRun run, LocalDateTime now) {
         return run.getStatus() == CampaignActivityRunStatus.PENDING_ANALYSIS
                 || (run.getStatus() == CampaignActivityRunStatus.ANALYZING
@@ -378,5 +431,11 @@ public class CampaignActivityRunService {
         static ValidationResult blocked(String blockedReason, Map<String, Object> facts) {
             return new ValidationResult(null, blockedReason, facts);
         }
+    }
+
+    private record AssignedTarget(Long userId, CampaignActivityRunTargetGroup group) {
+    }
+
+    private record TargetAssignment(String seed, List<AssignedTarget> targets, int treatmentCount, int holdoutCount) {
     }
 }
