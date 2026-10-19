@@ -113,7 +113,26 @@ tasks.named('test') {
         'purchase.index.write.background-users',
         'purchase.index.write.rows',
         'purchase.index.write.transaction-batch-size',
-        'purchase.index.write.iterations'
+        'purchase.index.write.iterations',
+        'dormant.campaign.benchmark',
+        'dormant.campaign.benchmark.artifact-dir',
+        'campaign.incrementality.benchmark',
+        'campaign.incrementality.benchmark.artifact-dir',
+        'campaign.incrementality.benchmark.purchases',
+        'campaign.incrementality.benchmark.iterations',
+        'campaign.incrementality.benchmark.write-rows',
+        'abandoned.cart.candidate.benchmark',
+        'abandoned.cart.candidate.benchmark.artifact-dir',
+        'abandoned.cart.candidate.benchmark.rows',
+        'abandoned.cart.candidate.benchmark.iterations',
+        'abandoned.cart.candidate.benchmark.write-rows',
+        'abandoned.cart.issuance.e2e',
+        'abandoned.cart.issuance.arm',
+        'abandoned.cart.issuance.smoke',
+        'abandoned.cart.issuance.single-page',
+        'abandoned.cart.issuance.purchase-overlap',
+        'abandoned.cart.issuance.rows',
+        'abandoned.cart.issuance.artifact-dir'
     ].each { propertyName ->
         if (System.getProperty(propertyName) != null) {
             systemProperty propertyName, System.getProperty(propertyName)
@@ -121,11 +140,20 @@ tasks.named('test') {
     }
 
     if (System.getProperty('cohort.sql.benchmark') == 'true'
-            || System.getProperty('purchase.index.write.benchmark') == 'true') {
+            || System.getProperty('purchase.index.write.benchmark') == 'true'
+            || System.getProperty('dormant.campaign.benchmark') == 'true'
+            || System.getProperty('campaign.incrementality.benchmark') == 'true'
+            || System.getProperty('abandoned.cart.candidate.benchmark') == 'true'
+            || System.getProperty('abandoned.cart.issuance.e2e') == 'true') {
         def dockerApiVersion = System.getProperty('cohort.benchmark.docker-api-version', '1.40')
         environment 'DOCKER_API_VERSION', dockerApiVersion
         systemProperty 'api.version', dockerApiVersion
         maxHeapSize = System.getProperty('cohort.benchmark.max-heap', '2g')
+    }
+
+    if (System.getProperty('abandoned.cart.issuance.purchase-overlap') == 'true') {
+        reports.junitXml.includeSystemOutLog = false
+        reports.junitXml.includeSystemErrLog = false
     }
 
     // Intelligent Colima Auto-Detection
@@ -133,5 +161,12 @@ tasks.named('test') {
     def dockerHostEnv = System.getenv("DOCKER_HOST") ?: ""
     if (dockerHostEnv.contains(".colima")) {
         environment "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock"
+    }
+}
+
+if (System.getProperty('abandoned.cart.issuance.purchase-overlap') == 'true') {
+    tasks.named('compileTestJava') {
+        include 'com/axon/core_service/AbstractIntegrationTest.java'
+        include 'com/axon/core_service/benchmark/AbandonedCartCouponIssuanceE2EBenchmarkTest.java'
     }
 }
