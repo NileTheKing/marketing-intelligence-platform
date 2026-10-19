@@ -1,109 +1,66 @@
 <!DOCTYPE html>
-<html lang="ko" xmlns:th="http://www.thymeleaf.org"
-    th:replace="fragments/layout :: layout('Axon - Global Dashboard', 'bg-gray-50 text-neutral-900', ~{::head/content()}, ~{::section}, 'dashboard')">
-
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axon - 전체 캠페인 개요</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <!-- Tailwind is kept only for the chatbot fragment's utility classes. -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
-        crossorigin="anonymous"></script>
-    <link rel="stylesheet" th:href="@{/css/dashboard.css}" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <style>
+        .traffic-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
+        .chart-wrap { position: relative; height: 150px; }
+        .coupon-val { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; }
+        .coupon-desc { font-size: 11px; color: var(--text-3); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    </style>
 </head>
-<section>
-    <!-- Hidden input for API context (not used directly for global, but good to have consistent structure) -->
-    <input type="hidden" id="campaignId" value="global" />
+<body class="console">
+<div class="shell">
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('overview')}"></aside>
 
-    <div class="dashboard-layout">
-        <!-- Sidebar -->
-        <div th:replace="fragments/dashboard_sidebar :: sidebar('global', null, null)"></div>
+    <main>
+        <div class="topbar">
+            <div><div class="crumb">대시보드 / 개요</div><h1>전체 캠페인 개요</h1></div>
+            <span class="updated"><i></i><span id="lastUpdated">최근 30일</span></span>
+        </div>
 
-        <main class="dashboard-main pt-6">
-            <!-- Header -->
-            <div class="dashboard-header">
-                <div class="mb-2 flex items-center gap-2 text-sm text-gray-500">
-                    <a href="/admin" class="hover:text-blue-600 transition-colors"><i class="fa-solid fa-house"></i></a>
-                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                    <span class="font-medium text-gray-900">Global Overview</span>
-                </div>
+        <div class="cat"><b>매출</b><span>최근 30일 · 결제 확정 기준</span></div>
+        <section class="card kpis">
+            <div class="kpi"><div class="kpi-label">거래액</div><div class="kpi-val num" id="kpiGmv">-</div><div class="kpi-sub num" id="kpiBudget">-</div></div>
+            <div class="kpi"><div class="kpi-label">구매</div><div class="kpi-val num" id="kpiPurchases">-</div><div class="kpi-sub num" id="kpiAov">-</div></div>
+            <div class="kpi"><div class="kpi-label">방문</div><div class="kpi-val num" id="kpiVisits">-</div><div class="kpi-sub num" id="kpiConversion">-</div></div>
+            <div class="kpi"><div class="kpi-label">ROAS</div><div class="kpi-val num" id="kpiRoas">-</div><div class="kpi-sub">거래액 ÷ 예산</div></div>
+        </section>
 
-                <div class="dashboard-title-row">
-                    <h1 class="page-title">Global Dashboard</h1>
-                    <p class="text-sm text-gray-500">
-                        Real-time cross-campaign analytics
-                    </p>
-                </div>
-            </div>
+        <div class="cat"><b>트래픽 · 자동 발송</b><span>시간대별 방문과 캠페인 밖 쿠폰 매출</span></div>
+        <div class="traffic-row">
+            <section class="card panel">
+                <div class="p-head"><div class="p-title">시간대별 방문</div><div class="p-sub num" id="peakLabel"></div></div>
+                <div class="chart-wrap"><canvas id="globalTrafficChart"></canvas></div>
+            </section>
+            <section class="card panel">
+                <div class="p-head"><div class="p-title">자동 발송 쿠폰 매출</div><div class="p-sub">캠페인 미귀속</div></div>
+                <div class="kpi-label">거래액</div>
+                <div class="coupon-val num" id="autoCouponGmv">-</div>
+                <div class="kpi-sub num" id="autoCouponCount">-</div>
+                <div class="coupon-desc">행동 규칙, 장바구니 이탈, 휴면 고객 재활성화처럼 캠페인 실행 없이 나간 쿠폰으로 산 구매입니다. 캠페인 거래액과 위 합계에는 포함하지 않습니다.</div>
+            </section>
+        </div>
 
-            <!-- Section 1: Global KPI Cards -->
-            <div class="kpi-grid mb-8">
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalVisits', 'Total Visits', 'fa-solid fa-earth-americas', 'blue', '0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalPurchases', 'Total Purchases', 'fa-solid fa-shopping-bag', 'green', '0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalGMV', 'Total GMV', 'fa-solid fa-coins', 'emerald', '₩0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalROAS', 'Global ROAS', 'fa-solid fa-chart-line', 'rose', '0%', '-', 'neutral')">
-                </div>
-            </div>
+        <div class="cat"><b>캠페인</b><span>거래액 순 · 캠페인이 보낸 쿠폰 구매 포함</span></div>
+        <section class="card">
+            <table>
+                <thead><tr><th>캠페인</th><th class="r">예산</th><th class="r">거래액</th><th>비중</th><th class="r">ROAS</th></tr></thead>
+                <tbody id="campaignEfficiencyTableBody"></tbody>
+            </table>
+        </section>
+    </main>
+</div>
 
-            <!-- Section 2: Top N Campaigns by GMV -->
-            <div class="charts-grid mb-8">
-                <div class="chart-card full">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Top 5 Campaigns by GMV</h3>
-                    </div>
-                    <div class="h-80 relative">
-                        <canvas id="topCampaignsChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 3: Global Hourly Traffic Trend -->
-            <div class="charts-grid mb-8">
-                <div class="chart-card full">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Global Hourly Traffic Trend (Last 24h)</h3>
-                    </div>
-                    <div class="h-80 relative">
-                        <canvas id="globalTrafficChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 4: Campaign Efficiency Table -->
-            <div class="charts-grid mb-8">
-                <div class="chart-card full overflow-hidden">
-                    <div class="chart-header border-b border-gray-100 pb-4 mb-0">
-                        <h3 class="chart-title">Campaign Efficiency Overview</h3>
-                    </div>
-                    <div class="overflow-x-auto mt-4">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                                <tr>
-                                    <th scope="col" class="px-4 py-3 font-medium">Campaign Name</th>
-                                    <th scope="col" class="px-4 py-3 text-right font-medium">Budget</th>
-                                    <th scope="col" class="px-4 py-3 text-right font-medium">GMV</th>
-                                    <th scope="col" class="px-4 py-3 text-right font-medium">ROAS</th>
-                                </tr>
-                            </thead>
-                            <tbody id="campaignEfficiencyTableBody" class="divide-y divide-gray-100">
-                                <!-- Rows will be populated by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <script th:src="@{/js/global-dashboard.js}"></script>
-        <!-- Chatbot -->
-        <div th:replace="fragments/chatbot :: chatbot"></div>
-        <script th:src="@{/js/chatbot.js}"></script>
-    </div>
-</section>
-
+<script th:src="@{/js/global-dashboard.js}"></script>
+<div th:replace="~{fragments/chatbot :: chatbot}"></div>
+<script th:src="@{/js/chatbot.js}"></script>
+</body>
 </html>

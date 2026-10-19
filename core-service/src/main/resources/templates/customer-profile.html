@@ -5,45 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Axon - 고객 프로필</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <link rel="stylesheet" th:href="@{/css/console.css}">
     <style>
-        :root {
-            --bg: #f7f7f5; --surface: #fff; --border: #e7e6e2;
-            --text: #141414; --text-2: #55534e; --text-3: #93918b;
-            --spike: #ff5a1f; --spike-soft: #fff1ea; --track: #efeeea;
-            --ok: #12804a; --low: #c4321f;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Pretendard, system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 13px; -webkit-font-smoothing: antialiased; }
-        .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-
-        .shell { display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: 100vh; }
-        aside { border-right: 1px solid var(--border); background: var(--surface); padding: 18px 10px; }
-        .brand { display: flex; align-items: center; gap: 8px; padding: 0 8px 18px; font-weight: 800; font-size: 15px; color: var(--text); text-decoration: none; }
-        .brand svg { width: 20px; height: 20px; }
-        .nav-label { font-size: 11px; color: var(--text-3); padding: 14px 8px 5px; font-weight: 600; }
-        .nav a { display: block; padding: 6px 8px; border-radius: 6px; color: var(--text-2); text-decoration: none; font-weight: 500; }
-        .nav a:hover { background: #f4f3ef; }
-        .nav a.active { background: #f1f0ec; color: var(--text); font-weight: 600; }
-
-        main { padding: 22px 28px 28px; min-width: 0; }
-        .crumb { font-size: 12px; color: var(--text-3); margin-bottom: 4px; }
         .title-row { display: flex; align-items: center; gap: 10px; }
-        h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
         .sub { font-size: 12px; color: var(--text-3); margin-top: 3px; }
         .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--track); color: var(--text-2); }
-        .badge.vip { background: var(--spike); color: #fff; }
-        .badge.risk { background: #fdecea; color: var(--low); }
-
-        .cat { display: flex; align-items: baseline; gap: 8px; margin: 18px 2px 8px; }
-        .cat b { font-size: 12px; font-weight: 700; }
-        .cat span { font-size: 11px; color: var(--text-3); }
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-
-        .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
-        .kpi { padding: 12px 16px; border-right: 1px solid var(--border); }
-        .kpi:last-child { border-right: 0; }
-        .kpi-label { font-size: 11px; color: var(--text-3); font-weight: 500; }
-        .kpi-val { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; }
+        .badge.vip { background: var(--accent); color: #fff; }
+        .badge.risk { background: var(--low-soft); color: var(--low); }
+        .kpis { --kpi-count: 5; }
+        .console .kpi-val { font-size: 18px; }
 
         .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 10px; align-items: start; }
         .list-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
@@ -51,7 +21,7 @@
         .row-main { font-weight: 600; }
         .row-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
         .row-right { text-align: right; white-space: nowrap; }
-        .chip { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--spike-soft); color: var(--spike); margin-left: 6px; }
+        .chip { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
         .cancelled { color: var(--text-3); text-decoration: line-through; }
 
         .day { padding: 8px 16px 4px; font-size: 11px; font-weight: 700; color: var(--text-3); background: #fbfbfa; border-bottom: 1px solid var(--border); }
@@ -59,31 +29,16 @@
         .event:last-child { border-bottom: 0; }
         .event time { font-size: 11px; color: var(--text-3); padding-top: 1px; }
         .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: #c9c7c1; }
-        .dot.buy { background: var(--spike); }
+        .dot.buy { background: var(--accent); }
         .dot.cart { background: var(--text); }
         .ev-name { font-weight: 600; }
         .ev-detail { font-size: 11px; color: var(--text-3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .empty { padding: 24px 16px; color: var(--text-3); text-align: center; }
-        .note { font-size: 11px; color: var(--text-3); margin-top: 8px; padding: 0 2px; }
+        .note { font-size: 11px; color: var(--text-3); margin: 8px 0 0; padding: 0 2px; }
     </style>
 </head>
-<body>
+<body class="console">
 <div class="shell">
-    <aside>
-        <a class="brand" href="/admin/dashboard/overview">
-            <svg viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#141414"/><path d="M5 15.5h3.2l2.3-7 3 9 2.2-5.5H19" stroke="#ff5a1f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Axon
-        </a>
-        <nav class="nav">
-            <div class="nav-label">분석</div>
-            <a href="/admin/dashboard/overview">개요</a>
-            <a class="active" href="#">고객 프로필</a>
-            <div class="nav-label">운영</div>
-            <a href="/admin/campaigns">캠페인</a>
-            <a href="/admin/coupons">쿠폰</a>
-            <a href="/admin/events">행동 이벤트</a>
-        </nav>
-    </aside>
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('customers')}"></aside>
 
     <main>
         <div class="crumb">고객 / <span th:text="'#' + ${userId}">#0</span></div>

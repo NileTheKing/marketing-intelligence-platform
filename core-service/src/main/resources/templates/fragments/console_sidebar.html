@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<aside th:fragment="sidebar(active)">
+    <a class="brand" href="/admin/dashboard/overview">
+        <svg viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#141414"/><path d="M5 15.5h3.2l2.3-7 3 9 2.2-5.5H19" stroke="#7ea0f0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Axon
+    </a>
+    <nav class="nav">
+        <div class="nav-label">분석</div>
+        <a href="/admin/dashboard/overview" th:classappend="${active == 'overview'} ? 'active'">개요</a>
+        <div class="nav-label">운영</div>
+        <a href="/admin/campaigns" th:classappend="${active == 'campaigns'} ? 'active'">캠페인</a>
+        <a href="/admin/coupons" th:classappend="${active == 'coupons'} ? 'active'">쿠폰</a>
+        <a href="/admin/events" th:classappend="${active == 'events'} ? 'active'">행동 이벤트</a>
+    </nav>
+</aside>
+</body>
+</html>

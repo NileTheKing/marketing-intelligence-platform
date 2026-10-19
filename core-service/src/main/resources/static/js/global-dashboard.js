@@ -1,15 +1,11 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const campaignId = document.getElementById('campaignId').value; // Will be "global"
-    let topCampaignsChart = null;
+    const ACCENT = '#2b5cd6';
+    const MUTED = '#dcdad4';
     let globalTrafficChart = null;
 
-    initGlobalDashboard();
-
-    function initGlobalDashboard() {
-        fetchGlobalDashboardData();
-        // Poll every 10 seconds for updates (global can be less frequent)
-        setInterval(fetchGlobalDashboardData, 10000);
-    }
+    fetchGlobalDashboardData();
+    // Poll every 10 seconds for updates
+    setInterval(fetchGlobalDashboardData, 10000);
 
     async function fetchGlobalDashboardData() {
         try {
@@ -23,191 +19,125 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateDashboard(data) {
         updateOverviewCards(data.overview);
-        renderTopCampaignsChart(data.topGmvCampaigns);
         renderGlobalTrafficChart(data.hourlyTraffic);
+        updateAutoCoupon(data.unattributedCouponPurchases);
         updateCampaignEfficiencyTable(data.campaignEfficiency);
         updateLastUpdatedTime();
     }
 
     function updateOverviewCards(overview) {
-        updateKpi('totalVisits', overview.totalVisits);
-        updateKpi('totalPurchases', overview.purchaseCount);
-        updateKpi('totalGMV', formatCurrency(overview.gmv));
-        updateKpi('totalROAS', formatNumber(overview.roas) + '%');
-    }
-
-    function updateKpi(elementId, value) {
-        const el = document.getElementById(elementId);
-        if (el) {
-            el.textContent = value;
-        }
-    }
-
-    let topGmvCampaignsChart = null;
-    function renderTopCampaignsChart(campaigns) {
-        const ctx = document.getElementById('topCampaignsChart').getContext('2d');
-        const labels = campaigns.map(c => c.campaignName);
-        const data = campaigns.map(c => c.value); // Changed from c.gmv to c.value
-
-        if (topGmvCampaignsChart) {
-            topGmvCampaignsChart.data.labels = labels;
-            topGmvCampaignsChart.data.datasets[0].data = data;
-            topGmvCampaignsChart.update();
-        } else {
-            topGmvCampaignsChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'GMV (KRW)',
-                        data: data,
-                        backgroundColor: '#3b82f6', // Blue-500
-                        borderRadius: 4,
-                        barPercentage: 0.6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: '#f1f5f9', drawBorder: false },
-                            ticks: {
-                                callback: function (value) { return formatCurrency(value); },
-                                font: { size: 11 },
-                                color: '#64748b'
-                            }
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: { font: { size: 11 }, color: '#64748b' }
-                        }
-                    },
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        tooltip: {
-                            backgroundColor: '#1e293b',
-                            padding: 12,
-                            cornerRadius: 8,
-                            titleFont: { size: 13, weight: 600 },
-                            bodyFont: { size: 12 },
-                            callbacks: {
-                                label: function (context) {
-                                    return context.dataset.label + ': ' + formatCurrency(context.raw);
-                                }
-                            }
-                        },
-                        legend: { display: false }
-                    },
-                    onClick: (evt, activeElements) => {
-                        if (activeElements.length > 0) {
-                            const index = activeElements[0].index;
-                            const campaignId = campaigns[index].campaignId;
-                            window.location.href = `/admin/dashboard/campaign/${campaignId}`;
-                        }
-                    },
-                    onHover: (event, chartElement) => {
-                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
-                    }
-                }
-            });
-        }
+        const gmv = Number(overview.gmv) || 0;
+        const purchases = overview.purchaseCount || 0;
+        const visits = overview.totalVisits || 0;
+        setText('kpiGmv', formatWon(gmv));
+        setText('kpiBudget', `예산 ${formatWon(overview.budget)}`);
+        setText('kpiPurchases', `${formatNumber(purchases)}건`);
+        setText('kpiAov', purchases ? `객단가 ${formatWon(gmv / purchases)}` : '객단가 -');
+        setText('kpiVisits', formatNumber(visits));
+        setText('kpiConversion', visits ? `구매 전환 ${formatNumber(purchases / visits * 100)}%` : '구매 전환 -');
+        setText('kpiRoas', `${formatNumber(overview.roas)}%`);
     }
 
     function renderGlobalTrafficChart(hourlyTraffic) {
-        const ctx = document.getElementById('globalTrafficChart').getContext('2d');
         const hours = Array.from({ length: 24 }, (_, i) => i);
-        const data = hours.map(h => hourlyTraffic.hourlyTraffic[h] || 0);
+        const source = (hourlyTraffic && hourlyTraffic.hourlyTraffic) || {};
+        const data = hours.map(h => source[h] || 0);
+        const peak = Math.max(...data);
+        const peakHour = data.indexOf(peak);
+        const colors = data.map((v, h) => (peak > 0 && h === peakHour ? ACCENT : MUTED));
+        setText('peakLabel', peak > 0 ? `최대 ${peakHour}시 · ${formatNumber(peak)}명` : '');
 
         if (globalTrafficChart) {
             globalTrafficChart.data.datasets[0].data = data;
+            globalTrafficChart.data.datasets[0].backgroundColor = colors;
             globalTrafficChart.update();
-        } else {
-            globalTrafficChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: hours.map(h => `${h}:00`),
-                    datasets: [{
-                        label: 'Hourly Visitors',
-                        data: data,
-                        fill: {
-                            target: 'origin',
-                            above: 'rgba(59, 130, 246, 0.1)'
-                        },
-                        borderColor: '#60a5fa', // Blue-400
-                        borderWidth: 2,
-                        tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: '#f1f5f9', drawBorder: false },
-                            title: { display: true, text: 'Visitors' },
-                            ticks: { color: '#64748b' }
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#64748b' }
-                        }
-                    },
-                    plugins: {
-                        tooltip: {
-                            backgroundColor: '#1e293b',
-                            padding: 10
-                        },
-                        legend: { display: false }
-                    }
-                }
-            });
+            return;
         }
+        globalTrafficChart = new Chart(document.getElementById('globalTrafficChart'), {
+            type: 'bar',
+            data: {
+                labels: hours.map(h => `${h}시`),
+                datasets: [{ data, backgroundColor: colors, borderRadius: 2, barPercentage: 0.8, categoryPercentage: 0.9 }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `${formatNumber(ctx.raw)}명` } }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        border: { color: '#e7e6e2' },
+                        ticks: { font: { size: 10 }, color: '#93918b', autoSkip: false, maxRotation: 0,
+                            callback: (v, i) => (i % 6 === 0 ? `${i}시` : '') }
+                    },
+                    y: { display: false, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    function updateAutoCoupon(aggregate) {
+        const count = aggregate ? aggregate.purchaseCount : 0;
+        setText('autoCouponGmv', formatWon(aggregate ? aggregate.gmv : 0));
+        setText('autoCouponCount', `구매 ${formatNumber(count)}건`);
     }
 
     function updateCampaignEfficiencyTable(campaigns) {
         const tbody = document.getElementById('campaignEfficiencyTableBody');
-        tbody.innerHTML = ''; // Clear existing rows
+        if (!campaigns || !campaigns.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">캠페인이 없습니다.</td></tr>';
+            return;
+        }
+        const sorted = [...campaigns].sort((a, b) => Number(b.gmv) - Number(a.gmv));
+        const total = sorted.reduce((sum, c) => sum + (Number(c.gmv) || 0), 0);
+        const maxShare = total ? Number(sorted[0].gmv) / total * 100 : 0;
 
-        campaigns.forEach(campaign => {
-            const row = document.createElement('tr');
-            row.className = "bg-white border-b hover:bg-gray-50 transition-colors duration-150";
-            row.innerHTML = `
-                <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                    <a href="/admin/dashboard/campaign/${campaign.campaignId}" class="text-blue-600 hover:underline hover:text-blue-800 transition-colors">
-                        ${campaign.campaignName}
-                    </a>
-                </td>
-                <td class="px-6 py-4 text-right">${formatCurrency(campaign.budget)}</td>
-                <td class="px-6 py-4 text-right">${formatCurrency(campaign.gmv)}</td>
-                <td class="px-6 py-4 text-right font-semibold text-blue-600">${formatNumber(campaign.roas)}%</td>
-            `;
-            tbody.appendChild(row);
-        });
+        tbody.innerHTML = sorted.map(campaign => {
+            const share = total ? Number(campaign.gmv) / total * 100 : 0;
+            const width = maxShare ? share / maxShare * 100 : 0;
+            const roasClass = campaign.roas < 100 ? 'low' : '';
+            return `<tr>
+                <td><a href="/admin/dashboard/campaign/${campaign.campaignId}">${escapeHtml(campaign.campaignName)}</a></td>
+                <td class="r num">${formatWon(campaign.budget)}</td>
+                <td class="r num">${formatWon(campaign.gmv)}</td>
+                <td><span class="bar"><i style="width:${width}%"></i></span>
+                    <span class="num" style="color:var(--text-3);font-size:11px;margin-left:8px">${formatNumber(share)}%</span></td>
+                <td class="r num"><b class="${roasClass}">${formatNumber(campaign.roas)}%</b></td>
+            </tr>`;
+        }).join('');
     }
 
     function updateLastUpdatedTime() {
         const now = new Date();
-        const timeString = now.toLocaleTimeString();
-        const el = document.getElementById('lastUpdated');
-        if (el) el.textContent = `Last updated: ${timeString}`;
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        setText('lastUpdated', `최근 30일 · ${hh}:${mm} 갱신`);
     }
 
-    // Utility functions (copied from dashboard.js for now, centralize later)
+    function setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
     function formatNumber(num) {
-        if (num === undefined || num === null) return '-';
+        if (num === undefined || num === null || Number.isNaN(Number(num))) return '-';
         return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 }).format(num);
     }
 
-    function formatCurrency(amount) {
+    // Exact won below 1억; 억/만 above so large totals stay scannable.
+    function formatWon(amount) {
         if (amount === undefined || amount === null) return '-';
-        return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
+        const v = Math.round(Number(amount) || 0);
+        if (v < 1e8) return `${v.toLocaleString('ko-KR')}원`;
+        const man = Math.round((v % 1e8) / 1e4);
+        return `${Math.floor(v / 1e8)}억${man ? ` ${man.toLocaleString('ko-KR')}만` : ''}원`;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     }
 });
