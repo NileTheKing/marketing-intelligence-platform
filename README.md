@@ -70,10 +70,10 @@ flowchart LR
 ### 선착순 참여
 
 <p align="center">
-  <img src="./docs/assets/recordings/fcfs_flow.gif" width="850" alt="선착순 상품 응모부터 결제 창까지" />
+  <img src="./docs/assets/recordings/fcfs_flow.gif" width="850" alt="선착순 상품 응모부터 결제 완료까지" />
 </p>
 
-고객이 응모하면 Entry 서비스가 Redis에서 재고를 예약하고, 구매 자격을 받은 고객에게만 결제 창을 엽니다.
+고객이 응모하면 Entry 서비스가 Redis에서 재고를 예약하고, 구매 자격을 받은 고객만 결제할 수 있습니다. 결제가 확정되면 Kafka를 거쳐 Core가 구매를 기록합니다.
 
 ### 캠페인 운영
 
