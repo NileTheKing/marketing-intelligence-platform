@@ -7,6 +7,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.dashboard.*;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.repository.CouponAttributionRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
 import com.axon.messaging.CampaignActivityType;
@@ -35,6 +36,7 @@ public class DashboardService {
     private final CampaignActivityRepository campaignActivityRepository;
     private final PurchaseRepository purchaseRepository;
     private final DashboardMetricCalculator metricCalculator;
+    private final CouponAttributionRepository couponAttributionRepository;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Level 3: Activity Detail Dashboard
@@ -402,6 +404,12 @@ public class DashboardService {
                         .collect(java.util.stream.Collectors.toMap(
                                 PurchaseAggregateByActivity::activityId,
                                 aggregate -> aggregate));
+        // Shop purchases made with a campaign-dispatched coupon count toward that campaign.
+        Map<Long, PurchaseAggregateByCampaign> couponPurchaseByCampaign = couponAttributionRepository
+                .findCouponPurchasesByCampaign(start, end).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        PurchaseAggregateByCampaign::campaignId,
+                        aggregate -> aggregate));
 
         for (com.axon.core_service.domain.campaign.Campaign campaign : campaigns) {
             Long campaignId = campaign.getId();
@@ -413,8 +421,12 @@ public class DashboardService {
                     .map(confirmedPurchaseByActivity::get)
                     .filter(aggregate -> aggregate != null)
                     .toList());
-            Long purchases = campaignPurchases.purchaseCount();
-            java.math.BigDecimal campaignGmv = campaignPurchases.gmv();
+            PurchaseAggregateByCampaign couponPurchases = couponPurchaseByCampaign.get(campaignId);
+            Long purchases = campaignPurchases.purchaseCount()
+                    + (couponPurchases != null ? couponPurchases.purchaseCount() : 0);
+            java.math.BigDecimal campaignGmv = couponPurchases != null
+                    ? campaignPurchases.gmv().add(couponPurchases.gmv())
+                    : campaignPurchases.gmv();
 
             java.math.BigDecimal budget = campaign.getBudget() != null ? campaign.getBudget()
                     : java.math.BigDecimal.ZERO;
@@ -463,6 +475,7 @@ public class DashboardService {
                 visitRanking,
                 efficiencyData,
                 globalHeatmap,
+                couponAttributionRepository.findUnattributedCouponPurchases(start, end),
                 LocalDateTime.now());
     }
 
