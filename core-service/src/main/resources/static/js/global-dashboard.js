@@ -98,14 +98,18 @@ document.addEventListener('DOMContentLoaded', function () {
         tbody.innerHTML = sorted.map(campaign => {
             const share = total ? Number(campaign.gmv) / total * 100 : 0;
             const width = maxShare ? share / maxShare * 100 : 0;
-            const roasClass = campaign.roas < 100 ? 'low' : '';
+            // No revenue yet (e.g. a campaign that has not opened) is not a failing ROAS.
+            const hasRevenue = Number(campaign.gmv) > 0;
+            const roasClass = hasRevenue && campaign.roas < 100 ? 'low' : '';
             return `<tr>
                 <td><a href="/admin/dashboard/campaign/${campaign.campaignId}">${escapeHtml(campaign.campaignName)}</a></td>
                 <td class="r num">${formatWon(campaign.budget)}</td>
                 <td class="r num">${formatWon(campaign.gmv)}</td>
                 <td><span class="bar"><i style="width:${width}%"></i></span>
                     <span class="num" style="color:var(--text-3);font-size:11px;margin-left:8px">${formatNumber(share)}%</span></td>
-                <td class="r num"><b class="${roasClass}">${formatNumber(campaign.roas)}%</b></td>
+                <td class="r num">${hasRevenue
+                    ? `<b class="${roasClass}">${formatNumber(campaign.roas)}%</b>`
+                    : '<span style="color:var(--text-3)">매출 없음</span>'}</td>
             </tr>`;
         }).join('');
     }
