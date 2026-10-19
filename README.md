@@ -109,6 +109,14 @@ flowchart LR
 
 고객 한 명의 구매·쿠폰 이력과 Elasticsearch에 쌓인 행동 로그를 한 화면에 모읍니다.
 
+### 발송 전 AI 검토와 관리자 승인
+
+<p align="center">
+  <img src="./docs/assets/recordings/slack_campaign_review.png" width="850" alt="Slack 캠페인 발송 사전 검토" />
+</p>
+
+쿠폰 발송 전에 대상 수, 예산, 목적과 세그먼트를 코드로 먼저 점검하고, AI가 위험 신호를 요약해 Slack으로 보냅니다. 관리자가 승인해야만 발송합니다.
+
 ### 실패 분석과 관리자 승인
 
 ```mermaid
