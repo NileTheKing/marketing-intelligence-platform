@@ -23,7 +23,6 @@ import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.List;
@@ -182,7 +181,11 @@ public class StoreViewService {
                 .collect(Collectors.toList());
 
         List<CampaignActivityDisplayDto> fcfsActivities = allActivities.stream()
-                .filter(activity -> activity.getActivityType() != CampaignActivityType.COUPON)
+                .filter(activity -> activity.getActivityType() == CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .collect(Collectors.toList());
+
+        List<CampaignActivityDisplayDto> raffleActivities = allActivities.stream()
+                .filter(activity -> activity.getActivityType() == CampaignActivityType.GIVEAWAY)
                 .collect(Collectors.toList());
 
         List<CampaignActivityDisplayDto> couponActivities = allActivities.stream()
@@ -195,7 +198,7 @@ public class StoreViewService {
 
         return CampaignActivitiesViewData.builder()
                 .fcfsCampaignActivities(fcfsActivities)
-                .raffleCampaignActivities(new ArrayList<>())
+                .raffleCampaignActivities(raffleActivities)
                 .coupons(couponActivities)
                 .issuedCouponIds(issuedCouponIds)
                 .build();
