@@ -69,55 +69,51 @@ flowchart LR
 
 ## 주요 화면
 
-### 선착순 참여
-
 <p align="center">
   <img src="./docs/assets/recordings/fcfs_flow.gif" width="850" alt="선착순 상품 응모부터 결제 완료까지" />
 </p>
+<p align="center"><sub>고객 응모 → Redis 재고 예약 → 결제 확정 → Kafka를 거쳐 Core가 구매 기록</sub></p>
 
-고객이 응모하면 Entry 서비스가 Redis에서 재고를 예약하고, 구매 자격을 받은 고객만 결제할 수 있습니다. 결제가 확정되면 Kafka를 거쳐 Core가 구매를 기록합니다.
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="./docs/assets/screens/campaign-management.png"><img src="./docs/assets/screens/campaign-management.png" alt="캠페인 관리"></a><br>
+<b>캠페인 관리</b><br>
+<sub>선착순·쿠폰·경품 활동의 상태, 정원 대비 참여, 예산</sub>
+</td>
+<td width="50%" valign="top">
+<a href="./docs/assets/screens/activity-dashboard.png"><img src="./docs/assets/screens/activity-dashboard.png" alt="선착순 실시간 대시보드"></a><br>
+<b>선착순 실시간 대시보드</b><br>
+<sub>남은 재고, 방문→결제 퍼널, 시간대별 방문을 5초마다 갱신</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="./docs/assets/screens/overview.png"><img src="./docs/assets/screens/overview.png" alt="전체 캠페인 개요"></a><br>
+<b>전체 캠페인 개요</b><br>
+<sub>최근 30일 거래액·ROAS. 캠페인이 보낸 쿠폰 구매는 해당 캠페인 매출로 귀속</sub>
+</td>
+<td width="50%" valign="top">
+<a href="./docs/assets/screens/incrementality.png"><img src="./docs/assets/screens/incrementality.png" alt="쿠폰 증분 효과"></a><br>
+<b>쿠폰 증분 효과</b><br>
+<sub>받지 않은 그룹(홀드아웃)과 비교해 쿠폰 때문에 늘어난 매출만 계산</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="./docs/assets/screens/customer-profile.png"><img src="./docs/assets/screens/customer-profile.png" alt="고객 프로필 (CDP)"></a><br>
+<b>고객 프로필 (CDP)</b><br>
+<sub>구매·쿠폰 이력과 Elasticsearch 행동 로그를 고객 한 명 기준으로</sub>
+</td>
+<td width="50%" valign="top">
+<a href="./docs/assets/screens/slack-campaign-review.png"><img src="./docs/assets/screens/slack-campaign-review.png" alt="발송 전 AI 검토 (Slack)"></a><br>
+<b>발송 전 AI 검토 (Slack)</b><br>
+<sub>대상 수·예산·세그먼트를 점검하고 관리자가 승인해야만 발송</sub>
+</td>
+</tr>
+</table>
 
-### 캠페인 운영
-
-<p align="center">
-  <img src="./docs/assets/recordings/campaign_admin.png" width="850" alt="캠페인 관리 화면" />
-</p>
-
-캠페인별 선착순·쿠폰·경품 활동의 상태, 정원 대비 참여, 예산을 관리합니다.
-
-<p align="center">
-  <img src="./docs/assets/recordings/activity_dashboard.png" width="850" alt="선착순 활동 실시간 대시보드" />
-</p>
-
-선착순 활동의 남은 재고, 방문부터 결제까지의 퍼널, 시간대별 방문을 5초마다 갱신합니다.
-
-### 마케팅 분석
-
-<p align="center">
-  <img src="./docs/assets/recordings/dashboard_overview.png" width="850" alt="전체 캠페인 개요" />
-</p>
-
-최근 30일 캠페인별 거래액과 ROAS를 비교합니다. 캠페인이 보낸 쿠폰으로 산 구매는 쿠폰 → 발송 기록 → 캠페인 순으로 따라가 해당 캠페인 매출에 넣습니다.
-
-<p align="center">
-  <img src="./docs/assets/recordings/incrementality.png" width="850" alt="쿠폰 발송 증분 효과" />
-</p>
-
-쿠폰 대상 일부를 받지 않는 그룹으로 남겨 두고, 두 그룹의 1인당 매출 차이로 쿠폰 때문에 늘어난 매출만 계산합니다.
-
-<p align="center">
-  <img src="./docs/assets/recordings/customer_profile.png" width="850" alt="고객 프로필" />
-</p>
-
-고객 한 명의 구매·쿠폰 이력과 Elasticsearch에 쌓인 행동 로그를 한 화면에 모읍니다.
-
-### 발송 전 AI 검토와 관리자 승인
-
-<p align="center">
-  <img src="./docs/assets/recordings/slack_campaign_review.png" width="850" alt="Slack 캠페인 발송 사전 검토" />
-</p>
-
-쿠폰 발송 전에 대상 수, 예산, 목적과 세그먼트를 코드로 먼저 점검하고, AI가 위험 신호를 요약해 Slack으로 보냅니다. 관리자가 승인해야만 발송합니다.
+<sub>이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 ### 실패 분석과 관리자 승인
 
