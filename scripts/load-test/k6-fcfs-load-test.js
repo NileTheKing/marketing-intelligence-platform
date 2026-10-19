@@ -112,11 +112,23 @@ const fcfsRetryCount = new Counter('fcfs_retry_count');  // 재결제 시나리�
 // JSON output에서 예약 요청의 초당 ingress/completion peak를 집계한다.
 const reservationAttemptStarted = new Counter('reservation_attempt_started');
 const reservationAttemptCompleted = new Counter('reservation_attempt_completed');
+const paymentPrepareAttempted = new Counter('payment_prepare_attempted');
+const paymentPrepareSuccess = new Counter('payment_prepare_success');
+const paymentConfirmAttempted = new Counter('payment_confirm_attempted');
+const paymentConfirmSuccess = new Counter('payment_confirm_success');
 
 const behaviorEventSuccessRate = new Rate('behavior_event_success_rate');
 const behaviorEventCount = new Counter('behavior_event_count');
 
 const reservationDuration = new Trend('reservation_duration');
+const paymentPrepareDuration = new Trend('payment_prepare_duration');
+const paymentConfirmDuration = new Trend('payment_confirm_duration');
+// HTTP 응답시간은 결과별로, 당첨자의 결제 여정은 별도 경과시간으로 남긴다.
+const fcfsWinnerDuration = new Trend('fcfs_winner_duration');
+const fcfsSoldOutDuration = new Trend('fcfs_sold_out_duration');
+const paymentPrepareSuccessDuration = new Trend('payment_prepare_success_duration');
+const paymentConfirmSuccessDuration = new Trend('payment_confirm_success_duration');
+const successfulPaymentJourneyDuration = new Trend('successful_payment_journey_duration');
 
 const userCount = USER_ID_END - USER_ID_START + 1;
 const WAITING_BURST_VUS = Math.min(MAX_VUS, userCount);
@@ -516,7 +528,7 @@ function runBehaviorFlow(data, userId, sessionId) {
 
 function runReservationFlow(data, userId, includePayment) {
   // ===== Step 3: FCFS 예약 시도 =====
-  const startTime = Date.now();
+  const journeyStartedAt = Date.now();
 
   let reservationToken = null;
   let reservationRetry = false;
@@ -530,12 +542,12 @@ function runReservationFlow(data, userId, includePayment) {
     reserveWithTestAPI(data, userId);
   }
 
-  const duration = Date.now() - startTime;
+  const duration = Date.now() - journeyStartedAt;
   reservationDuration.add(duration);
 
   // ===== Step 4: 결제 승인 (DB 저장) =====
   if (includePayment && reservationToken && !reservationRetry) {
-    confirmPayment(data, userId, reservationToken);
+    confirmPayment(data, userId, reservationToken, journeyStartedAt);
   }
 }
 
@@ -629,7 +641,7 @@ function reserveWithJWT(data, userId) {
   );
   reservationAttemptCompleted.add(1);
 
-  handleReservationResponse(res, userId);
+  handleReservationResponse(res, userId, res.timings.duration);
 
   if (res.status === 200) {
       try {
@@ -652,7 +664,7 @@ function reserveWithJWT(data, userId) {
 // =========================================================================
 // 결제 승인 (DB 저장) - Prepare -> Confirm
 // =========================================================================
-function confirmPayment(data, userId, reservationToken) {
+function confirmPayment(data, userId, reservationToken, journeyStartedAt) {
   let token = getPreparedJwtToken(data, userId);
 
   // 토큰 없으면 실시간 발급
@@ -677,6 +689,8 @@ function confirmPayment(data, userId, reservationToken) {
     reservationToken: reservationToken
   });
 
+  paymentPrepareAttempted.add(1);
+  const prepareStartedAt = Date.now();
   const prepareRes = http.post(
     `${data.entryServiceUrl}/api/v1/payments/prepare`,
     preparePayload,
@@ -686,11 +700,15 @@ function confirmPayment(data, userId, reservationToken) {
       timeout: REQUEST_TIMEOUT,
     }
   );
+  const prepareDuration = Date.now() - prepareStartedAt;
+  paymentPrepareDuration.add(prepareDuration);
 
   if (prepareRes.status !== 200) {
       debugError(`Payment prepare failed for user ${userId}: ${prepareRes.status}`, prepareRes.body);
-      return;
+    return;
   }
+  paymentPrepareSuccess.add(1);
+  paymentPrepareSuccessDuration.add(prepareDuration);
 
   let approvalToken = null;
   try {
@@ -715,6 +733,8 @@ function confirmPayment(data, userId, reservationToken) {
     reservationToken: approvalToken // 2차 토큰 사용
   });
 
+  paymentConfirmAttempted.add(1);
+  const confirmStartedAt = Date.now();
   const confirmRes = http.post(
     `${data.entryServiceUrl}/api/v1/payments/confirm`,
     confirmPayload,
@@ -724,9 +744,17 @@ function confirmPayment(data, userId, reservationToken) {
       timeout: REQUEST_TIMEOUT,
     }
   );
+  const confirmDuration = Date.now() - confirmStartedAt;
+  paymentConfirmDuration.add(confirmDuration);
 
   if (confirmRes.status !== 200) {
       debugError(`Payment confirm failed for user ${userId}: ${confirmRes.status}`, confirmRes.body);
+  }
+
+  if (confirmRes.status === 200) {
+    paymentConfirmSuccess.add(1);
+    paymentConfirmSuccessDuration.add(confirmDuration);
+    successfulPaymentJourneyDuration.add(Date.now() - journeyStartedAt);
   }
 
   check(confirmRes, {
@@ -748,10 +776,11 @@ function requestHeaders(token) {
 // =========================================================================
 // 예약 응답 처리
 // =========================================================================
-function handleReservationResponse(res, userId) {
+function handleReservationResponse(res, userId, responseDuration) {
   if (res.status === 200) {
     // ✅ 성공 (reservationToken 받음)
     // isRetry 필드 확인해서 신규/재시도 구분
+    fcfsWinnerDuration.add(responseDuration);
     let isRetry = false;
     try {
       const json = res.json();
@@ -775,6 +804,7 @@ function handleReservationResponse(res, userId) {
     // 마감 (SOLD_OUT)
     fcfsSoldOutRate.add(1);
     fcfsSoldOutCount.add(1);
+    fcfsSoldOutDuration.add(responseDuration);
 
   } else if (res.status === 409) {
     // ❌ 중복 참여 (분산 락 실패!)

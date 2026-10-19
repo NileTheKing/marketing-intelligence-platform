@@ -85,14 +85,15 @@ cd "$AXON_REPO_ROOT"
 FLOW=reservation MAX_VUS=100 ./scripts/load-test/run-external-compose-baseline.sh 1000 1
 ```
 
-The wrapper performs the previous manual sequence:
+The wrapper performs the following sequence:
 
-1. Reset seed data and regenerate JWT tokens on the VM.
-2. Verify token count on the VM.
-3. Copy the fresh token file to the Mac.
-4. Verify token count locally.
-5. Run external k6 against `https://axon.opicnic.xyz`.
-6. Verify Redis and MySQL counts on the VM.
+1. Wait until Core's Kafka consumer lag and pending database connections remain at zero across consecutive samples. This prevents a prior run's asynchronous messages from being mixed into the next run.
+2. Reset seed data and regenerate JWT tokens on the VM.
+3. Verify token count on the VM.
+4. Copy the fresh token file to the Mac.
+5. Verify token count locally.
+6. Run external k6 against `https://axon.opicnic.xyz`.
+7. Verify Redis and MySQL counts on the VM.
 
 Optional manual equivalent:
 
