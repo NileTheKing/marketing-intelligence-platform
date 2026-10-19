@@ -139,7 +139,7 @@ public class BehaviorEventService {
                         .filter(buildTimeRangeFilter(start, end))))
                 .aggregations("hourly_traffic", a -> a
                         .dateHistogram(h -> h
-                                .field("occurredAt") // epoch seconds
+                                .field("occurredAt") // ES date field
                                 .fixedInterval(co.elastic.clients.elasticsearch._types.Time.of(t -> t.time("1h"))))),
                 Void.class);
 
@@ -284,8 +284,9 @@ public class BehaviorEventService {
      * userId는 로그인 상태에서 발생한 이벤트에만 있으므로 익명 세션 이벤트는 포함되지 않습니다.
      */
     public java.util.List<CustomerBehaviorEvent> getRecentEventsByUser(Long userId, int size) throws IOException {
+        // Behavior index only: other axon.event.* indices may map occurredAt differently, which breaks sorting.
         SearchResponse<StoredBehaviorEvent> response = elasticsearchClient.search(s -> s
-                .index("axon.event.*")
+                .index("axon.event.behavior")
                 .size(size)
                 .query(q -> q.term(t -> t.field("userId").value(userId)))
                 .sort(so -> so.field(f -> f.field("occurredAt").order(SortOrder.Desc))),
@@ -298,7 +299,7 @@ public class BehaviorEventService {
                 .toList();
     }
 
-    /** occurredAt is stored as epoch seconds by the Kafka sink, or as ISO-8601 text by older seed data. */
+    /** occurredAt is ISO-8601 text from the Kafka sink; documents indexed before that fix hold decimal epoch seconds. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record StoredBehaviorEvent(String eventName, String triggerType, Object occurredAt, String pageUrl,
             java.util.Map<String, Object> properties) {
@@ -380,9 +381,9 @@ public class BehaviorEventService {
     }
 
     private Query buildTimeRangeFilter(LocalDateTime start, LocalDateTime end) {
-        // timestamp range 필터 쿼리 작성 (occurredAt is Unix epoch in seconds)
-        long startEpoch = start.atZone(BUSINESS_ZONE).toEpochSecond();
-        long endEpoch = end.atZone(BUSINESS_ZONE).toEpochSecond();
+        // occurredAt is an ES date field; numeric range bounds are read as epoch milliseconds.
+        long startEpoch = start.atZone(BUSINESS_ZONE).toInstant().toEpochMilli();
+        long endEpoch = end.atZone(BUSINESS_ZONE).toInstant().toEpochMilli();
 
         return Query.of(q -> q
                 .range(r -> r
