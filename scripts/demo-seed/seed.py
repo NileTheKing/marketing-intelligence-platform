@@ -390,6 +390,12 @@ class Seeder:
                                                         "limit_count": 20_000, "price": 0, "quantity": 0,
                                                         "budget": 0, "coupon_delivery_mode": "DIRECT",
                                                         "holdout_rate_percent": 10, "purpose": "GENERAL_PROMOTION"})
+            if name == "디지털 액세서리 10% 쿠폰":
+                # Planned for fewer loyal customers than the segment now holds, so a new run surfaces
+                # a concrete review signal (target count above expectation) instead of missing settings.
+                activity.update(purpose="LOYALTY_REWARD", expected_recipient_count=self.scaled(3_600),
+                                operator_memo="테크 위크 마지막 주 충성 고객 대상 액세서리 재구매 유도. "
+                                              "예산은 예상 대상 수 기준으로 잡음.")
             activity.update(_coupon=coupon, _action=action, _dispatch=self.day(dispatch_offset).replace(hour=10),
                             _treatment_rate=treatment_rate, _discount=discount)
         else:  # GIVEAWAY: applications only; this activity type has no funnel definition yet
