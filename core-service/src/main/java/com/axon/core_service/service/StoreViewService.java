@@ -211,10 +211,15 @@ public class StoreViewService {
         return convertToCampaignActivityDto(campaignActivity);
     }
 
-    public void recordPaymentSuccess(Long userId, Long productId, Long couponId, BigDecimal finalPrice) {
+    @Transactional
+    public void recordPaymentSuccess(Long userId, Long productId, Long userCouponId, BigDecimal finalPrice) {
         if (userId != null && productId != null && finalPrice != null) {
             productRepository.findByIdAndCampaignOnlyFalse(productId)
                     .orElseThrow(() -> new IllegalArgumentException("Campaign-only products cannot use shop checkout"));
+            if (userCouponId != null) {
+                couponService.useCoupon(userCouponId, userId);
+                log.info("User coupon {} successfully used by user {} during payment", userCouponId, userId);
+            }
             Purchase purchase = Purchase.builder()
                     .userId(userId)
                     .productId(productId)
@@ -223,14 +228,10 @@ public class StoreViewService {
                     .price(finalPrice)
                     .quantity(1)
                     .purchasedAt(Instant.now())
+                    .userCouponId(userCouponId)
                     .build();
             purchaseRepository.save(purchase);
             log.info("Purchase saved: userId={}, productId={}, price={}", userId, productId, finalPrice);
-        }
-
-        if (couponId != null && userId != null) {
-            couponService.useCoupon(couponId, userId);
-            log.info("Coupon {} successfully used by user {} during payment", couponId, userId);
         }
     }
 
