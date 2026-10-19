@@ -46,4 +46,10 @@ public class DashboardViewController {
     public String globalDashboardView() {
         return "global-dashboard";
     }
+
+    @GetMapping("/admin/customers/{userId}")
+    public String customerProfileView(@PathVariable Long userId, Model model) {
+        model.addAttribute("userId", userId);
+        return "customer-profile";
+    }
 }

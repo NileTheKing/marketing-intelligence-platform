@@ -1,18 +1,22 @@
 package com.axon.core_service.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.json.JsonData;
 import com.axon.messaging.behavior.BehaviorEventProperty;
 import com.axon.core_service.domain.dashboard.CampaignFunnelDefinition;
 import com.axon.core_service.domain.dashboard.FunnelStep;
+import com.axon.core_service.domain.dto.customer.CustomerBehaviorEvent;
 import com.axon.messaging.CampaignActivityType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
@@ -273,6 +277,50 @@ public class BehaviorEventService {
             }
         }
         return result;
+    }
+
+    /**
+     * 한 고객의 최근 행동 이벤트를 시간 역순으로 조회합니다.
+     * userId는 로그인 상태에서 발생한 이벤트에만 있으므로 익명 세션 이벤트는 포함되지 않습니다.
+     */
+    public java.util.List<CustomerBehaviorEvent> getRecentEventsByUser(Long userId, int size) throws IOException {
+        SearchResponse<StoredBehaviorEvent> response = elasticsearchClient.search(s -> s
+                .index("axon.event.*")
+                .size(size)
+                .query(q -> q.term(t -> t.field("userId").value(userId)))
+                .sort(so -> so.field(f -> f.field("occurredAt").order(SortOrder.Desc))),
+                StoredBehaviorEvent.class);
+
+        return response.hits().hits().stream()
+                .map(hit -> hit.source())
+                .filter(java.util.Objects::nonNull)
+                .map(StoredBehaviorEvent::toCustomerEvent)
+                .toList();
+    }
+
+    /** occurredAt is stored as epoch seconds by the Kafka sink, or as ISO-8601 text by older seed data. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record StoredBehaviorEvent(String eventName, String triggerType, Object occurredAt, String pageUrl,
+            java.util.Map<String, Object> properties) {
+
+        CustomerBehaviorEvent toCustomerEvent() {
+            return new CustomerBehaviorEvent(parseOccurredAt(), eventName, triggerType, pageUrl,
+                    properties == null ? java.util.Map.of() : properties);
+        }
+
+        private Instant parseOccurredAt() {
+            if (occurredAt instanceof Number epochSeconds) {
+                return Instant.ofEpochMilli(Math.round(epochSeconds.doubleValue() * 1000));
+            }
+            if (occurredAt instanceof String text) {
+                try {
+                    return Instant.parse(text);
+                } catch (java.time.format.DateTimeParseException e) {
+                    return null;
+                }
+            }
+            return null;
+        }
     }
 
     // == private helpers
