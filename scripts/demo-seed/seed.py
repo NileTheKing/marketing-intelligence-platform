@@ -339,6 +339,12 @@ class Seeder:
             return "DRAFT"
         return "ENDED" if campaign["_end"] < 0 else "ACTIVE"
 
+    # Unsplash photos (free license) for the FCFS products that appear in screenshots.
+    FCFS_IMAGES = {"한우 1++ 선물세트": "/image/product/fcfs_hanwoo.jpg",
+                   "노바텍 스마트워치 울트라": "/image/product/fcfs_smartwatch.jpg",
+                   "루멘 무선 이어폰 프로": "/image/product/fcfs_earbuds.jpg",
+                   "노스폴 구스 롱패딩": "/image/product/fcfs_padding.jpg"}
+
     def build_activity(self, campaign, spec):
         kind = spec[0]
         status = self.activity_status(campaign)
@@ -352,10 +358,12 @@ class Seeder:
             _, name, open_offset, limit, (category, product_name, list_price), price = spec
             product = self.add("products", {"product_name": product_name, "brand": product_name.split()[0],
                                             "category": category, "price": list_price, "stock": limit,
-                                            "discount_rate": 0, "campaign_only": 1, "image_url": None})
+                                            "discount_rate": 0, "campaign_only": 1,
+                                            "image_url": self.FCFS_IMAGES.get(product_name)})
             limit_s = max(40, round(limit * math.sqrt(self.scale)))
             activity = self.add("campaign_activities", {**base, "name": name, "activity_type": "FIRST_COME_FIRST_SERVE",
                                                         "product_id": product["id"], "limit_count": limit_s,
+                                                        "image_url": product["image_url"],
                                                         "price": price, "quantity": limit_s,
                                                         "budget": 0})
             activity["_open"] = self.day(open_offset).replace(hour=20)
