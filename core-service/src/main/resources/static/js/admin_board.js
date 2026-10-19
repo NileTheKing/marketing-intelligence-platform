@@ -1,382 +1,240 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const campaignListContainer = document.getElementById('campaign-list-container');
-    const campaignDetailHeader = document.getElementById('campaign-detail-header');
+    const listContainer = document.getElementById('campaign-list-container');
+    const detailHeader = document.getElementById('campaign-detail-header');
     const activityContent = document.getElementById('activity-content');
     const noCampaignSelected = document.getElementById('no-campaign-selected');
     const activityTableBody = document.getElementById('activity-table-body');
+    const searchInput = document.getElementById('activity-search');
+    const statusFilter = document.getElementById('activity-status-filter');
+    const typeFilter = document.getElementById('activity-type-filter');
 
-    // Detail Header Elements
-    const selectedCampaignName = document.getElementById('selected-campaign-name');
-    const selectedCampaignDate = document.getElementById('selected-campaign-date');
-    const selectedCampaignStatus = document.getElementById('selected-campaign-status');
-    const statTotalActivities = document.getElementById('stat-total-activities');
-    const statActiveActivities = document.getElementById('stat-active-activities');
-    const statTotalParticipants = document.getElementById('stat-total-participants');
+    const TYPE_LABELS = { FIRST_COME_FIRST_SERVE: '선착순', COUPON: '쿠폰', GIVEAWAY: '경품', WEBHOOK: '웹훅' };
+    const STATUS = {
+        ACTIVE: { label: '진행 중', cls: 'live' },
+        PAUSED: { label: '일시정지', cls: 'paused' },
+        DRAFT: { label: '작성 중', cls: '' },
+        ENDED: { label: '종료', cls: '' }
+    };
 
     let campaignsData = [];
     let selectedCampaignId = null;
     let activeDropdown = null;
 
-    // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        if (activeDropdown && !activeDropdown.contains(e.target)) {
-            activeDropdown.remove();
-            activeDropdown = null;
+        if (activeDropdown && !activeDropdown.contains(e.target)) closeDropdown();
+    });
+    [searchInput, statusFilter, typeFilter].forEach(el => el.addEventListener('input', renderActivities));
+
+    document.getElementById('create-campaign-btn').addEventListener('click', () => {
+        window.adminModalHandler?.showCreateCampaignModal?.();
+    });
+    document.getElementById('create-activity-btn').addEventListener('click', () => {
+        if (!selectedCampaignId) return;
+        if (window.adminModalHandler?.showCreateActivityModal) {
+            window.adminModalHandler.showCreateActivityModal(selectedCampaignId);
+        } else {
+            window.location.href = `/admin/campaign-activities/new?campaignId=${selectedCampaignId}`;
         }
     });
 
-    // Initial Fetch
     fetchCampaigns();
-
-    // Event Listeners
-    const createCampaignBtn = document.getElementById('create-campaign-btn');
-    if (createCampaignBtn) {
-        createCampaignBtn.addEventListener('click', () => {
-            if (window.adminModalHandler && window.adminModalHandler.showCreateCampaignModal) {
-                window.adminModalHandler.showCreateCampaignModal();
-            } else {
-                console.error('adminModalHandler not found or showCreateCampaignModal not available');
-            }
-        });
-    }
-
-    const createActivityBtn = document.getElementById('create-activity-btn');
-    if (createActivityBtn) {
-        createActivityBtn.addEventListener('click', () => {
-            if (selectedCampaignId) {
-                // Check if adminModalHandler has a specific function for creating activities
-                if (window.adminModalHandler && window.adminModalHandler.showCreateActivityModal) {
-                    window.adminModalHandler.showCreateActivityModal(selectedCampaignId);
-                } else {
-                    // Fallback to navigating to the create activity page with campaign ID
-                    window.location.href = `/admin/campaign-activities/new?campaignId=${selectedCampaignId}`;
-                }
-            } else {
-                alert('캠페인을 먼저 선택해주세요.');
-            }
-        });
-    }
 
     function fetchCampaigns() {
         fetch('/api/v1/campaigns')
-            .then((response) => response.json())
-            .then((data) => {
-                campaignsData = data;
-                renderCampaignList(data);
-
-                // Select first campaign by default if available
-                if (data.length > 0) {
-                    selectCampaign(data[0].id);
-                } else {
-                    // If no campaigns, ensure no campaign selected state is shown
-                    if (noCampaignSelected) noCampaignSelected.classList.remove('hidden');
-                    if (campaignDetailHeader) campaignDetailHeader.classList.add('hidden');
-                    if (activityContent) activityContent.classList.add('hidden');
-                }
+            .then(response => response.json())
+            .then(data => {
+                // Running first, then upcoming, then ended; newest start first within each group.
+                const rank = c => ({ live: 0, soon: 1, '': 2 })[campaignState(c).cls];
+                campaignsData = data.sort((a, b) => rank(a) - rank(b) || new Date(b.startAt) - new Date(a.startAt));
+                document.getElementById('campaign-count').textContent =
+                    `진행 중 ${campaignsData.filter(c => campaignState(c).cls === 'live').length} · 전체 ${campaignsData.length}`;
+                renderCampaignList();
+                if (campaignsData.length > 0) selectCampaign(campaignsData[0].id);
             })
-            .catch((error) => {
+            .catch(error => {
                 console.error('캠페인 목록 조회 오류:', error);
-                if (campaignListContainer) campaignListContainer.innerHTML = '<div class="text-center py-4 text-red-500">목록을 불러오지 못했습니다.</div>';
-                if (noCampaignSelected) noCampaignSelected.classList.remove('hidden');
-                if (campaignDetailHeader) campaignDetailHeader.classList.add('hidden');
-                if (activityContent) activityContent.classList.add('hidden');
+                listContainer.innerHTML = '<div class="empty low">목록을 불러오지 못했습니다.</div>';
             });
     }
 
-    function renderCampaignList(campaigns) {
-        if (!campaignListContainer) return;
-        campaignListContainer.innerHTML = '';
+    function campaignState(campaign) {
+        const now = new Date();
+        if (now < new Date(campaign.startAt)) return { label: '예정', cls: 'soon' };
+        if (now > new Date(campaign.endAt)) return { label: '종료', cls: '' };
+        return { label: '진행 중', cls: 'live' };
+    }
 
-        if (campaigns.length === 0) {
-            campaignListContainer.innerHTML = '<div class="text-center py-10 text-gray-400 text-sm">등록된 캠페인이 없습니다.</div>';
+    function renderCampaignList() {
+        if (campaignsData.length === 0) {
+            listContainer.innerHTML = '<div class="empty">등록된 캠페인이 없습니다.</div>';
             return;
         }
-
-        campaigns.forEach(campaign => {
+        listContainer.innerHTML = '';
+        campaignsData.forEach(campaign => {
+            const state = campaignState(campaign);
             const item = document.createElement('div');
-            // Use a temporary class for selection that will be updated by selectCampaign
-            item.className = `campaign-item p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors border-l-4 ${selectedCampaignId === campaign.id ? 'border-blue-600 bg-blue-50' : 'border-transparent'}`;
+            item.className = 'c-item';
             item.dataset.id = campaign.id;
-
-            // Determine status based on dates
-            const now = new Date();
-            const start = new Date(campaign.startAt);
-            const end = new Date(campaign.endAt);
-
-            let statusText = '예정';
-            let statusClass = 'text-blue-600 bg-blue-100';
-
-            if (now >= start && now <= end) {
-                statusText = '진행중';
-                statusClass = 'text-green-600 bg-green-100';
-            } else if (now > end) {
-                statusText = '종료';
-                statusClass = 'text-gray-600 bg-gray-100';
-            }
-
             item.innerHTML = `
-                <div class="flex justify-between items-start mb-1">
-                    <div class="font-bold text-gray-900 truncate flex-1" title="${campaign.name}">${campaign.name}</div>
-                    <button class="text-gray-400 hover:text-black edit-campaign-btn p-1 rounded hover:bg-gray-200 transition-colors" data-id="${campaign.id}" title="캠페인 수정">
-                        <i class="fa-solid fa-pen-to-square text-xs"></i>
-                    </button>
-                </div>
-                <div class="text-xs text-gray-500 flex justify-between items-center">
-                    <span>${formatDateShort(campaign.startAt)} ~ ${formatDateShort(campaign.endAt)}</span>
-                    <span class="px-2 py-0.5 rounded ${statusClass}">${statusText}</span>
-                </div>
-            `;
-
-            // Edit button click handler (stop propagation to prevent selecting the campaign)
-            const editBtn = item.querySelector('.edit-campaign-btn');
-            if (editBtn) {
-                editBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (window.adminModalHandler && window.adminModalHandler.showEditCampaignModal) {
-                        window.adminModalHandler.showEditCampaignModal(campaign.id);
-                    } else {
-                        console.error('showEditCampaignModal not available');
-                    }
-                });
-            }
-
+                <div class="c-name"><span title="${esc(campaign.name)}">${esc(campaign.name)}</span>
+                    <button class="icon-btn" title="캠페인 수정"><i class="fa-solid fa-pen"></i></button></div>
+                <div class="c-meta"><span class="num">${formatDateShort(campaign.startAt)} – ${formatDateShort(campaign.endAt)}</span>
+                    <span class="pill ${state.cls}">${state.label}</span></div>`;
+            item.querySelector('.icon-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.adminModalHandler?.showEditCampaignModal?.(campaign.id);
+            });
             item.addEventListener('click', () => selectCampaign(campaign.id));
-            campaignListContainer.appendChild(item);
+            listContainer.appendChild(item);
         });
     }
 
     function selectCampaign(id) {
-        selectedCampaignId = id;
         const campaign = campaignsData.find(c => c.id === id);
         if (!campaign) return;
+        selectedCampaignId = id;
+        document.querySelectorAll('.c-item').forEach(el => el.classList.toggle('active', Number(el.dataset.id) === id));
 
-        // Update Sidebar Selection UI
-        document.querySelectorAll('.campaign-item').forEach(el => {
-            if (parseInt(el.dataset.id) === id) {
-                el.classList.add('bg-blue-50', 'border-blue-600');
-                el.classList.remove('border-transparent');
-            } else {
-                el.classList.remove('bg-blue-50', 'border-blue-600');
-                el.classList.add('border-transparent');
-            }
-        });
+        noCampaignSelected.hidden = true;
+        detailHeader.hidden = false;
+        activityContent.hidden = false;
 
-        // Show Content Area
-        if (noCampaignSelected) noCampaignSelected.classList.add('hidden');
-        if (campaignDetailHeader) campaignDetailHeader.classList.remove('hidden');
-        if (activityContent) activityContent.classList.remove('hidden');
+        const state = campaignState(campaign);
+        document.getElementById('selected-campaign-name').textContent = campaign.name;
+        document.getElementById('selected-campaign-date').textContent = `${formatDate(campaign.startAt)} – ${formatDate(campaign.endAt)}`;
+        const statusEl = document.getElementById('selected-campaign-status');
+        statusEl.className = `pill ${state.cls}`;
+        statusEl.innerHTML = `<i></i>${state.label}`;
 
-        // Update Header Info
-        if (selectedCampaignName) selectedCampaignName.textContent = campaign.name;
-        if (selectedCampaignDate) selectedCampaignDate.innerHTML = `<i class="fa-regular fa-calendar mr-1"></i> ${formatDate(campaign.startAt)} ~ ${formatDate(campaign.endAt)}`;
-
-        // Update Status Badge
-        if (selectedCampaignStatus) {
-            const now = new Date();
-            const start = new Date(campaign.startAt);
-            const end = new Date(campaign.endAt);
-            let statusText = '예정';
-            let statusClass = 'text-blue-600 bg-blue-100';
-
-            if (now >= start && now <= end) {
-                statusText = '진행중';
-                statusClass = 'text-green-600 bg-green-100';
-            } else if (now > end) {
-                statusText = '종료';
-                statusClass = 'text-gray-600 bg-gray-100';
-            }
-            selectedCampaignStatus.textContent = statusText;
-            selectedCampaignStatus.className = `px-2 py-0.5 rounded text-xs ${statusClass}`;
-        }
-
-        // Calculate Stats
         const activities = campaign.campaignActivities || [];
-        const totalActivities = activities.length;
-        const activeActivities = activities.filter(a => a.status === 'ACTIVE').length; // Assuming status field exists
-        const totalParticipants = activities.reduce((sum, a) => sum + (a.participantCount || 0), 0);
+        const counts = {};
+        activities.forEach(a => { counts[a.activityType] = (counts[a.activityType] || 0) + 1; });
+        const fcfs = activities.filter(a => a.activityType === 'FIRST_COME_FIRST_SERVE');
+        const participants = fcfs.reduce((sum, a) => sum + (a.participantCount || 0), 0);
+        const capacity = fcfs.reduce((sum, a) => sum + (a.limitCount || 0), 0);
+        const active = activities.filter(a => a.status === 'ACTIVE').length;
+        const budget = activities.reduce((sum, a) => sum + (a.budget || 0), 0);
 
-        if (statTotalActivities) statTotalActivities.textContent = totalActivities;
-        if (statActiveActivities) statActiveActivities.textContent = activeActivities;
-        if (statTotalParticipants) statTotalParticipants.textContent = totalParticipants.toLocaleString();
+        setText('stat-total-activities', activities.length);
+        setText('stat-type-mix', Object.entries(counts).map(([t, n]) => `${TYPE_LABELS[t] || t} ${n}`).join(' · ') || '-');
+        setText('stat-active-activities', active);
+        setText('stat-active-sub', active ? '참여를 받는 중' : '진행 중인 활동 없음');
+        setText('stat-total-participants', participants.toLocaleString());
+        setText('stat-fill', capacity ? `정원 ${capacity.toLocaleString()}명 중 ${Math.round(participants / capacity * 100)}%` : '선착순 활동 없음');
+        setText('stat-budget', budget ? krw(budget) : '-');
 
-        // Render Activities
-        renderActivityTable(activities);
+        renderActivities();
     }
 
-    function renderActivityTable(activities) {
-        if (!activityTableBody) return;
-        activityTableBody.innerHTML = '';
+    function renderActivities() {
+        const campaign = campaignsData.find(c => c.id === selectedCampaignId);
+        if (!campaign) return;
+        const query = searchInput.value.trim().toLowerCase();
+        const activities = (campaign.campaignActivities || []).filter(a =>
+            (!query || a.name.toLowerCase().includes(query))
+            && (!statusFilter.value || a.status === statusFilter.value)
+            && (!typeFilter.value || a.activityType === typeFilter.value));
 
         if (activities.length === 0) {
-            activityTableBody.innerHTML = `
-                <tr>
-                    <td colspan="8" class="text-center py-12 text-gray-400">
-                        <i class="fa-regular fa-folder-open text-2xl mb-2 block"></i>
-                        등록된 활동이 없습니다.
-                    </td>
-                </tr>
-            `;
+            activityTableBody.innerHTML = '<tr><td colspan="7" class="empty">조건에 맞는 활동이 없습니다.</td></tr>';
             return;
         }
 
-        activities.forEach(activity => {
-            const row = document.createElement('tr');
-            row.className = 'hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0';
+        activityTableBody.innerHTML = activities.map(activity => {
+            const status = STATUS[activity.status] || { label: activity.status, cls: '' };
+            const isFcfs = activity.activityType === 'FIRST_COME_FIRST_SERVE';
+            const name = isFcfs
+                ? `<a href="/admin/dashboard/${activity.id}">${esc(activity.name)}</a>`
+                : `<span class="act-name">${esc(activity.name)}</span>`;
+            const detail = activity.productName
+                ? `${esc(activity.productName)} · ${Number(activity.price).toLocaleString()}원`
+                : activity.couponName ? `${esc(activity.couponName)}${activity.holdoutRatePercent ? ` · 홀드아웃 ${activity.holdoutRatePercent}%` : ''}` : '';
+            return `<tr>
+                <td>${name}<div class="act-sub">${detail}</div></td>
+                <td class="tag">${TYPE_LABELS[activity.activityType] || activity.activityType}</td>
+                <td><span class="pill ${status.cls}"><i></i>${status.label}</span></td>
+                <td class="num tag">${formatDateShort(activity.startDate)} – ${formatDateShort(activity.endDate)}</td>
+                <td>${progressCell(activity)}</td>
+                <td class="r num">${activity.budget ? krw(activity.budget) : '-'}</td>
+                <td><button class="menu-btn" data-id="${activity.id}"><i class="fa-solid fa-ellipsis pointer-events-none"></i></button></td>
+            </tr>`;
+        }).join('');
 
-            const typeLabelMap = {
-                FIRST_COME_FIRST_SERVE: { label: '선착순', color: 'text-blue-600 bg-blue-50' },
-                COUPON: { label: '쿠폰', color: 'text-green-600 bg-green-50' },
-                GIVEAWAY: { label: '경품', color: 'text-purple-600 bg-purple-50' }
-            };
-            const typeInfo = typeLabelMap[activity.activityType] || { label: activity.activityType, color: 'text-gray-600 bg-gray-50' };
-
-            const limit = activity.limitCount ?? 100;
-            const participantCount = activity.participantCount ?? 0;
-            const progressPercent = Math.min(100, Math.round((participantCount / limit) * 100));
-
-            row.innerHTML = `
-                <td class="py-3 px-4 font-medium text-gray-900">${activity.name}</td>
-                <td class="py-3 px-4">
-                    <span class="px-2 py-1 text-xs font-semibold rounded-full ${activity.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
-                        <span class="dot inline-block w-1.5 h-1.5 rounded-full mr-1 ${activity.status === 'ACTIVE' ? 'bg-green-500' : 'bg-gray-500'}"></span>
-                        ${activity.status}
-                    </span>
-                </td>
-                <td class="py-3 px-4"><span class="text-xs px-2 py-1 rounded ${typeInfo.color}">${typeInfo.label}</span></td>
-                <td class="py-3 px-4 text-gray-500">${formatDate(activity.startDate)} ~ ${formatDate(activity.endDate)}</td>
-                <td class="py-3 px-4">
-                    <div class="flex items-center gap-2">
-                        <div class="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div class="h-full bg-black rounded-full" style="width:${progressPercent}%"></div>
-                        </div>
-                        <span class="text-xs text-gray-500">${progressPercent}%</span>
-                    </div>
-                </td>
-                <td class="py-3 px-4 text-gray-500">${formatDate(activity.createdAt)}</td>
-                <td class="py-3 px-4">
-                    <button class="action-menu-trigger text-gray-400 hover:text-gray-600 relative" data-activity-id="${activity.id}" data-activity-name="${activity.name}" data-activity-status="${activity.status}">
-                        <i class="fa-solid fa-ellipsis-vertical pointer-events-none"></i>
-                    </button>
-                </td>
-            `;
-            activityTableBody.appendChild(row);
-        });
-
-        // Add event listeners for action menu triggers
-        document.querySelectorAll('.action-menu-trigger').forEach(btn => {
+        activityTableBody.querySelectorAll('.menu-btn').forEach(btn => {
+            const activity = activities.find(a => String(a.id) === btn.dataset.id);
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const activityId = btn.dataset.activityId;
-                const activityName = btn.dataset.activityName;
-                const currentStatus = btn.dataset.activityStatus;
-
-                // Remove existing dropdown if any
-                if (activeDropdown) {
-                    activeDropdown.remove();
-                    activeDropdown = null;
-                }
-
-                // Create Dropdown
-                const dropdown = document.createElement('div');
-                dropdown.className = 'fixed bg-white rounded-md shadow-lg z-[9999] border border-gray-200 py-1 text-sm w-32';
-
-                // Calculate position
-                const rect = btn.getBoundingClientRect();
-                dropdown.style.top = `${rect.bottom + window.scrollY + 5}px`;
-                dropdown.style.left = `${rect.right + window.scrollX - 128}px`; // Align right edge
-
-                // Edit Option
-                const editBtn = document.createElement('button');
-                editBtn.className = 'block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100';
-                editBtn.innerHTML = '<i class="fa-regular fa-pen-to-square mr-2"></i> 수정';
-                editBtn.onclick = () => {
-                    if (window.adminModalHandler && window.adminModalHandler.showEditModal) {
-                        window.adminModalHandler.showEditModal(activityId, activityName);
-                    }
-                    dropdown.remove();
-                    activeDropdown = null;
-                };
-                dropdown.appendChild(editBtn);
-
-                // Status Change Options
-                if (currentStatus === 'DRAFT') {
-                    const publishBtn = document.createElement('button');
-                    publishBtn.className = 'block w-full text-left px-4 py-2 text-blue-600 hover:bg-gray-100';
-                    publishBtn.innerHTML = '<i class="fa-solid fa-upload mr-2"></i> 게시';
-                    publishBtn.onclick = () => {
-                        if (window.adminModalHandler && window.adminModalHandler.showStatusModal) {
-                            window.adminModalHandler.showStatusModal(activityId, activityName, currentStatus, 'ACTIVE');
-                        }
-                        dropdown.remove();
-                        activeDropdown = null;
-                    };
-                    dropdown.appendChild(publishBtn);
-                } else if (currentStatus === 'ACTIVE') {
-                    const pauseBtn = document.createElement('button');
-                    pauseBtn.className = 'block w-full text-left px-4 py-2 text-yellow-600 hover:bg-gray-100';
-                    pauseBtn.innerHTML = '<i class="fa-solid fa-pause mr-2"></i> 일시정지';
-                    pauseBtn.onclick = () => {
-                        if (window.adminModalHandler && window.adminModalHandler.showStatusModal) {
-                            window.adminModalHandler.showStatusModal(activityId, activityName, currentStatus, 'PAUSED');
-                        }
-                        dropdown.remove();
-                        activeDropdown = null;
-                    };
-                    dropdown.appendChild(pauseBtn);
-
-                    const endBtn = document.createElement('button');
-                    endBtn.className = 'block w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100';
-                    endBtn.innerHTML = '<i class="fa-solid fa-stop mr-2"></i> 종료';
-                    endBtn.onclick = () => {
-                        if (window.adminModalHandler && window.adminModalHandler.showStatusModal) {
-                            window.adminModalHandler.showStatusModal(activityId, activityName, currentStatus, 'ENDED');
-                        }
-                        dropdown.remove();
-                        activeDropdown = null;
-                    };
-                    dropdown.appendChild(endBtn);
-                } else if (currentStatus === 'PAUSED') {
-                    const resumeBtn = document.createElement('button');
-                    resumeBtn.className = 'block w-full text-left px-4 py-2 text-green-600 hover:bg-gray-100';
-                    resumeBtn.innerHTML = '<i class="fa-solid fa-play mr-2"></i> 재개';
-                    resumeBtn.onclick = () => {
-                        if (window.adminModalHandler && window.adminModalHandler.showStatusModal) {
-                            window.adminModalHandler.showStatusModal(activityId, activityName, currentStatus, 'ACTIVE');
-                        }
-                        dropdown.remove();
-                        activeDropdown = null;
-                    };
-                    dropdown.appendChild(resumeBtn);
-                }
-
-                // Delete Option
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'block w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100 border-t border-gray-100';
-                deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can mr-2"></i> 삭제';
-                deleteBtn.onclick = () => {
-                    if (window.adminModalHandler && window.adminModalHandler.showDeleteModal) {
-                        window.adminModalHandler.showDeleteModal(activityId, activityName);
-                    }
-                    dropdown.remove();
-                    activeDropdown = null;
-                };
-                dropdown.appendChild(deleteBtn);
-
-                document.body.appendChild(dropdown);
-                activeDropdown = dropdown;
+                openMenu(btn, activity);
             });
         });
     }
 
-    function formatDate(dateString) {
-        if (!dateString) return '-';
-        const date = new Date(dateString);
-        return date.toISOString().split('T')[0];
+    function progressCell(activity) {
+        if (activity.activityType !== 'FIRST_COME_FIRST_SERVE' || !activity.limitCount) return '<span class="tag">-</span>';
+        const count = activity.participantCount || 0;
+        const percent = Math.min(100, Math.round(count / activity.limitCount * 100));
+        return `<span class="bar"><i style="width:${percent}%"></i></span>
+            <span class="num tag" style="margin-left:6px">${count.toLocaleString()}/${activity.limitCount.toLocaleString()}</span>`;
+    }
+
+    function openMenu(anchor, activity) {
+        closeDropdown();
+        const modal = window.adminModalHandler || {};
+        const items = [['수정', '', () => modal.showEditModal?.(activity.id, activity.name)]];
+        const status = (label, next, cls = '') => [label, cls, () => modal.showStatusModal?.(activity.id, activity.name, activity.status, next)];
+        if (activity.status === 'DRAFT') items.push(status('게시', 'ACTIVE'));
+        if (activity.status === 'ACTIVE') items.push(status('일시정지', 'PAUSED'), status('종료', 'ENDED', 'danger'));
+        if (activity.status === 'PAUSED') items.push(status('재개', 'ACTIVE'));
+        items.push(null, ['삭제', 'danger', () => modal.showDeleteModal?.(activity.id, activity.name)]);
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'dropdown';
+        items.forEach(item => {
+            if (!item) { dropdown.appendChild(document.createElement('hr')); return; }
+            const [label, cls, action] = item;
+            const button = document.createElement('button');
+            button.textContent = label;
+            button.className = cls;
+            button.addEventListener('click', () => { action(); closeDropdown(); });
+            dropdown.appendChild(button);
+        });
+        const rect = anchor.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.left = `${rect.right - 128}px`;
+        document.body.appendChild(dropdown);
+        activeDropdown = dropdown;
+    }
+
+    function closeDropdown() {
+        activeDropdown?.remove();
+        activeDropdown = null;
+    }
+
+    function setText(id, value) {
+        document.getElementById(id).textContent = value;
+    }
+
+    function krw(value) {
+        const n = Number(value);
+        if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(2)}억`;
+        if (n >= 10_000) return `${Math.round(n / 10_000).toLocaleString()}만`;
+        return `${n.toLocaleString()}원`;
+    }
+
+    function esc(text) {
+        return String(text ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
     }
 
     function formatDateShort(dateString) {
         if (!dateString) return '-';
         const date = new Date(dateString);
         return `${date.getMonth() + 1}.${date.getDate()}`;
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        const pad = n => String(n).padStart(2, '0');
+        return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
     }
 });
