@@ -8,13 +8,6 @@
 
 ## 확인 범위
 
-### 2026-10-20 FCFS 벌크 저장 적용
-
-- FCFS 배치의 신규 Entry·Purchase 저장을 JDBC 다중 행 INSERT로, UserSummary 최신 구매 시각 반영을 CASE UPDATE로 변경했다. 실험용 선택 설정은 제거하고 기본 경로로 사용한다. 소비자 동시성 1과 최대 poll 20건은 유지한다.
-- Entry·Purchase는 기존 서비스 트랜잭션에 함께 참여한다. UserSummary는 기존처럼 별도 트랜잭션에서 동기 호출한다. 배치 실패 후 개별 재처리와 DLT 정책은 유지한다.
-- 관련 단위·MySQL 통합 테스트 20개 통과. 실제 INSERT 제약 위반 시 두 테이블 롤백, 같은 메시지 재처리 및 중복 방지, 최신 시각 유지와 누락된 Summary 처리까지 확인했다. 전체 Core 테스트 실행 결과를 의미하지는 않는다.
-- VM 배포는 빌드한 JAR를 기존 런타임 이미지에 반영하는 방식으로 진행한다. 배포별 이미지·소스·점검 결과는 VM의 `/home/ubuntu/apps/axon-releases/`에 보관한다. VM Git checkout은 기존 상태를 유지하므로 이후 소스 재빌드 배포 시 이 변경 커밋을 먼저 반영해야 한다.
-
 - Core의 17개 JPA 엔티티와 Repository
 - FCFS 원장 이후 UserSummary projection
 - 쿠폰 사용, 재고 동기화, 월별 LTV 배치
@@ -22,6 +15,14 @@
 - 서비스·스케줄러의 트랜잭션 호출 경로
 
 OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력하지 않았다.
+
+## 2026-10-20 FCFS 벌크 저장 적용
+
+- FCFS 배치의 신규 Entry·Purchase 저장을 JDBC 다중 행 INSERT로, UserSummary 최신 구매 시각 반영을 CASE UPDATE로 변경했다. 실험용 선택 설정은 제거하고 기본 경로로 사용한다. 소비자 동시성 1과 최대 poll 20건은 유지한다.
+- Entry·Purchase는 기존 서비스 트랜잭션에 함께 참여한다. UserSummary는 기존처럼 별도 트랜잭션에서 동기 호출한다. 배치 실패 후 개별 재처리와 DLT 정책은 유지한다.
+- 관련 단위·MySQL 통합 테스트 20개 통과. 실제 INSERT 제약 위반 시 두 테이블 롤백, 같은 메시지 재처리 및 중복 방지, 최신 시각 유지와 누락된 Summary 처리까지 확인했다. 전체 Core 테스트 실행 결과를 의미하지는 않는다.
+- VM Core에 `cf36d63`의 JAR를 기존 런타임 이미지에 반영해 배포했다. 1.2 CPU·3 GiB에서 신규 메시지 20건의 Entry·Purchase·UserSummary 반영과 동일 메시지 재전송 시 중복 미생성을 확인했다. 최종 lag 0, DLT와 projection 실패 토픽의 추가 메시지 0건이다. 이 점검은 처리량 재측정이 아니다.
+- 이미지 ID·JAR 해시·소스 커밋·점검 결과와 이전 이미지 백업은 VM의 `/home/ubuntu/apps/axon-releases/core-bulk-cf36d63/manifest.json` 및 `axon-core-service:pre-bulk-cf36d63`에 보관한다. 자동 승인 검토에서 전체 소스 아카이브 전송을 거절해 JAR만 전송했다. VM Git checkout은 기존 `c8634b3a`를 유지하므로 이후 소스 재빌드 배포 시 `cf36d63`을 먼저 반영해야 한다.
 
 ## 실제 OCI 상태
 
