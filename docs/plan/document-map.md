@@ -46,6 +46,7 @@ Do not delete old documents just because they are outdated. Mark their current r
 | `docs/plan/purchase-cancellation-and-campaign-product-v1-plan.md` | active (implemented) | campaign-only product policy, post-payment cancellation state, and MySQL commercial projection correction |
 | `docs/plan/reconciliation-issue-v1-plan.md` | active (implemented) | durable FCFS reconciliation issue history; daily UserSummary projection repair from the Purchase ledger, with failed repairs retained for operator review |
 | `docs/portfolio-evidence-writing.md` | active | T-file evidence-writing protocol and portfolio claim boundaries |
+| `docs/experiment-evidence-workflow.md` | active | 실험·테스트 증거 확인 순서, 로그 출력 범위, 재실행 기준, 결과 기록 |
 
 ## Active / Current Implementation References
 

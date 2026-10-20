@@ -16,6 +16,7 @@
 - 이 레포 = 개발/고도화. 자소서·포폴 산출물은 별도(obsidian).
 - 포트폴리오 증거 정본(T 파일) 위치·주제는 `docs/plan/document-map.md`의 `Current Portfolio Source Notes`를 확인한다. T 파일 작성/수정 요청은 `docs/portfolio-evidence-writing.md`를 먼저 읽는다.
 - **결제(payment) 내부 로직 = 다른 개발자 담당** → 고도화는 앞단 게이트로만.
+- **실험·테스트·성능 수치 확인** → `docs/experiment-evidence-workflow.md`의 증거 확인 순서와 재실행 기준을 따른다.
 
 ---
 
