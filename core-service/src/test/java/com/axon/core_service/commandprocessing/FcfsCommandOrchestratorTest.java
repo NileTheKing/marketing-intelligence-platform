@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 import com.axon.core_service.event.CampaignActivityApprovedEvent;
 import com.axon.core_service.observability.CorePipelineMetrics;
@@ -23,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class FcfsCommandOrchestratorTest {
 
@@ -127,6 +129,25 @@ class FcfsCommandOrchestratorTest {
         org.mockito.InOrder inOrder = Mockito.inOrder(ledger, events);
         inOrder.verify(ledger).persistBatch(List.of(message));
         inOrder.verify(events).publishEvent(any(CampaignActivityApprovedEvent.class));
+    }
+
+    @Test
+    void singleRecordExperimentProcessesBatchItemsIndividually() {
+        CampaignActivityKafkaProducerDto first = message(1);
+        CampaignActivityKafkaProducerDto second = message(2);
+        when(ledger.persistBatch(any())).thenAnswer(invocation -> {
+            List<CampaignActivityKafkaProducerDto> batch = invocation.getArgument(0, List.class);
+            return batch.stream().map(message -> result(message, true)).toList();
+        });
+        ReflectionTestUtils.setField(orchestrator, "singleRecordWritesEnabled", true);
+
+        orchestrator.process(List.of(first, second));
+
+        ArgumentCaptor<List<CampaignActivityKafkaProducerDto>> batches = ArgumentCaptor.forClass(List.class);
+        verify(ledger, times(2)).persistBatch(batches.capture());
+        org.assertj.core.api.Assertions.assertThat(batches.getAllValues())
+                .containsExactly(List.of(first), List.of(second));
+        verify(summaries, times(2)).recordLatestPurchaseBatch(any());
     }
 
     private CampaignActivityKafkaProducerDto message(int index) {

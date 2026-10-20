@@ -29,6 +29,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 
 import java.math.BigDecimal;
@@ -75,6 +78,9 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private FcfsLedgerPersistenceService ledgerPersistenceService;
+
+    @MockitoSpyBean
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private FcfsCommandOrchestrator orchestrator;
@@ -201,6 +207,54 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(campaignActivityEntryRepository.count()).isZero();
         assertThat(purchaseRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("JDBC Purchase INSERT 실패는 먼저 삽입한 Entry도 롤백하고 재처리에 수렴한다")
+    void bulkPurchaseInsertFailureRollsBackEntryAndAllowsRetry() {
+        Object originalFlag = ReflectionTestUtils.getField(ledgerPersistenceService, "bulkWritesEnabled");
+        ReflectionTestUtils.setField(ledgerPersistenceService, "bulkWritesEnabled", true);
+        List<CampaignActivityKafkaProducerDto> messages = List.of(dto(784L), dto(785L));
+        java.util.concurrent.atomic.AtomicBoolean entryInsertObserved = new java.util.concurrent.atomic.AtomicBoolean();
+        boolean constraintAdded = false;
+        try {
+            jdbcTemplate.execute("ALTER TABLE purchases ADD CONSTRAINT test_reject_bulk_purchase "
+                    + "CHECK (user_id NOT IN (784, 785))");
+            constraintAdded = true;
+            org.mockito.Mockito.doAnswer(invocation -> {
+                assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM campaign_activity_entries", Long.class)).isEqualTo(2L);
+                entryInsertObserved.set(true);
+                return invocation.callRealMethod();
+            }).when(jdbcTemplate).update(
+                    org.mockito.ArgumentMatchers.startsWith("INSERT INTO purchases "), any(Object[].class));
+
+            assertThatThrownBy(() -> ledgerPersistenceService.persistBatch(messages))
+                    .isInstanceOf(DataAccessException.class)
+                    .hasMessageContaining("test_reject_bulk_purchase");
+            assertThat(entryInsertObserved).isTrue();
+            assertThat(campaignActivityEntryRepository.count()).isZero();
+            assertThat(purchaseRepository.count()).isZero();
+            org.mockito.Mockito.verify(purchaseRepositorySpy, org.mockito.Mockito.never()).saveAllAndFlush(any());
+
+            jdbcTemplate.execute("ALTER TABLE purchases DROP CHECK test_reject_bulk_purchase");
+            constraintAdded = false;
+            assertThat(ledgerPersistenceService.persistBatch(messages))
+                    .allMatch(FcfsLedgerPersistenceService.LedgerResult::purchaseCreated);
+            assertThat(ledgerPersistenceService.persistBatch(messages))
+                    .noneMatch(FcfsLedgerPersistenceService.LedgerResult::purchaseCreated);
+            assertThat(campaignActivityEntryRepository.count()).isEqualTo(2);
+            assertThat(purchaseRepository.count()).isEqualTo(2);
+        } finally {
+            try {
+                if (constraintAdded) {
+                    jdbcTemplate.execute("ALTER TABLE purchases DROP CHECK test_reject_bulk_purchase");
+                }
+            } finally {
+                org.mockito.Mockito.reset(jdbcTemplate);
+                ReflectionTestUtils.setField(ledgerPersistenceService, "bulkWritesEnabled", originalFlag);
+            }
+        }
     }
 
     @Test

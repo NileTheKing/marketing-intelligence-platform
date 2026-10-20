@@ -5,13 +5,20 @@ import com.axon.core_service.repository.UserRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +32,10 @@ public class UserSummaryService {
     private final UserRepository userRepository;
     private final UserSummaryRepository userSummaryRepository;
     private final PurchaseRepository purchaseRepository;
+    private final JdbcTemplate jdbcTemplate;
+
+    @Value("${axon.experiment.bulk-summary-writes:${axon.experiment.bulk-writes:false}}")
+    private boolean bulkWritesEnabled;
     /**
      * Updates the user's purchase activity by recording a purchase that occurred at the given instant.
      *
@@ -50,9 +61,13 @@ public class UserSummaryService {
 
         log.info("Recording purchase for {} users", latestPurchaseTimes.size());
 
-        for (Map.Entry<Long, Instant> entry : latestPurchaseTimes.entrySet()) {
-            if (entry.getValue() != null) {
-                advanceLastPurchaseAt(entry.getKey(), entry.getValue());
+        if (bulkWritesEnabled) {
+            advanceLastPurchaseAtBatch(latestPurchaseTimes);
+        } else {
+            for (Map.Entry<Long, Instant> entry : latestPurchaseTimes.entrySet()) {
+                if (entry.getValue() != null) {
+                    advanceLastPurchaseAt(entry.getKey(), entry.getValue());
+                }
             }
         }
 
@@ -94,5 +109,41 @@ public class UserSummaryService {
         if (updated == 0 && !userSummaryRepository.existsById(userId)) {
             throw new IllegalArgumentException("User summary not found: " + userId);
         }
+    }
+
+    private void advanceLastPurchaseAtBatch(Map<Long, Instant> latestPurchaseTimes) {
+        Map<Long, LocalDateTime> candidates = new LinkedHashMap<>();
+        latestPurchaseTimes.forEach((userId, occurredAt) -> {
+            if (occurredAt != null) {
+                candidates.put(userId, LocalDateTime.ofInstant(occurredAt, BUSINESS_ZONE));
+            }
+        });
+        if (candidates.isEmpty()) {
+            return;
+        }
+
+        String placeholders = String.join(",", java.util.Collections.nCopies(candidates.size(), "?"));
+        List<Long> existingIds = jdbcTemplate.query(
+                "SELECT user_id FROM user_summary WHERE user_id IN (" + placeholders + ")",
+                (rs, rowNum) -> rs.getLong(1),
+                candidates.keySet().toArray());
+        Set<Long> existing = new LinkedHashSet<>(existingIds);
+        for (Long userId : candidates.keySet()) {
+            if (!existing.contains(userId)) {
+                throw new IllegalArgumentException("User summary not found: " + userId);
+            }
+        }
+
+        StringBuilder sql = new StringBuilder("UPDATE user_summary SET last_purchase_at = CASE user_id ");
+        List<Object> args = new ArrayList<>(candidates.size() * 3 + candidates.size());
+        candidates.forEach((userId, occurredAt) -> {
+            sql.append("WHEN ? THEN CASE WHEN last_purchase_at IS NULL OR last_purchase_at < ? THEN ? ELSE last_purchase_at END ");
+            args.add(userId);
+            args.add(occurredAt);
+            args.add(occurredAt);
+        });
+        sql.append("ELSE last_purchase_at END WHERE user_id IN (").append(placeholders).append(")");
+        args.addAll(candidates.keySet());
+        jdbcTemplate.update(sql.toString(), args.toArray());
     }
 }

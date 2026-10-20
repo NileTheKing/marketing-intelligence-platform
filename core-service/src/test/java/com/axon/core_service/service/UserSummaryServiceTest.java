@@ -5,6 +5,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 
 import com.axon.core_service.domain.user.User;
 import com.axon.core_service.repository.UserRepository;
@@ -14,6 +18,12 @@ import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +42,9 @@ class UserSummaryServiceTest {
 
     @Mock
     private UserSummaryRepository userSummaryRepository;
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
 
     @InjectMocks
     private UserSummaryService userSummaryService;
@@ -74,6 +87,28 @@ class UserSummaryServiceTest {
         userSummaryService.recordLatestPurchaseBatch(java.util.Map.of(1L, olderMessage));
 
         verify(userSummaryRepository).advanceLastPurchaseAt(1L, candidate);
+    }
+
+    @Test
+    @DisplayName("bulk projection은 null 시각을 무시하고 CASE 기반 단일 UPDATE를 사용한다")
+    @SuppressWarnings("unchecked")
+    void recordLatestPurchaseBatchUsesBulkUpdateWhenEnabled() {
+        Instant occurredAt = Instant.parse("2026-08-01T00:00:00Z");
+        doReturn(List.of(1L)).when(jdbcTemplate).query(
+                anyString(), org.mockito.ArgumentMatchers.<RowMapper<Long>>any(), any(Object[].class));
+        ReflectionTestUtils.setField(userSummaryService, "bulkWritesEnabled", true);
+        Map<Long, Instant> candidates = new LinkedHashMap<>();
+        candidates.put(1L, occurredAt);
+        candidates.put(2L, null);
+
+        userSummaryService.recordLatestPurchaseBatch(candidates);
+
+        org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).update(sql.capture(), any(Object[].class));
+        org.assertj.core.api.Assertions.assertThat(sql.getValue())
+                .contains("UPDATE user_summary SET last_purchase_at = CASE user_id")
+                .contains("last_purchase_at IS NULL OR last_purchase_at < ?");
+        verify(userSummaryRepository, never()).advanceLastPurchaseAt(org.mockito.ArgumentMatchers.anyLong(), any());
     }
 
     @Test
