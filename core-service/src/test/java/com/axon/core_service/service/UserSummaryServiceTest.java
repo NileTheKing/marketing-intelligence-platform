@@ -1,35 +1,36 @@
 package com.axon.core_service.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.axon.core_service.domain.user.User;
-import com.axon.core_service.repository.UserRepository;
-import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
+import com.axon.core_service.repository.PurchaseRepository;
+import com.axon.core_service.repository.UserRepository;
+import com.axon.core_service.repository.UserSummaryRepository;
 import java.time.Instant;
-import java.util.Optional;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.test.util.ReflectionTestUtils;
+import java.util.Optional;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @ExtendWith(MockitoExtension.class)
 class UserSummaryServiceTest {
@@ -77,38 +78,39 @@ class UserSummaryServiceTest {
     }
 
     @Test
-    @DisplayName("배치 projection은 마지막 구매 시각만 전달하고 기존 값보다 과거로 갱신하지 않는다")
-    void recordLatestPurchaseBatchAdvancesSummary() {
-        Instant olderMessage = Instant.parse("2026-08-01T00:00:00Z");
-        java.time.LocalDateTime candidate = java.time.LocalDateTime.ofInstant(
-                olderMessage, java.time.ZoneId.of("Asia/Seoul"));
-        when(userSummaryRepository.advanceLastPurchaseAt(1L, candidate)).thenReturn(1);
-
-        userSummaryService.recordLatestPurchaseBatch(java.util.Map.of(1L, olderMessage));
-
-        verify(userSummaryRepository).advanceLastPurchaseAt(1L, candidate);
-    }
-
-    @Test
-    @DisplayName("bulk projection은 null 시각을 무시하고 CASE 기반 단일 UPDATE를 사용한다")
+    @DisplayName("배치 projection은 null 시각을 무시하고 CASE 기반 단일 UPDATE를 사용한다")
     @SuppressWarnings("unchecked")
-    void recordLatestPurchaseBatchUsesBulkUpdateWhenEnabled() {
+    void recordLatestPurchaseBatchUsesBulkUpdate() {
         Instant occurredAt = Instant.parse("2026-08-01T00:00:00Z");
         doReturn(List.of(1L)).when(jdbcTemplate).query(
                 anyString(), org.mockito.ArgumentMatchers.<RowMapper<Long>>any(), any(Object[].class));
-        ReflectionTestUtils.setField(userSummaryService, "bulkWritesEnabled", true);
         Map<Long, Instant> candidates = new LinkedHashMap<>();
         candidates.put(1L, occurredAt);
         candidates.put(2L, null);
 
         userSummaryService.recordLatestPurchaseBatch(candidates);
 
-        org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(jdbcTemplate).update(sql.capture(), any(Object[].class));
-        org.assertj.core.api.Assertions.assertThat(sql.getValue())
+        Assertions.assertThat(sql.getValue())
                 .contains("UPDATE user_summary SET last_purchase_at = CASE user_id")
                 .contains("last_purchase_at IS NULL OR last_purchase_at < ?");
         verify(userSummaryRepository, never()).advanceLastPurchaseAt(org.mockito.ArgumentMatchers.anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("배치 projection은 요약이 없는 사용자를 기존 오류로 거부한다")
+    @SuppressWarnings("unchecked")
+    void recordLatestPurchaseBatchThrowsIfSummaryMissing() {
+        doReturn(List.of()).when(jdbcTemplate).query(
+                anyString(), org.mockito.ArgumentMatchers.<RowMapper<Long>>any(), any(Object[].class));
+
+        assertThatThrownBy(() -> userSummaryService.recordLatestPurchaseBatch(
+                Map.of(42L, Instant.parse("2026-08-01T00:00:00Z"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("User summary not found: 42");
+
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
     }
 
     @Test

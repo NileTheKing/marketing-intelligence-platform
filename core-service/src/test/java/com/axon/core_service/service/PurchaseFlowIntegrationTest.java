@@ -31,7 +31,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 
 import java.math.BigDecimal;
@@ -90,6 +89,9 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private UserSummaryRepository userSummaryRepository;
+
+    @Autowired
+    private UserSummaryService userSummaryService;
 
     @MockitoSpyBean
     private PurchaseRepository purchaseRepositorySpy;
@@ -196,24 +198,8 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Purchase flush 실패는 이미 flush된 Entry도 같은 물리 트랜잭션에서 롤백한다")
-    void purchaseFlushFailureRollsBackFlushedEntry() {
-        CampaignActivityKafkaProducerDto dto = dto(781L);
-        org.mockito.Mockito.doThrow(new IllegalStateException("purchase flush failure"))
-                .when(purchaseRepositorySpy).saveAllAndFlush(any());
-
-        assertThatThrownBy(() -> ledgerPersistenceService.persistBatch(List.of(dto)))
-                .isInstanceOf(IllegalStateException.class);
-
-        assertThat(campaignActivityEntryRepository.count()).isZero();
-        assertThat(purchaseRepository.count()).isZero();
-    }
-
-    @Test
     @DisplayName("JDBC Purchase INSERT 실패는 먼저 삽입한 Entry도 롤백하고 재처리에 수렴한다")
     void bulkPurchaseInsertFailureRollsBackEntryAndAllowsRetry() {
-        Object originalFlag = ReflectionTestUtils.getField(ledgerPersistenceService, "bulkWritesEnabled");
-        ReflectionTestUtils.setField(ledgerPersistenceService, "bulkWritesEnabled", true);
         List<CampaignActivityKafkaProducerDto> messages = List.of(dto(784L), dto(785L));
         java.util.concurrent.atomic.AtomicBoolean entryInsertObserved = new java.util.concurrent.atomic.AtomicBoolean();
         boolean constraintAdded = false;
@@ -252,7 +238,6 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
                 }
             } finally {
                 org.mockito.Mockito.reset(jdbcTemplate);
-                ReflectionTestUtils.setField(ledgerPersistenceService, "bulkWritesEnabled", originalFlag);
             }
         }
     }
@@ -329,6 +314,52 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(userSummaryRepository.findById(user.getId()).orElseThrow().getLastPurchaseAt())
                 .isEqualTo(LocalDateTime.ofInstant(durablePurchaseAt, java.time.ZoneId.of("Asia/Seoul")));
+    }
+
+    @Test
+    @DisplayName("벌크 구매 요약은 null을 무시하고 DB의 최신 구매 시각만 전진시킨다")
+    void bulkSummaryPreservesLatestPurchaseTimes() {
+        User existing = userRepository.save(User.builder().name("existing").email("existing@example.test")
+                .role(Role.USER).build());
+        User fresh = userRepository.save(User.builder().name("fresh").email("fresh@example.test")
+                .role(Role.USER).build());
+        Instant oldTime = Instant.parse("2026-08-01T00:00:00Z");
+        Instant latest = oldTime.plusSeconds(3600);
+        userSummaryService.recordPurchase(existing.getId(), latest);
+        Map<Long, Instant> candidates = new java.util.LinkedHashMap<>();
+        candidates.put(existing.getId(), oldTime);
+        candidates.put(fresh.getId(), oldTime);
+        candidates.put(Long.MAX_VALUE, null);
+
+        userSummaryService.recordLatestPurchaseBatch(candidates);
+
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Seoul");
+        assertThat(userSummaryRepository.findById(existing.getId()).orElseThrow().getLastPurchaseAt())
+                .isEqualTo(LocalDateTime.ofInstant(latest, zone));
+        assertThat(userSummaryRepository.findById(fresh.getId()).orElseThrow().getLastPurchaseAt())
+                .isEqualTo(LocalDateTime.ofInstant(oldTime, zone));
+
+        userSummaryService.recordLatestPurchaseBatch(Map.of(
+                existing.getId(), latest.plusSeconds(3600), fresh.getId(), oldTime.minusSeconds(3600)));
+        assertThat(userSummaryRepository.findById(existing.getId()).orElseThrow().getLastPurchaseAt())
+                .isEqualTo(LocalDateTime.ofInstant(latest.plusSeconds(3600), zone));
+        assertThat(userSummaryRepository.findById(fresh.getId()).orElseThrow().getLastPurchaseAt())
+                .isEqualTo(LocalDateTime.ofInstant(oldTime, zone));
+    }
+
+    @Test
+    @DisplayName("벌크 구매 요약에 누락된 사용자가 있으면 다른 사용자도 갱신하지 않는다")
+    void bulkSummaryMissingUserDoesNotPartiallyUpdate() {
+        User user = userRepository.save(User.builder().name("valid").email("valid@example.test")
+                .role(Role.USER).build());
+        Map<Long, Instant> candidates = new java.util.LinkedHashMap<>();
+        candidates.put(user.getId(), Instant.now());
+        candidates.put(Long.MAX_VALUE, Instant.now());
+
+        assertThatThrownBy(() -> userSummaryService.recordLatestPurchaseBatch(candidates))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("User summary not found");
+        assertThat(userSummaryRepository.findById(user.getId()).orElseThrow().getLastPurchaseAt()).isNull();
     }
 
     private CampaignActivityKafkaProducerDto dto(Long userId) {

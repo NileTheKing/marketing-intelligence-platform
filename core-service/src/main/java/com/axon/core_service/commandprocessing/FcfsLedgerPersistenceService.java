@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,9 +29,6 @@ public class FcfsLedgerPersistenceService {
     private final CampaignActivityEntryRepository entryRepository;
     private final PurchaseRepository purchaseRepository;
     private final JdbcTemplate jdbcTemplate;
-
-    @Value("${axon.experiment.bulk-writes:false}")
-    private boolean bulkWritesEnabled;
 
     @Transactional
     public List<LedgerResult> persistBatch(List<CampaignActivityKafkaProducerDto> messages) {
@@ -88,13 +84,8 @@ public class FcfsLedgerPersistenceService {
                     purchase.getPurchaseAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()));
         }
 
-        if (bulkWritesEnabled) {
-            insertEntries(newEntries);
-            insertPurchases(newPurchases);
-        } else {
-            entryRepository.saveAllAndFlush(newEntries);
-            purchaseRepository.saveAllAndFlush(newPurchases);
-        }
+        insertEntries(newEntries);
+        insertPurchases(newPurchases);
         return results;
     }
 

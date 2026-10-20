@@ -17,7 +17,6 @@ import com.axon.core_service.repository.UserSummaryRepository;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,8 +33,6 @@ public class UserSummaryService {
     private final PurchaseRepository purchaseRepository;
     private final JdbcTemplate jdbcTemplate;
 
-    @Value("${axon.experiment.bulk-summary-writes:${axon.experiment.bulk-writes:false}}")
-    private boolean bulkWritesEnabled;
     /**
      * Updates the user's purchase activity by recording a purchase that occurred at the given instant.
      *
@@ -61,15 +58,7 @@ public class UserSummaryService {
 
         log.info("Recording purchase for {} users", latestPurchaseTimes.size());
 
-        if (bulkWritesEnabled) {
-            advanceLastPurchaseAtBatch(latestPurchaseTimes);
-        } else {
-            for (Map.Entry<Long, Instant> entry : latestPurchaseTimes.entrySet()) {
-                if (entry.getValue() != null) {
-                    advanceLastPurchaseAt(entry.getKey(), entry.getValue());
-                }
-            }
-        }
+        advanceLastPurchaseAtBatch(latestPurchaseTimes);
 
         log.info("Updated purchase time for {} users", latestPurchaseTimes.size());
     }

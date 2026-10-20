@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -30,15 +29,8 @@ public class FcfsCommandOrchestrator {
     private final ApplicationEventPublisher eventPublisher;
     private final CorePipelineMetrics pipelineMetrics;
 
-    @Value("${axon.experiment.single-record-writes:false}")
-    private boolean singleRecordWritesEnabled;
-
     public void process(List<CampaignActivityKafkaProducerDto> messages) {
         List<CampaignActivityKafkaProducerDto> deduped = deduplicate(messages);
-        if (singleRecordWritesEnabled && messages.size() > 1) {
-            deduped.forEach(message -> process(List.of(message)));
-            return;
-        }
         List<FcfsLedgerPersistenceService.LedgerResult> successes;
         try {
             successes = persistLedger(deduped);
