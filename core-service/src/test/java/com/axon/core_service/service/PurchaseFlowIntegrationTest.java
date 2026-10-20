@@ -27,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
@@ -40,8 +41,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
@@ -57,6 +59,9 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String kafkaBootstrapServers;
+
+    @Autowired
+    private KafkaListenerEndpointRegistry listenerRegistry;
 
     @Autowired
     private PurchaseRepository purchaseRepository;
@@ -238,15 +243,48 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
         List<CampaignActivityKafkaProducerDto> batch = new java.util.ArrayList<>(validMessages);
         batch.add(poison);
 
-        try (KafkaConsumer<String, byte[]> dltConsumer = dltConsumer()) {
+        var commandConsumer = listenerRegistry.getListenerContainers().stream()
+                .filter(container -> "axon-group".equals(container.getGroupId()))
+                .findFirst().orElseThrow();
+        commandConsumer.stop();
+        try (KafkaConsumer<String, byte[]> dltConsumer = dltConsumer();
+             AdminClient admin = AdminClient.create(Map.of("bootstrap.servers", kafkaBootstrapServers))) {
             dltConsumer.subscribe(List.of(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT));
-            dltConsumer.poll(Duration.ofSeconds(2)); // assignment before producing the poison record
-            orchestrator.process(batch);
+            Awaitility.await().atMost(Duration.ofSeconds(15)).until(() -> {
+                dltConsumer.poll(Duration.ofMillis(100));
+                return !dltConsumer.assignment().isEmpty();
+            });
+            dltConsumer.seekToEnd(dltConsumer.assignment());
+            dltConsumer.assignment().forEach(dltConsumer::position);
 
-            ConsumerRecords<String, byte[]> records = dltConsumer.poll(Duration.ofSeconds(5));
-            assertThat(records.count()).isEqualTo(1);
-            assertThat(new String(records.iterator().next().value(), java.nio.charset.StandardCharsets.UTF_8))
-                    .contains("999");
+            // Queue one complete poll batch before starting the real listener and its error handler.
+            var sends = batch.stream().map(message -> kafkaTemplate.send(
+                    KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, 0, "poison-isolation", message)).toList();
+            java.util.concurrent.CompletableFuture.allOf(
+                    sends.toArray(java.util.concurrent.CompletableFuture[]::new)).join();
+            var poisonMetadata = sends.getLast().join().getRecordMetadata();
+            TopicPartition partition = new TopicPartition(poisonMetadata.topic(), poisonMetadata.partition());
+            commandConsumer.start();
+
+            List<CampaignActivityKafkaProducerDto> failures = new java.util.ArrayList<>();
+            com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
+            Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+                for (var record : dltConsumer.poll(Duration.ofMillis(100))) {
+                    CampaignActivityKafkaProducerDto failed = json.readValue(
+                            record.value(), CampaignActivityKafkaProducerDto.class);
+                    if (activityId.equals(failed.getCampaignActivityId())) failures.add(failed);
+                }
+                assertThat(failures).hasSize(1);
+                assertThat(failures.getFirst().getUserId()).isEqualTo(poison.getUserId());
+                assertThat(failures.getFirst().getFailureReason()).contains("productId");
+                assertThat(purchaseRepository.findByCampaignActivityId(activityId)).hasSize(19);
+                var committed = admin.listConsumerGroupOffsets("axon-group")
+                        .partitionsToOffsetAndMetadata().get().get(partition);
+                assertThat(committed).isNotNull();
+                assertThat(committed.offset()).isGreaterThanOrEqualTo(poisonMetadata.offset() + 1);
+            });
+        } finally {
+            if (!commandConsumer.isRunning()) commandConsumer.start();
         }
 
         for (CampaignActivityKafkaProducerDto message : validMessages) {

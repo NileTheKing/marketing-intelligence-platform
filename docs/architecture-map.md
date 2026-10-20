@@ -54,7 +54,7 @@ Campaign -> CampaignActivity (기간/상태)
   → core batch listener (poll당 최대 20건) → FCFS orchestration
       → Entry + Purchase 단일 원장 트랜잭션
           배치 실패: 전체 rollback → 메시지별 새 트랜잭션 재시도
-          최종 실패 메시지만 command DLT
+          실패 위치를 예외로 반환 -> Kafka error handler가 재시도/최종 실패 메시지의 command DLT 전송 담당
       → UserSummary 별도 projection 트랜잭션
           실패: USER_SUMMARY_PROJECTION_FAILED에 기록
       → 매일 03:00 DB 대사: Purchase 원장과 UserSummary 비교 후 불일치 자동 rebuild

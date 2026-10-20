@@ -19,6 +19,14 @@ Status: active, temporary handoff. Updated: 2026-10-19.
 - The HTTP history benchmark now requires `CAMPAIGN_ENTRY_HISTORY_BENCHMARK=true`; its Spring configuration is restricted to the benchmark profile so it cannot replace other tests' application configuration.
 - Historical SQL and issuance results below retain their original measurement boundaries. Cleanup did not remeasure them.
 
+### Kafka Test Follow-up (2026-10-19)
+
+- The October 16 exception-handling changes (`64222cc`, `e097e62`) already exist in this branch. Failures propagate to the listener's Kafka error handler; direct orchestration calls do not execute that handler.
+- Updated the listener configuration test to identify the command and webhook groups instead of assuming the entire application has only two listeners.
+- Coupon persistence failure now has a focused propagation/no-success test; command DLT consumption has a separate final-failure test.
+- Replaced the direct-call poison-message test with real Kafka publication and listener recovery. Focused tests passed: 19 valid participation/purchase pairs persist, only the invalid message reaches DLT, and the source group's committed offset advances past it.
+- Production exception-handling code was not changed. Full Core regression passed: 297 tests, 288 passed, 9 skipped, 0 failures/errors (`./gradlew test`, 2026-10-19). `git diff --check` also passed. The earlier three-failure result above is the historical cleanup baseline, not the current test status.
+
 ## User Goal And Decisions
 
 The user wants convincing SQL/index work grounded in a plausible business need, not a fast query made marginally faster. Earlier cohort aggregation and campaign reporting experiments felt weak because the business urgency was unclear. Do not reopen that search without a reason.

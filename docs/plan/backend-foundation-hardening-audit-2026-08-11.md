@@ -88,3 +88,94 @@
 - FCFS orchestrator·ledger·projection 분리는 원장 트랜잭션, 단건 복구, 후행 projection 책임이 있어 유지했다.
 - `DashboardService`는 크지만 파일 길이만으로 나누지 않았다.
 - 현재 실패 사례가 없는 Inbox/Outbox나 범용 repository·domain-event·strategy framework는 추가하지 않았다.
+
+## Backend Workflow Regression Plan (2026-10-19)
+
+Status: active, incremental implementation. This is a backend integration-test plan, not browser E2E or a live AI/Slack test.
+
+### Purpose and Boundaries
+
+Protect important business flows when shared models, authentication, transactions or Kafka configuration change. Reuse existing unit and integration tests; do not duplicate their entire case matrix. Use real Core controllers/security, services, repositories, MySQL, Redis and Kafka in disposable test infrastructure. The external AI result and external notification server may be controlled by tests. Do not call actual LLM, Slack or VM endpoints.
+
+The existing `PurchaseFlowIntegrationTest` already covers the FCFS Kafka-to-DB boundary, including poison-record recovery and committed offsets. Reuse it. HTTP Entry reservation/prepare/confirm testing is a later separate E2E boundary, not a claim of this plan.
+
+### Ownership and Safety
+
+- Parent owns this plan, the small regression runner, result review and any follow-up scope decisions.
+- Luna initially owns ONLY a new `core-service/src/test/java/com/axon/core_service/service/CampaignRunWorkflowIntegrationTest.java`.
+- Do not edit existing production code, existing tests, `AbstractIntegrationTest`, dependencies, CI, migrations, compose files, AI code or documentation without the parent's explicit approval. A discovered production bug is a failing-test finding, not permission to refactor.
+- Do not create branches/worktrees, switch branches, commit, stage, reset, stash, push or deploy. Other sessions share the working directory; preserve all existing changes.
+- Never print credentials, tokens or complete environment contents. Do not use local app DBs, SQL Lab data, shared app Kafka topics or external services.
+- No new framework, generic test DSL, base test class, broad helper package, dependency or business feature. Keep fixtures local. If the first slice exceeds roughly 450 lines or needs a second file, stop and propose a narrower scope.
+
+### Phase 1: One Vertical Coupon Run Slice Only
+
+Implement and validate this phase, then STOP for parent review. Do not proceed to phases 2 or 3 on your own.
+
+Infrastructure and execution:
+
+1. Reuse `AbstractIntegrationTest` and `@AutoConfigureMockMvc`. It supplies disposable real MySQL, Redis and Kafka. Do not mock repositories, KafkaTemplate, run/execution/dispatch services or coupon strategy.
+2. MockMvc is acceptable for Core HTTP/security. Use Spring Security's existing test authentication for ADMIN and a test-only internal service token for the internal review endpoints. Do not disable security filters globally.
+3. Create a small owned fixture: about 10 real users with actual UserSummary/RFM data, one audience segment, an active coupon and a parent campaign. Use real activity registration API to establish the action relationship. Configure a 20% holdout explicitly; assert the persisted assignment rather than relying on randomly chosen user IDs.
+4. Do not annotate the whole test with a rollback transaction: Kafka consumers must see committed fixtures. Scope assertions by the fixture's campaign/run/coupon/user IDs. No global DELETE/TRUNCATE, global topic purge, arbitrary table reset or exact-total assumptions about unrelated rows.
+5. Disable automatic job execution only through existing test controls; drive the real public service/API entry points deliberately. Do not sleep through a real schedule interval. Do not inject success statuses or UserCoupon rows into the DB to fabricate the result.
+6. Await asynchronous outcomes with bounded Awaitility assertions, normally at most 15-30 seconds. No fixed sleep as a completion check. Keep test-only listeners/resources closed and restore anything explicitly paused in finally blocks.
+
+Required checks (two tests, not a large matrix):
+
+- Normal route: register DIRECT coupon activity through the admin endpoint, prepare a Run, claim review through the existing internal endpoint, submit a controlled `NO_FLAG` result with its real claim token, and invoke the existing automatic-dispatch endpoint. Await actual Kafka consumption and UserCoupon storage. Assert exact recipient count, no holdout coupons, no duplicate `(user,coupon)` rows, and corresponding execution/dispatch success. Repeating automatic dispatch must not issue extra coupons (the API may reject it or return an idempotent result according to current code).
+- Held route: prepare a separate fixture/Run, submit `FLAG` (or `REVIEW_REQUIRED`) through the internal analysis endpoint. Assert automatic dispatch is rejected and no execution/dispatch issuance or coupons exist before approval. Call the real decision endpoint with an operator identity/reason, await actual coupons for treatment users only, and assert the decision attribution and existing success history. Repeat approval and verify no extra issuance. Do not actually invoke Slack or the LLM.
+
+Endpoint references (read current DTOs and security configuration, do not guess payload fields):
+
+- `POST /api/v1/campaigns/{campaignId}/activities`
+- `POST /api/v1/campaign-activities/{activityId}/runs`
+- `POST /internal/v1/campaign-run-reviews/claim` for initial analysis; assert the returned run ID belongs to the fixture. The optional `runId` parameter selects reanalysis-eligible runs, not new pending runs.
+- `POST /internal/v1/campaign-run-reviews/runs/{runId}/analysis`
+- `POST /internal/v1/campaign-run-reviews/runs/{runId}/auto-dispatch`
+- `POST /internal/v1/campaign-run-reviews/runs/{runId}/decision`
+
+The controlled review result stands in for the external AI boundary. It does NOT prove FastAPI/LangGraph execution, checkpoint resume, Slack interactivity or LLM judgment quality. Do not call it full-system E2E.
+
+Verification and report:
+
+- Run only the new class first. It must actually execute with zero failures/errors/skips. Docker unavailability is a blocker, never a pass.
+- Local OrbStack/Testcontainers compatibility, if needed: `DOCKER_HOST=unix:///Users/yangnail/.orbstack/run/docker.sock`, `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock`, `JAVA_TOOL_OPTIONS=-Dapi.version=1.44`. These are test process settings, not global config edits.
+- Redirect long Gradle output to an artifact log. Inspect only compact failure excerpts and JUnit results; do not stream full logs into agent context. Run `git diff --check`.
+- Write a concise result artifact under `artifacts/test-regression/` with start/end time, Git HEAD, dirty-worktree disclosure, exact command, fixture sizes, test counts, pass/fail, observed coupon/target counts, actual/mocked boundaries and unresolved limitations. Never expose service-token or claim-token values.
+- On failure: identify the first broken boundary and relevant stack excerpt. Do not weaken assertions, add `@Disabled`, swallow failures, replace real dependencies with mocks or expand into production fixes. Report a minimal proposed fix to the parent.
+
+### Phase 2: After Parent Acceptance
+
+Only on explicit follow-up: reuse the Phase 1 fixture style for separate small cart-abandonment and dormant-customer integration checks. Cart: behavior event to candidate to actual issuance, with purchased/removed exclusions. Dormant: database eligibility to Kafka to issuance, with active/paused campaign controls. Use past timestamps, not real waiting periods. Reuse benchmark knowledge, not its million-row fixtures or throughput loops. Keep these as backend integration tests, without claiming storefront SDK/browser coverage.
+
+### Phase 3: After Parent Acceptance
+
+Only on explicit follow-up: test a controlled notification failure through real Kafka/DLT/DB, then operator-approved retry against a local fake HTTP endpoint returning success. Assert history preservation and no duplicate effect. Separately add one small performance-query result assertion to the Run fixture if it requires no extra infrastructure. Actual LLM and Slack remain a separate manual/live integration check.
+
+### Parent Acceptance Gate
+
+Review that no production path is mocked, forbidden files were untouched, positive and pre-approval negative assertions are meaningful, async writes are visible, test execution was not skipped, and results are reproducible. Then run the new suite with the existing FCFS integration suite through a small local runner. Decide the next phase only after this gate; no automatic expansion by the worker.
+
+### Local Regression Runner
+
+Run `bash scripts/test/run-backend-regression.sh` from the repository root. It executes
+`PurchaseFlowIntegrationTest` and `CampaignRunWorkflowIntegrationTest` with disposable
+Testcontainers infrastructure, rejects missing or skipped suites, and saves logs and
+JUnit XML under `artifacts/test-regression/`. Docker is required. It does not access the
+VM, application database, real LLM or Slack. Concurrent Git/source changes make the
+result inconclusive rather than accepted. Cart/dormant and notification recovery slices
+remain later phases, not coverage provided by this runner.
+
+### Phase 1 Acceptance (2026-10-20)
+
+- Reviewed and hardened the campaign workflow test: exact 10/8/2 target assignments,
+  coupon and Execution/Dispatch duplicate checks, operator attribution, and cleanup
+  restricted to the fixture users' RFM membership.
+- Local runner passed all 9 required tests with zero skips: 7 purchase-flow and 2 campaign-run.
+- Core full suite: 301 tests, 292 passed, 9 skipped (8 opt-in benchmarks and 1 external HTTP
+  smoke test), zero failures/errors. Both required suites also passed without skips here.
+- Results: `artifacts/test-regression/20261020T071712Z-backend/` and
+  `artifacts/test-regression/campaign-run-workflow-phase-1.md`.
+- Phase 1 is accepted. Phases 2/3 remain pending explicit follow-up; no real AI/Slack
+  or Entry HTTP coverage is claimed. No production changes, commit, push or deployment.

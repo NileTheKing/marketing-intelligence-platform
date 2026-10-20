@@ -104,7 +104,7 @@ class MarketingActionExecutionLifecycleTest {
     }
 
     @Test
-    void couponSaveFailurePublishesCommandDltAndDltConsumerMarksFinalFailure() {
+    void couponSaveFailureEscapesToKafkaErrorHandlerWithoutMarkingSuccess() {
         Coupon coupon = mock(Coupon.class);
         when(coupon.getId()).thenReturn(10L);
         when(couponRepository.findAllById(List.of(10L))).thenReturn(List.of(coupon));
@@ -123,15 +123,21 @@ class MarketingActionExecutionLifecycleTest {
                 .executionId(42L)
                 .dispatchId(11L)
                 .build();
-        when(kafkaTemplate.send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), any()))
-                .thenReturn(CompletableFuture.completedFuture(null));
+        assertThatThrownBy(() -> dispatcher.dispatch(List.of(message)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("coupon persistence failed");
 
-        dispatcher.dispatch(List.of(message));
+        verify(executionService).recordAttempt(11L);
+        verify(executionService, never()).markSucceeded(any());
+        org.mockito.Mockito.verifyNoInteractions(kafkaTemplate);
+    }
 
-        ArgumentCaptor<CampaignActivityKafkaProducerDto> dltCaptor =
-                ArgumentCaptor.forClass(CampaignActivityKafkaProducerDto.class);
-        verify(kafkaTemplate).send(eq(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND_DLT), dltCaptor.capture());
-        CampaignActivityKafkaProducerDto dltMessage = dltCaptor.getValue();
+    @Test
+    void commandDltConsumerRecordsFinalFailure() {
+        CampaignActivityKafkaProducerDto dltMessage = CampaignActivityKafkaProducerDto.builder()
+                .executionId(42L).dispatchId(11L)
+                .failureCategory(MarketingActionFailureCategory.UNKNOWN)
+                .failureReason("coupon persistence failed").build();
         new MarketingActionExecutionDltConsumer(executionService)
                 .consumeCampaignCommandDlt(List.of(dltMessage));
         verify(executionService).markDltFinal(11L, MarketingActionFailureCategory.UNKNOWN,
