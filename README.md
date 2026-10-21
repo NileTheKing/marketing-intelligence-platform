@@ -95,13 +95,13 @@ flowchart LR
 
 ## 시스템 구조
 
-<img src="./docs/assets/architecture.png" width="900" alt="시스템 구조: 주문 흐름과 마케팅 흐름">
+<img src="./docs/assets/architecture.png" width="900" alt="상단은 요청 수신 서버, Kafka, 비즈니스 처리 서버와 저장소의 연결 구조입니다. 하단은 같은 Core 서버의 구매 후처리 내부로, 트랜잭션 경계와 배치 및 JDBC 벌크 저장을 표시합니다.">
 
-**주문 흐름 (파랑)**
-고객이 선착순 상품에 응모하면(A1) 요청 수신 서버가 Redis에서 중복 확인과 수량 차감을 원자적으로 판정합니다(A2). 결제가 끝나면 결제 완료 이벤트를 Kafka로 넘기고 바로 응답하며(A3), 처리 서버가 이를 받아 구매를 기록합니다(A4).
+**구매 처리**
+요청 수신 서버(`entry-service`)가 Redis에서 선착순 참여를 판정하고 결제 요청을 처리합니다. Kafka로 전달된 구매 후처리는 비즈니스 처리 서버(`core-service`)가 담당합니다. 구매 기록과 참여 기록은 배치 단위의 한 트랜잭션에서 JDBC 벌크 저장하고, 집계 데이터는 별도 트랜잭션에서 갱신한 뒤 구매 이벤트를 발행합니다.
 
-**마케팅 흐름 (주황)**
-JS SDK가 조회, 클릭, 스크롤, 체류를 보내고 서버는 로그인과 구매를 보내 행동 로그로 모읍니다(B1). 행동 로그는 Kafka에서 Elasticsearch로 쌓이고(B2), 처리 서버가 여기서 발송 대상을 뽑고 캠페인 성과를 분석합니다(B3). 대량 발송은 운영 AI 에이전트가 먼저 검토하고(B4), 관리자가 Slack에서 승인해야 나갑니다(B5).
+**마케팅**
+행동 로그는 Kafka Connect를 거쳐 Elasticsearch에 적재해 발급 대상 조회에 활용하고, 구매와 쿠폰 기반의 캠페인 성과는 MySQL에서 조회합니다. 대량 쿠폰 발급은 AI 검토와 Slack 관리자 승인을 거쳐 실행합니다.
 
 **서버를 늘려도 깨지지 않게 만든 장치**
 
@@ -120,52 +120,35 @@ JS SDK가 조회, 클릭, 스크롤, 체류를 보내고 서버는 로그인과 
 
 <table>
 <tr>
-<td align="center" width="20%"><h3>63%</h3></td>
-<td align="center" width="20%"><h3>p95 500ms</h3></td>
-<td align="center" width="20%"><h3>80%</h3></td>
-<td align="center" width="20%"><h3>6배</h3></td>
-<td align="center" width="20%"><h3>2.2배</h3></td>
+<td align="center" width="25%"><h3>63%</h3></td>
+<td align="center" width="25%"><h3>p95 500ms</h3></td>
+<td align="center" width="25%"><h3>77 → 956 TPS</h3></td>
+<td align="center" width="25%"><h3>2.2배</h3></td>
 </tr>
 <tr>
 <td align="center" valign="top">선착순 API p95 단축<br>Lua 원자 연산</td>
 <td align="center" valign="top">1,000 RPS에서 유지<br>Virtual Thread, Kafka</td>
-<td align="center" valign="top">트랜잭션 시간 단축<br>재고 지연 동기화</td>
-<td align="center" valign="top">메시지 처리량<br>배치 소비</td>
+<td align="center" valign="top">Consumer 처리량<br>배치 처리와 JDBC 벌크 저장</td>
 <td align="center" valign="top">쿠폰 발급량<br>복합 인덱스</td>
 </tr>
 </table>
 
-<sub>설계 기준: 선착순 구매 1,000 RPS (4 OCPU, 24GB, 한 대)</sub>
+<sub>설계 기준: 선착순 구매 1,000 RPS (4 OCPU, 24GB, 한 대)<br>
+Consumer 측정: 단일 Core 인스턴스, 1.2 CPU, 3 GiB, Kafka 소비 스레드 1개. 단건 처리와 배치·벌크 저장 비교.</sub>
 
 ---
 
 ## 기술적으로 집중한 문제
 
-- **선착순 동시 요청의 정합성과 응답 속도**: WATCH(낙관적 락)로 재고를 판정하니 충돌이 잦아 응답이 늦어졌습니다. Lua 스크립트로 구매자 등록과 수량 갱신을 원자적으로 처리해 정원 초과와 중복 구매를 막고 p95를 63% 줄였습니다.
+**트래픽 및 설계 기준**: 선착순 구매 이벤트시 1000RPS, 900TPS(4 OCPU, 24GB)
 
-  <details>
-  <summary>자세히</summary>
-
-  - **문제**: 선착순 구매 동시 요청에서 Redis WATCH 방식은 충돌한 요청이 재시도를 반복해 API 응답이 지연
-  - **해결**: 중복 참여 확인, 수량 증가, 한도 초과 시 되돌리기를 Lua 스크립트 하나로 원자 처리. 트래픽이 몰리는 API에는 Virtual Thread를 적용하고 구매 이후 작업은 Kafka로 넘겨 바로 응답
-  - **결과**: API p95 63% 단축, 초당 1,000건 요청에서 p95 500ms 유지
-
-  </details>
-
-- **결제 후처리의 Row Lock 경합**: 재고 차감이 특정 상품에 몰려 Row Lock 경합과 커넥션 풀 고갈이 생겼습니다. 재고 갱신을 트랜잭션에서 분리해 지연 동기화하고, 메시지는 배치로 소비하도록 바꿨습니다.
-
-  <details>
-  <summary>자세히</summary>
-
-  - **문제**: 결제 후처리 트랜잭션 안에서 재고를 갱신해, 인기 상품에 Row Lock 경합과 커넥션 풀 고갈이 발생. 메시지마다 트랜잭션을 열어 소비가 밀리며 Consumer Lag 발생
-  - **해결**: 재고 갱신을 트랜잭션에서 분리해 지연 동기화, 메시지를 배치로 소비하는 구조로 전환
-  - **결과**: 트랜잭션 시간 80% 단축, 메시지 처리량 6배
-
-  </details>
-
-- **장바구니 이탈 쿠폰 대상 조회 병목**: 장바구니에 담고 30분이 지난 고객을 찾는 쿼리가 느려 발송이 밀렸습니다. EXPLAIN ANALYZE로 실행 계획을 보고 복합 인덱스를 맞춰 단위 시간당 발급량을 2.2배로 늘렸습니다.
-
-- **대량 발송의 사람 실수**: 대상이나 예산 설정 실수가 그대로 수천 명에게 나갈 수 있었습니다. 발송 전 코드 점검과 LangGraph 에이전트의 요약을 Slack으로 보내, 관리자가 승인해야만 발송하도록 했습니다.
+- 선착순 구매 API의 처리량 및  응답속도를 확보하기 위해, Virtual Thread 도입 및 후속 작업은 Kafka로 비동기 처리구조 설계→ 1000RPS peak, p95 500ms 확보
+- 선착순 구매 API에서, 동시 요청으로 초과 판매가 발생하고 장애 시 일부 Redis 연산만 반영되는 문제 발생. Redis INCR로 수량을 제한하고 Lua로 중복 확인과 수량 갱신을 원자적으로 처리 → 초과 판매와 데이터 불일치 해결, Redis 낙관적 락 대비 API 응답시간 63% 단축
+- 장바구니 이탈 고객 대상 쿠폰 발송 시, 대상 조회 병목으로 발송 지연 발생. EXPLAIN ANALYZE 기반 복합 인덱스 최적화 → 단위 시간당 발급량 2.2배 개선
+- 결제 완료 메시지를 처리하는 Kafka Consumer에서, 메시지별 DB 저장과 커밋으로 처리량 저하. 배치 단위 트랜잭션 처리와 JDBC 벌크 저장 적용 → 단일Consumer에서 처리량 77→956 TPS
+- JS SDK와 서버 이벤트 기반 행동 로그 수집 및 Elasticsearch 적재 파이프라인 구축. 쿠폰 발급과 알림 자동화 및 대조군 비교 등 캠페인 성과 분석 대시보드 개발
+- 대량 쿠폰발급 등 마케팅 캠페인시 휴먼 에러를 검토하는 FastAPI LangGraph 에이전트 개발, Slack에서 운영자가 확인하는 Human-in-the-Loop 승인 구현
+- OpenTelemetry기반 APM과 Prometheus로 인프라,앱 병목해결. 주요 API 응답 68%개선. Github Actions CI/CD 구축
 
 ---
 
