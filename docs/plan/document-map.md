@@ -53,6 +53,7 @@ These are still useful, but code must win if there is a conflict.
 
 | Document | Status | Use |
 |---|---|---|
+| `docs/devlog/dev-log-2026-10-21-redis-reservation-comparison.md` | active evidence | consolidated WATCH/Lua and separate-command/Lua measurements; distinguishes historical Redis-only results from current Redis and actual HTTP API results |
 | `docs/flow/reservation-payment-flow.md` | active/reference | reservation to payment flow |
 | `docs/flow/token-based-payment-flow.md` | active/reference | token/payment flow reference |
 | `docs/design/llm-query-architecture.md` | active/reference | LLM query architecture background |
