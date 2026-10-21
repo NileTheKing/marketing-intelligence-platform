@@ -1,7 +1,9 @@
 package com.axon.core_service.controller;
 
 import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.domain.dto.product.ProductListResponse;
 import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.service.StoreViewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,15 @@ import java.util.stream.Collectors;
 public class ProductController {
 
     private final ProductRepository productRepository;
+    private final StoreViewService storeViewService;
+
+    @GetMapping
+    public ResponseEntity<ProductListResponse> listProducts(
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(storeViewService.getProductList(category, page, size));
+    }
 
     @GetMapping("/search")
     public ResponseEntity<?> searchProducts(@RequestParam("keyword") String keyword) {

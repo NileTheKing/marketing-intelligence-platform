@@ -10,9 +10,11 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name="user_coupons", indexes = {
-        @Index(name="idx_user_coupon_user_id", columnList="user_id")
+        @Index(name="idx_user_coupon_user_id", columnList="user_id"),
+        @Index(name="idx_user_coupon_execution", columnList="marketing_action_execution_id")
 }, uniqueConstraints = {
-        @UniqueConstraint(name = "uk_user_coupon_user_coupon", columnNames = {"user_id", "coupon_id"})
+        @UniqueConstraint(name = "uk_user_coupon_user_coupon", columnNames = {"user_id", "coupon_id"}),
+        @UniqueConstraint(name = "uk_user_coupon_execution", columnNames = {"marketing_action_execution_id"})
 })
 @Getter
 @NoArgsConstructor
@@ -36,10 +38,14 @@ public class UserCoupon extends BaseTimeEntity {
     @Column(name = "used_at")
     private LocalDateTime usedAt;
 
+    @Column(name = "marketing_action_execution_id")
+    private Long marketingActionExecutionId;
+
     @Builder
-    public UserCoupon(Long userId, Coupon coupon) {
+    public UserCoupon(Long userId, Coupon coupon, Long marketingActionExecutionId) {
         this.userId = userId;
         this.coupon = coupon;
+        this.marketingActionExecutionId = marketingActionExecutionId;
         this.status = CouponStatus.ISSUED;
     }
 

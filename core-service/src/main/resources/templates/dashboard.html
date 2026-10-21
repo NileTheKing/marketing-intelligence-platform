@@ -1,179 +1,104 @@
 <!DOCTYPE html>
-<html lang="ko" xmlns:th="http://www.thymeleaf.org"
-    th:replace="fragments/layout :: layout('Axon - Marketing Dashboard', 'bg-gray-50 text-neutral-900', ~{::head/content()}, ~{::section}, 'dashboard')">
-
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'Axon - ' + ${campaignName}">Axon - 활동 대시보드</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <!-- Tailwind is kept only for the chatbot fragment's utility classes. -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
-        crossorigin="anonymous"></script>
-    <link rel="stylesheet" th:href="@{/css/dashboard.css}" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <style>
+        .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 2px; }
+        .seg button { border: 0; background: none; font: 600 12px Pretendard, sans-serif; color: var(--text-3); padding: 3px 10px; border-radius: 5px; cursor: pointer; }
+        .seg button.on { background: #f1f0ec; color: var(--text); }
+        .head-right { display: flex; align-items: center; gap: 12px; }
+        .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+        .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px #e8f5ee; }
+
+        .stock { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 24px; align-items: center; padding: 14px 16px; }
+        .stock-big { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+        .stock-big small { font-size: 13px; color: var(--text-3); font-weight: 500; margin-left: 4px; }
+        .stock-track { height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; display: flex; }
+        .stock-track .sold { background: var(--accent); }
+        .stock-track .left { background: var(--accent-mid); }
+        .legend { display: flex; gap: 14px; margin-top: 7px; font-size: 11px; color: var(--text-3); }
+        .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+        .sold-out { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--low-soft); color: var(--low); }
+        .stock-state { font-size: 12px; color: var(--text-3); text-align: right; }
+
+        .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+        .funnel-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 70px 56px; gap: 10px; align-items: center; padding: 7px 0; }
+        .funnel-row + .funnel-row { border-top: 1px dashed var(--border); }
+        .funnel-label { font-size: 12px; font-weight: 600; }
+        .funnel-bar { height: 18px; background: var(--track); border-radius: 4px; overflow: hidden; }
+        .funnel-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+        .funnel-count { text-align: right; font-weight: 600; font-size: 12px; }
+        .funnel-rate { text-align: right; font-size: 11px; color: var(--text-3); }
+        .chart-wrap { position: relative; height: 172px; }
+        .up { color: var(--ok); }
+    </style>
 </head>
-<section>
-    <input type="hidden" id="activityId" th:value="${activityId}" />
+<body class="console">
+<input type="hidden" id="activityId" th:value="${activityId}">
+<div class="shell">
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('campaigns')}"></aside>
 
-    <div class="dashboard-layout">
-        <!-- Local Sidebar (Dark Theme) -->
-        <div th:replace="fragments/dashboard_sidebar :: sidebar('activity', ${campaignId}, ${parentCampaignId})"></div>
-
-        <!-- Main Content -->
-        <main class="dashboard-main">
-            <!-- Header -->
-            <div class="dashboard-header">
-                <div class="mb-2 flex items-center gap-2 text-sm text-gray-500">
-                    <span>Admin</span>
-                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                    <span>Dashboard</span>
-                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                    <span class="font-medium text-gray-900" th:text="${campaignName}">Campaign</span>
-                </div>
-
-                <div class="dashboard-title-row">
-                    <h1 class="page-title" th:text="${campaignName}">Campaign Dashboard</h1>
-
-                    <div class="flex items-center gap-3">
-                        <div class="relative">
-                            <button id="periodDropdownBtn" onclick="togglePeriodDropdown()"
-                                class="bg-white border border-gray-200 rounded px-3 py-1.5 flex items-center gap-2 text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
-                                <i class="fa-regular fa-calendar"></i>
-                                <span id="currentPeriodLabel">Last 7 Days</span>
-                                <i class="fa-solid fa-caret-down text-xs text-gray-400"></i>
-                            </button>
-                            <!-- Dropdown Menu -->
-                            <div id="periodDropdownMenu"
-                                class="hidden absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded shadow-lg z-50 py-1">
-                                <a href="#" onclick="changePeriod('1d', 'Last 24 Hours')"
-                                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600">Last
-                                    24 Hours</a>
-                                <a href="#" onclick="changePeriod('7d', 'Last 7 Days')"
-                                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600">Last
-                                    7 Days</a>
-                                <a href="#" onclick="changePeriod('30d', 'Last 30 Days')"
-                                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600">Last
-                                    30 Days</a>
-                            </div>
-                        </div>
-
-                        <div class="live-badge">
-                            <div class="live-dot"></div>
-                            <span>LIVE</span>
-                        </div>
-                    </div>
-                </div>
-                <p class="text-sm text-gray-500">
-                    Last updated: <span id="lastUpdated">--:--:--</span>
-                </p>
+    <main>
+        <div class="topbar">
+            <div>
+                <div class="crumb">캠페인 / <a href="/admin/campaigns" style="color:inherit;text-decoration:none" th:text="${parentCampaignName} ?: '캠페인'">캠페인</a> / 선착순</div>
+                <h1 th:text="${campaignName}">활동</h1>
             </div>
-
-            <!-- KPI Cards Row -->
-            <div class="kpi-grid">
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalVisits', 'Total Visits', 'fa-solid fa-eye', 'blue', '0', '-', 'neutral')">
+            <div class="head-right">
+                <div class="seg" id="periodSeg">
+                    <button data-period="1d">24시간</button>
+                    <button data-period="7d" class="on">7일</button>
+                    <button data-period="30d">30일</button>
                 </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalEngages', 'Engagements', 'fa-solid fa-hand-pointer', 'purple', '0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalQualifies', 'Qualified', 'fa-solid fa-check-circle', 'green', '0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('purchaseCount', 'Purchases', 'fa-solid fa-cart-shopping', 'orange', '0', '-', 'neutral')">
-                </div>
+                <span class="live"><i></i><span id="lastUpdated">실시간</span></span>
             </div>
+        </div>
 
-            <!-- Business Metrics Row -->
-            <div class="kpi-grid">
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('gmv', 'Total GMV', 'fa-solid fa-sack-dollar', 'emerald', '₩0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('conversionRate', 'Conversion Rate', 'fa-solid fa-bullseye', 'indigo', '0%', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('roas', 'ROAS', 'fa-solid fa-chart-line', 'rose', '0%', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('aov', 'Avg Order Value', 'fa-solid fa-receipt', 'amber', '₩0', '-', 'neutral')">
-                </div>
+        <div class="cat"><b>재고</b><span>Redis 카운터 기준 · 5초마다 갱신</span></div>
+        <section class="card stock">
+            <div>
+                <div class="kpi-label">참여 확정</div>
+                <div class="stock-big num"><span id="realtimeParticipants">0</span><small id="realtimeTotal">/ 0</small></div>
             </div>
-
-            <!-- Real-time Section (Anchor) -->
-            <div id="realtime-section" class="mb-8">
-                <div class="realtime-card p-6">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center gap-3">
-                            <div class="text-blue-600">
-                                <i class="fa-solid fa-users text-xl"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-gray-900 text-lg">Active Participants</h3>
-                                <p class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Real-time
-                                    Activity</p>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-3xl font-bold text-gray-900" id="realtimeParticipants">0</div>
-                            <div class="text-sm text-gray-500">Current Users</div>
-                        </div>
-                    </div>
-                    <div class="w-full bg-gray-100 rounded-sm h-1.5 mb-6 overflow-hidden">
-                        <div id="participantsProgressBar"
-                            class="bg-blue-600 h-1.5 rounded-sm transition-all duration-500" style="width: 0%"></div>
-                    </div>
-
-                    <div class="border-t border-gray-100 pt-6">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-box-open text-gray-400"></i>
-                                <span class="font-medium text-gray-700">Stock Availability</span>
-                            </div>
-                            <span class="font-bold text-gray-900" id="realtimeStock">0 left</span>
-                        </div>
-                        <div class="w-full bg-gray-100 rounded-sm h-1.5 overflow-hidden">
-                            <div id="stockProgressBar"
-                                class="h-1.5 rounded-sm transition-all duration-500 bg-emerald-500" style="width: 0%">
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div>
+                <div class="stock-track"><i class="sold" id="soldBar" style="width:0%"></i><i class="left" id="leftBar" style="width:0%"></i></div>
+                <div class="legend"><span style="--c: var(--accent)" id="soldLegend">참여 확정</span><span style="--c: var(--accent-mid)" id="leftLegend">남은 수량</span></div>
             </div>
+            <div class="stock-state" id="stockState">-</div>
+        </section>
 
-            <!-- Charts Row -->
-            <div id="funnel-section" class="charts-grid">
-                <!-- Funnel Chart -->
-                <div class="chart-card half">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Conversion Funnel</h3>
-                        <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
-                    </div>
-                    <div class="h-64 relative">
-                        <canvas id="funnelChart"></canvas>
-                    </div>
-                </div>
+        <div class="cat"><b>매출</b><span id="periodLabel">최근 7일 · 결제 확정 기준</span></div>
+        <section class="card kpis">
+            <div class="kpi"><div class="kpi-label">거래액</div><div class="kpi-val num" id="gmv">-</div><div class="kpi-sub num" id="gmvSub">-</div></div>
+            <div class="kpi"><div class="kpi-label">객단가</div><div class="kpi-val num" id="aov">-</div><div class="kpi-sub num" id="aovSub">-</div></div>
+            <div class="kpi"><div class="kpi-label">방문 → 구매 전환율</div><div class="kpi-val num" id="conversionRate">-</div><div class="kpi-sub num" id="conversionSub">-</div></div>
+            <div class="kpi"><div class="kpi-label">ROAS</div><div class="kpi-val num" id="roas">-</div><div class="kpi-sub num" id="budget">-</div></div>
+        </section>
 
-                <!-- Traffic Trend -->
-                <div class="chart-card half">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Traffic Trend (24h)</h3>
-                        <div class="flex gap-1 bg-gray-100 p-1 rounded-md">
-                            <span
-                                class="text-xs font-medium px-2 py-1 bg-white rounded shadow-sm text-gray-800">24H</span>
-                            <span
-                                class="text-xs font-medium px-2 py-1 text-gray-500 hover:text-gray-700 cursor-pointer">7D</span>
-                        </div>
-                    </div>
-                    <div class="h-64 relative">
-                        <canvas id="trafficChart"></canvas>
-                    </div>
-                </div>
-            </div>
+        <div class="cat"><b>퍼널 · 트래픽</b><span>방문부터 결제까지, 시간대별 방문</span></div>
+        <div class="two">
+            <section class="card panel">
+                <div class="p-head"><div class="p-title">참여 퍼널</div><div class="p-sub">이전 단계 대비</div></div>
+                <div id="funnel"></div>
+            </section>
+            <section class="card panel">
+                <div class="p-head"><div class="p-title">시간대별 방문</div><div class="p-sub num" id="peakLabel"></div></div>
+                <div class="chart-wrap"><canvas id="trafficChart"></canvas></div>
+            </section>
+        </div>
+    </main>
+</div>
 
-        </main>
-    </div>
-
-    <!-- Chatbot & Scripts -->
-    <div th:replace="fragments/chatbot :: chatbot"></div>
-    <script th:src="@{/js/chatbot.js}"></script>
-    <script th:src="@{/js/dashboard.js}"></script>
-
+<div th:replace="~{fragments/chatbot :: chatbot}"></div>
+<script th:src="@{/js/chatbot.js}"></script>
+<script th:src="@{/js/dashboard.js}"></script>
+</body>
 </html>

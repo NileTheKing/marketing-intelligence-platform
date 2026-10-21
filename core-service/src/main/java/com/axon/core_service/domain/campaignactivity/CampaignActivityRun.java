@@ -43,6 +43,15 @@ public class CampaignActivityRun extends BaseTimeEntity {
     @Column(name = "target_count", nullable = false)
     private int targetCount;
 
+    @Column(name = "treatment_count", nullable = false)
+    private int treatmentCount;
+
+    @Column(name = "holdout_count", nullable = false)
+    private int holdoutCount;
+
+    @Column(name = "dispatched_at")
+    private LocalDateTime dispatchedAt;
+
     @Column(name = "blocked_reason", length = 1000)
     private String blockedReason;
 
@@ -78,32 +87,42 @@ public class CampaignActivityRun extends BaseTimeEntity {
     private CampaignActivityRun(CampaignActivity campaignActivity,
                                 CampaignActivityRunStatus status,
                                 int targetCount,
+                                int treatmentCount,
+                                int holdoutCount,
                                 String blockedReason,
                                 Map<String, Object> factSnapshot) {
         this.campaignActivity = campaignActivity;
         this.status = status;
         this.targetCount = targetCount;
+        this.treatmentCount = treatmentCount;
+        this.holdoutCount = holdoutCount;
         this.blockedReason = blockedReason;
         this.factSnapshot = factSnapshot;
     }
 
     public static CampaignActivityRun blocked(CampaignActivity activity, int targetCount,
+                                              int treatmentCount, int holdoutCount,
                                               String reason, Map<String, Object> facts) {
         return builder()
                 .campaignActivity(activity)
                 .status(CampaignActivityRunStatus.BLOCKED)
                 .targetCount(targetCount)
+                .treatmentCount(treatmentCount)
+                .holdoutCount(holdoutCount)
                 .blockedReason(reason)
                 .factSnapshot(facts)
                 .build();
     }
 
     public static CampaignActivityRun pendingAnalysis(CampaignActivity activity, int targetCount,
+                                                       int treatmentCount, int holdoutCount,
                                                        Map<String, Object> facts) {
         return builder()
                 .campaignActivity(activity)
                 .status(CampaignActivityRunStatus.PENDING_ANALYSIS)
                 .targetCount(targetCount)
+                .treatmentCount(treatmentCount)
+                .holdoutCount(holdoutCount)
                 .factSnapshot(facts)
                 .build();
     }
@@ -157,6 +176,7 @@ public class CampaignActivityRun extends BaseTimeEntity {
 
     public void markDispatched() {
         this.status = CampaignActivityRunStatus.DISPATCHED;
+        this.dispatchedAt = LocalDateTime.now();
     }
 
     public void close(String decidedBy, String reason) {

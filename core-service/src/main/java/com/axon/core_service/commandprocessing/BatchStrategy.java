@@ -13,7 +13,8 @@ public interface BatchStrategy extends CampaignStrategy {
     /**
      * 여러 캠페인 활동 메시지를 배치로 처리
      *
-     * @param messages 배치 처리할 메시지 리스트 (보통 50개 단위)
+     * @param messages 배치 처리할 메시지 리스트. 크기는 Kafka poll 결과에 따라 달라지며,
+     *                 상한은 consumer의 max.poll.records 설정을 따름
      */
     void processBatch(List<CampaignActivityKafkaProducerDto> messages);
 }

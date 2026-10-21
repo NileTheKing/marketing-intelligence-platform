@@ -54,6 +54,23 @@ public interface UserSummaryRepository extends JpaRepository<UserSummary, Long> 
             @Param("rfmSegment") RfmSegment rfmSegment);
 
     @Query("""
+            SELECT summary.userId
+            FROM UserSummary summary
+            WHERE summary.lastPurchaseAt IS NOT NULL
+              AND summary.lastPurchaseAt < :cutoff
+              AND NOT EXISTS (
+                  SELECT 1 FROM MarketingActionExecution execution
+                  WHERE execution.reengagementCampaignId = :campaignId
+                    AND execution.userId = summary.userId
+              )
+            ORDER BY summary.lastPurchaseAt ASC, summary.userId ASC
+            """)
+    List<Long> findDormantUserIdsWithoutCampaignExecution(
+            @Param("campaignId") Long campaignId,
+            @Param("cutoff") LocalDateTime cutoff,
+            Pageable pageable);
+
+    @Query("""
             SELECT COUNT(summary)
             FROM UserSummary summary
             WHERE summary.rfmSegment = :rfmSegment

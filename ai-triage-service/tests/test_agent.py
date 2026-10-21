@@ -245,7 +245,7 @@ def test_campaign_run_llm_failure_falls_back_to_operator_review(monkeypatch):
             raise AssertionError("LLM failure must not automatically dispatch")
 
         async def fail_campaign_run_analysis(self, run_id, claim_token, reason):
-            raise AssertionError("safe fallback should save a FLAG result")
+            raise AssertionError("safe fallback should save a review-required result")
 
     class FakeRunNotifier:
         def __init__(self):
@@ -253,7 +253,7 @@ def test_campaign_run_llm_failure_falls_back_to_operator_review(monkeypatch):
 
         async def send_campaign_run(self, run, output, context, update=False):
             self.sent = True
-            assert output.recommendation == "FLAG"
+            assert output.recommendation == "REVIEW_REQUIRED"
             return "1700000000.000300"
 
     class FailingStructuredModel:
@@ -272,7 +272,7 @@ def test_campaign_run_llm_failure_falls_back_to_operator_review(monkeypatch):
 
         await runtime.process(claimed_campaign_run())
 
-        assert core.saved[0].recommendation == "FLAG"
+        assert core.saved[0].recommendation == "REVIEW_REQUIRED"
         assert notifier.sent
 
     asyncio.run(scenario())

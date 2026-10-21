@@ -27,7 +27,7 @@ public interface CampaignActivityRunRepository extends JpaRepository<CampaignAct
                                                           @Param("analyzing") CampaignActivityRunStatus analyzing,
                                                           @Param("now") LocalDateTime now);
 
-    @Query("select coalesce(sum(run.targetCount), 0) from CampaignActivityRun run "
+    @Query("select coalesce(sum(run.treatmentCount), 0) from CampaignActivityRun run "
             + "where run.campaignActivity.id = :activityId and run.status in :statuses")
     long sumReservedTargetCount(@Param("activityId") Long activityId,
                                 @Param("statuses") List<CampaignActivityRunStatus> statuses);

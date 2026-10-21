@@ -46,4 +46,27 @@ public class DashboardViewController {
     public String globalDashboardView() {
         return "global-dashboard";
     }
+
+    @GetMapping("/admin/incrementality")
+    public String latestIncrementalityView() {
+        return dashboardPageService.getLatestRunId()
+                .map(runId -> "redirect:/admin/campaign-runs/" + runId + "/incrementality")
+                .orElse("redirect:/admin/campaigns");
+    }
+
+    @GetMapping("/admin/campaign-runs/{runId}/incrementality")
+    public String incrementalityView(@PathVariable Long runId, Model model) {
+        DashboardPageService.IncrementalityPageData pageData = dashboardPageService.getIncrementalityPageData(runId);
+        model.addAttribute("runId", runId);
+        model.addAttribute("activityName", pageData.activityName());
+        model.addAttribute("campaignName", pageData.campaignName());
+        model.addAttribute("runs", pageData.runs());
+        return "incrementality";
+    }
+
+    @GetMapping("/admin/customers/{userId}")
+    public String customerProfileView(@PathVariable Long userId, Model model) {
+        model.addAttribute("userId", userId);
+        return "customer-profile";
+    }
 }

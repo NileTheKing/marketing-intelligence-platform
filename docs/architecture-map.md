@@ -24,6 +24,19 @@
 
 ## 핵심 흐름 (누가 뭘 emit/consume)
 
+**활동 등록과 자동 쿠폰 설정**
+```
+Campaign -> CampaignActivity (기간/상태)
+  COUPON + couponDeliveryMode
+    DIRECT -> 기존 Run 대상 확정/검토/일괄 발송
+    ABANDONED_CART -> 1:1 장바구니 설정 -> 행동 이벤트/후보 스케줄러
+    DORMANT_CUSTOMER -> 1:1 휴면 설정 -> 미구매 고객 스케줄러
+  -> 모두 기존 Execution/Dispatch/Kafka 쿠폰 발급 경로 재사용
+```
+등록 화면/API가 활동과 전용 설정을 함께 저장한다. 자동 쿠폰은 활동의 ACTIVE 상태와
+활동/상위 캠페인의 기간을 확인하며, 중지된 장바구니 후보는 재개를 위해 보존한다.
+2026-10-19 집중 Java 테스트는 통과했으며, 실제 배포 전에는 migration과 MySQL/Kafka 통합 확인이 필요하다.
+
 **A. FCFS 예약**
 ```
 클라 → nginx → entry `POST /api/v1/entries` → EntryController#createEntry
@@ -41,7 +54,7 @@
   → core batch listener (poll당 최대 20건) → FCFS orchestration
       → Entry + Purchase 단일 원장 트랜잭션
           배치 실패: 전체 rollback → 메시지별 새 트랜잭션 재시도
-          최종 실패 메시지만 command DLT
+          실패 위치를 예외로 반환 -> Kafka error handler가 재시도/최종 실패 메시지의 command DLT 전송 담당
       → UserSummary 별도 projection 트랜잭션
           실패: USER_SUMMARY_PROJECTION_FAILED에 기록
       → 매일 03:00 DB 대사: Purchase 원장과 UserSummary 비교 후 불일치 자동 rebuild
@@ -57,6 +70,8 @@
 ReservationApprovedEvent → entry BehaviorEventAdapter → CDP 포맷 Kafka 메시지
   → Kafka BEHAVIOR_EVENT
 BEHAVIOR_EVENT → Kafka Connect Elasticsearch sink → Elasticsearch (행동 분석 파이프라인)
+BEHAVIOR_EVENT → Core candidate consumer (`CART_ITEM_ADDED`/`CART_ITEM_REMOVED`/`PURCHASE`만 처리)
+  → MySQL 장바구니 이탈 쿠폰 후보 상태 저장
   ※ 백엔드는 성공(reservation_approved)만 발행. 매진/거절 신호는 프론트 SDK 몫.
 ```
 
@@ -68,6 +83,11 @@ BehaviorTriggerScheduler
       → timeout/네트워크·5xx·429만 최대 3회 backoff+jitter 재시도
       → 일반 4xx 또는 최종 실패는 WEBHOOK_FAILED_DLT 기록
       → DLT 발행 실패 시 listener 예외 전파로 offset commit 차단
+
+AbandonedCartCouponScheduler
+  → 30분이 지난 장바구니 이탈 후보를 MySQL에서 500건씩 조회
+  → 구매 재확인 뒤 기존 COUPON command consumer로 발행
+  → Kafka 수락을 확인한 뒤 다음 500건을 이어서 처리
 ```
 
 ## Kafka 토픽 (`common-messaging` KafkaTopics)

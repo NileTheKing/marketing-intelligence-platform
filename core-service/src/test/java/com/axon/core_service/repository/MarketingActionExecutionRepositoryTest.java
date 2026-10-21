@@ -13,6 +13,8 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @DataJpaTest
 class MarketingActionExecutionRepositoryTest {
@@ -112,10 +114,24 @@ class MarketingActionExecutionRepositoryTest {
                 .isEqualTo(MarketingActionExecutionStatus.DISPATCHING);
     }
 
+    @Test
+    void reengagementCampaignAllowsOnlyOneExecutionPerUser() {
+        executionRepository.saveAndFlush(reengagementExecution(77L, 1L));
+
+        assertThatThrownBy(() -> executionRepository.saveAndFlush(reengagementExecution(77L, 1L)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private MarketingActionExecution execution() {
         return MarketingActionExecution.builder()
                 .actionId(5L).ruleId(10L).actionReferenceId(99L).userId(1L).productId(100L)
                 .channel(RewardType.WEBHOOK).build();
+    }
+
+    private MarketingActionExecution reengagementExecution(Long campaignId, Long userId) {
+        return MarketingActionExecution.builder()
+                .actionId(5L).actionReferenceId(99L).userId(userId)
+                .reengagementCampaignId(campaignId).channel(RewardType.WEBHOOK).build();
     }
 
     private MarketingActionDispatch dispatch(MarketingActionExecution execution, long sequence) {

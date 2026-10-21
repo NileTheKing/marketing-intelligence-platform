@@ -46,32 +46,35 @@ public class MarketingActionExecutionService {
     @Transactional
     public MarketingActionDispatch createPending(Long actionId, Long ruleId, Long actionReferenceId,
                                                   Long userId, Long productId, RewardType channel) {
-        MarketingActionExecution execution = executionRepository.save(MarketingActionExecution.builder()
-                .actionId(actionId)
-                .ruleId(ruleId)
-                .actionReferenceId(actionReferenceId)
-                .userId(userId)
-                .productId(productId)
-                .campaignActivityRunId(null)
-                .channel(channel)
-                .build());
-        return dispatchRepository.saveAndFlush(MarketingActionDispatch.builder()
-                .execution(execution)
-                .sequence(1L)
-                .initiatedBy(MarketingActionDispatchInitiatedBy.SYSTEM)
-                .build());
+        return createPending(actionId, ruleId, actionReferenceId, userId, productId, null, null, channel);
+    }
+
+    @Transactional
+    public MarketingActionDispatch createPending(Long actionId, Long ruleId, Long actionReferenceId,
+                                                  Long userId, Long productId, Long reengagementCampaignId,
+                                                  RewardType channel) {
+        return createPending(actionId, ruleId, actionReferenceId, userId, productId,
+                reengagementCampaignId, null, channel);
     }
 
     @Transactional
     public MarketingActionDispatch createCampaignRunPending(Long actionId, Long actionReferenceId,
                                                              Long userId, Long campaignActivityRunId,
                                                              RewardType channel) {
+        return createPending(actionId, null, actionReferenceId, userId, null,
+                null, campaignActivityRunId, channel);
+    }
+
+    private MarketingActionDispatch createPending(Long actionId, Long ruleId, Long actionReferenceId,
+                                                   Long userId, Long productId, Long reengagementCampaignId,
+                                                   Long campaignActivityRunId, RewardType channel) {
         MarketingActionExecution execution = executionRepository.save(MarketingActionExecution.builder()
                 .actionId(actionId)
-                .ruleId(null)
+                .ruleId(ruleId)
                 .actionReferenceId(actionReferenceId)
                 .userId(userId)
-                .productId(null)
+                .productId(productId)
+                .reengagementCampaignId(reengagementCampaignId)
                 .campaignActivityRunId(campaignActivityRunId)
                 .channel(channel)
                 .build());
@@ -81,7 +84,6 @@ public class MarketingActionExecutionService {
                 .initiatedBy(MarketingActionDispatchInitiatedBy.SYSTEM)
                 .build());
     }
-
 
     @Transactional
     public boolean markDispatching(Long dispatchId) {

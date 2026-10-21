@@ -3,10 +3,13 @@ package com.axon.core_service.domain.dto.campaignactivity;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
+import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -46,7 +49,6 @@ public class CampaignActivityRequest {
 
     private List<FilterDetail> filters;
 
-    @NotNull
     @PositiveOrZero
     private BigDecimal price;
 
@@ -54,9 +56,14 @@ public class CampaignActivityRequest {
 
     private Long couponId;
 
-    @NotNull
     @PositiveOrZero
     private Integer quantity;
+
+    private CouponDeliveryMode couponDeliveryMode;
+
+    private Integer delayMinutes;
+
+    private Integer dormantDays;
 
     @PositiveOrZero
     private BigDecimal budget;
@@ -66,6 +73,10 @@ public class CampaignActivityRequest {
 
     @PositiveOrZero
     private Integer maxRecipientCount;
+
+    @Min(1)
+    @Max(50)
+    private Integer holdoutRatePercent;
 
     private CampaignActivityPurpose purpose;
 
@@ -83,10 +94,16 @@ public class CampaignActivityRequest {
     @JsonIgnore
     @AssertTrue(message = "quantity must be positive for product activities")
     public boolean isQuantityValid() {
-        return quantity == null
-                || activityType == null
-                || activityType == CampaignActivityType.COUPON
-                || quantity > 0;
+        return activityType == null || activityType == CampaignActivityType.COUPON
+                ? quantity == null || quantity >= 0
+                : quantity != null && quantity > 0;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "price is required for product activities")
+    public boolean isPriceValid() {
+        return activityType == null || activityType == CampaignActivityType.COUPON
+                || price != null;
     }
 
 }

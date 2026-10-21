@@ -25,9 +25,13 @@ class KafkaBatchListenerConfigurationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Kafka poll batch는 DB 처리 완료 후 BATCH ack 경계로 반환한다")
     void listenerUsesKafkaBatchAndExplicitCommitBoundary() {
-        var containers = kafkaListenerEndpointRegistry.getListenerContainers();
+        var containers = kafkaListenerEndpointRegistry.getListenerContainers().stream()
+                .filter(container -> java.util.Set.of("axon-group", "axon-webhook-group")
+                        .contains(container.getGroupId()))
+                .toList();
 
-        assertThat(containers).hasSize(2);
+        assertThat(containers).extracting(container -> container.getGroupId())
+                .containsExactlyInAnyOrder("axon-group", "axon-webhook-group");
         assertThat(containers).allSatisfy(container -> {
             assertThat(container.getContainerProperties().getAckMode())
                     .isEqualTo(ContainerProperties.AckMode.BATCH);

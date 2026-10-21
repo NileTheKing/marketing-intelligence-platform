@@ -417,6 +417,27 @@
                     <!-- Coupon Info Section (Hidden by default) -->
                     <div id="coupon-info-container" class="space-y-5 hidden">
                         <div>
+                            <label for="couponDeliveryMode" class="form-label">쿠폰 지급 방식</label>
+                            <select id="couponDeliveryMode" class="form-select">
+                                <option value="DIRECT">일괄 지급</option>
+                                <option value="ABANDONED_CART">장바구니 이탈</option>
+                                <option value="DORMANT_CUSTOMER">휴면 고객</option>
+                            </select>
+                        </div>
+                        <div id="coupon-delay-setting" class="hidden">
+                            <label for="couponDelayMinutes" class="form-label">이탈 후 대기 시간 (분) <span class="text-red-500">*</span></label>
+                            <input type="number" id="couponDelayMinutes" class="form-input" min="1" step="1" inputmode="numeric">
+                        </div>
+                        <div id="coupon-dormant-setting" class="hidden">
+                            <label for="couponDormantDays" class="form-label">휴면 기준 (일) <span class="text-red-500">*</span></label>
+                            <input type="number" id="couponDormantDays" class="form-input" min="1" step="1" inputmode="numeric">
+                        </div>
+                        <div id="coupon-direct-policy" class="hidden">
+                            <label for="couponHoldoutRatePercent" class="form-label">비교군 비율 (%) <span class="text-red-500">*</span></label>
+                            <input type="number" id="couponHoldoutRatePercent" class="form-input" min="1" max="50" step="1" value="10" inputmode="numeric">
+                            <p class="mt-1 text-xs text-gray-500">일괄 지급 캠페인의 효과 비교에 사용할 비교군 비율입니다.</p>
+                        </div>
+                        <div>
                             <label class="form-label">연동 쿠폰</label>
                             <div class="flex gap-2 mb-2">
                                 <input type="text" id="selectedCouponName"
@@ -434,6 +455,21 @@
                                     <i class="fa-solid fa-plus-circle mr-1"></i> 새 쿠폰 만들기
                                 </a>
                             </div>
+                        </div>
+                        <div>
+                            <label for="couponPurpose" class="form-label">캠페인 목적 <span class="text-red-500">*</span></label>
+                            <select id="couponPurpose" class="form-select">
+                                <option value="">목적을 선택하세요</option>
+                                <option value="VIP_REWARD">VIP 리워드</option>
+                                <option value="LOYALTY_REWARD">충성 고객 리워드</option>
+                                <option value="REENGAGEMENT">재참여 유도</option>
+                                <option value="GENERAL_PROMOTION">일반 프로모션</option>
+                                <option value="OTHER">기타</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="couponOperatorMemo" class="form-label">운영 메모 <span class="text-red-500">*</span></label>
+                            <textarea id="couponOperatorMemo" class="form-textarea" maxlength="2000" rows="3" placeholder="쿠폰 캠페인 운영 목적과 참고 사항"></textarea>
                         </div>
                     </div>
                 </div>

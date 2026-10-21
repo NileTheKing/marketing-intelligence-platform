@@ -6,8 +6,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
@@ -35,7 +38,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByProductNameContainingAndCampaignOnlyFalse(String productName);
 
-    List<Product> findAllByCampaignOnlyFalse();
+    Slice<Product> findByCampaignOnlyFalse(Pageable pageable);
+
+    Slice<Product> findByCampaignOnlyFalseAndCategoryIgnoreCase(String category, Pageable pageable);
+
+    List<Product> findAllByIdInAndCampaignOnlyFalse(Collection<Long> ids);
 
     Optional<Product> findByIdAndCampaignOnlyFalse(Long id);
 

@@ -1,136 +1,140 @@
 <!DOCTYPE html>
-<html lang="ko" xmlns:th="http://www.thymeleaf.org"
-    th:replace="fragments/layout :: layout('Axon 관리자 - 캠페인 활동 관리', 'bg-white text-neutral-900', ~{::head/content()}, ~{::section}, 'campaigns')">
-
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axon - 캠페인 관리</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <!-- Tailwind and Font Awesome are kept only for the create/edit modals built by admin_modal_handler.js. -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
-        crossorigin="anonymous"></script>
-    <link rel="stylesheet" th:href="@{/css/admin_board.css}" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous"></script>
+    <script th:src="@{/js/common.js}"></script>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <style>
+        .board { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 10px; margin-top: 18px; align-items: start; }
+        .list-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+        .list-head b { font-size: 12px; }
+        .c-item { padding: 9px 12px; border-bottom: 1px solid var(--border); cursor: pointer; border-left: 2px solid transparent; }
+        .c-item:last-child { border-bottom: 0; }
+        .c-item:hover { background: #fafaf8; }
+        .c-item.active { background: var(--accent-soft); border-left-color: var(--accent); }
+        .c-name { display: flex; justify-content: space-between; gap: 6px; font-weight: 600; font-size: 12.5px; }
+        .c-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .c-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; font-size: 11px; color: var(--text-3); }
+        .icon-btn { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 0 2px; font-size: 11px; }
+        .icon-btn:hover { color: var(--text); }
+
+        .btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 7px; font: 600 12px Pretendard, sans-serif; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; }
+        .btn:hover { background: #f4f3ef; }
+        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn.primary:hover { background: #244fbd; }
+        .btn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+
+        .pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--track); color: var(--text-2); white-space: nowrap; }
+        .pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+        .pill.live { background: #e8f5ee; color: var(--ok); }
+        .pill.soon { background: var(--accent-soft); color: var(--accent); }
+        .pill.paused { background: #fdf4e3; color: #9a6400; }
+        .tag { font-size: 11px; color: var(--text-2); }
+
+        .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+        .detail-head h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+        .detail-head .sub { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; color: var(--text-3); }
+        .actions { display: flex; gap: 6px; }
+
+        .toolbar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+        .toolbar input, .toolbar select { height: 28px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font: 12px Pretendard, sans-serif; background: var(--surface); color: var(--text); }
+        .toolbar input { width: 200px; }
+        .toolbar input:focus, .toolbar select:focus { outline: 1px solid var(--accent); }
+        #activity-table-body td { white-space: nowrap; }
+        #activity-table-body td:first-child > a, #activity-table-body td:first-child > .act-name,
+        #activity-table-body .act-sub { display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+        #activity-content th, #activity-content td { padding-left: 10px; padding-right: 10px; }
+        #activity-content th:first-child, #activity-content td:first-child { padding-left: 16px; }
+        #activity-table-body .bar { width: 56px; }
+        .act-name { font-weight: 600; }
+        .act-sub { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+        .menu-btn { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 2px 6px; }
+        .menu-btn:hover { color: var(--text); }
+        .dropdown { position: fixed; z-index: 9999; width: 128px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(20,20,20,.08); padding: 4px; font: 12px Pretendard, sans-serif; }
+        .dropdown button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--text); }
+        .dropdown button:hover { background: #f4f3ef; }
+        .dropdown button.danger { color: var(--low); }
+        .dropdown hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+        .placeholder { padding: 60px 16px; text-align: center; color: var(--text-3); }
+    </style>
 </head>
-<section class="flex flex-col h-screen bg-gray-50">
+<body class="console">
+<div class="shell">
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('campaigns')}"></aside>
 
-    <!-- Split View Container -->
-    <div class="flex flex-1 overflow-hidden">
-        <!-- Left Sidebar: Campaign List -->
-        <aside class="w-80 bg-white border-r border-gray-200 flex flex-col shrink-0 z-0">
-            <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h2 class="font-bold text-gray-700">캠페인 목록</h2>
-                <button id="create-campaign-btn"
-                    class="btn-primary text-xs px-3 py-1.5 rounded bg-black text-white hover:bg-gray-800 transition-colors">
-                    <i class="fa-solid fa-plus mr-1"></i> 생성
-                </button>
-            </div>
-            <div id="campaign-list-container" class="flex-1 overflow-y-auto p-2 space-y-1">
-                <!-- Campaign Items will be injected here -->
-                <div class="text-center py-10 text-gray-400 text-sm">캠페인을 불러오는 중...</div>
-            </div>
-        </aside>
+    <main>
+        <div class="topbar">
+            <div><div class="crumb">운영 / 캠페인</div><h1>캠페인 관리</h1></div>
+            <span class="updated"><i></i><span id="campaign-count">-</span></span>
+        </div>
 
-        <!-- Right Main Panel: Activity Details -->
-        <main class="flex-1 flex flex-col min-w-0 bg-white">
-            <!-- Campaign Detail Header -->
-            <div id="campaign-detail-header" class="px-8 py-6 border-b border-gray-200 bg-white hidden">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h1 id="selected-campaign-name" class="text-2xl font-bold text-gray-900 mb-1">캠페인 이름</h1>
-                        <div class="flex items-center text-sm text-gray-500 gap-4">
-                            <span id="selected-campaign-date"><i class="fa-regular fa-calendar mr-1"></i> 2023.01.01 ~
-                                2023.12.31</span>
-                            <span id="selected-campaign-status"
-                                class="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-xs">진행중</span>
+        <div class="board">
+            <section class="card">
+                <div class="list-head">
+                    <b>캠페인</b>
+                    <button id="create-campaign-btn" class="btn sm">+ 새 캠페인</button>
+                </div>
+                <div id="campaign-list-container"><div class="empty">불러오는 중</div></div>
+            </section>
+
+            <section class="card">
+                <div id="no-campaign-selected" class="placeholder">왼쪽에서 캠페인을 선택하세요.</div>
+
+                <div id="campaign-detail-header" hidden>
+                    <div class="detail-head">
+                        <div>
+                            <h2 id="selected-campaign-name"></h2>
+                            <div class="sub"><span id="selected-campaign-status" class="pill"></span><span class="num" id="selected-campaign-date"></span></div>
+                        </div>
+                        <div class="actions">
+                            <a href="/admin/coupons" class="btn">쿠폰 목록</a>
+                            <button id="create-activity-btn" class="btn primary">+ 새 활동</button>
                         </div>
                     </div>
-                    <div class="flex items-center">
-                        <button id="create-activity-btn"
-                            class="btn-primary text-sm px-4 py-2 rounded bg-black text-white hover:bg-gray-800 transition-colors shadow-sm">
-                            <i class="fa-solid fa-plus mr-2"></i> 새 활동 만들기
-                        </button>
-                        <a href="/admin/coupons"
-                            class="btn-primary text-sm px-4 py-2 rounded bg-black text-white hover:bg-gray-800 transition-colors shadow-sm ml-3 flex items-center">
-                            <i class="fa-solid fa-ticket mr-2"></i> 쿠폰 리스트
-                        </a>
+                    <div class="kpis" style="--kpi-count: 4; border-bottom: 1px solid var(--border);">
+                        <div class="kpi"><div class="kpi-label">활동</div><div class="kpi-val num" id="stat-total-activities">0</div><div class="kpi-sub num" id="stat-type-mix">-</div></div>
+                        <div class="kpi"><div class="kpi-label">진행 중</div><div class="kpi-val num" id="stat-active-activities">0</div><div class="kpi-sub" id="stat-active-sub">-</div></div>
+                        <div class="kpi"><div class="kpi-label">선착순 참여</div><div class="kpi-val num" id="stat-total-participants">0</div><div class="kpi-sub num" id="stat-fill">-</div></div>
+                        <div class="kpi"><div class="kpi-label">예산</div><div class="kpi-val num" id="stat-budget">-</div><div class="kpi-sub">활동 예산 합계</div></div>
                     </div>
                 </div>
 
-                <!-- Stats Summary (Optional) -->
-                <div class="grid grid-cols-3 gap-4 mt-6">
-                    <div class="p-4 rounded-lg bg-gray-50 border border-gray-100">
-                        <div class="text-xs text-gray-500 mb-1">총 활동 수</div>
-                        <div id="stat-total-activities" class="text-xl font-bold text-gray-900">0</div>
+                <div id="activity-content" hidden>
+                    <div class="toolbar">
+                        <input id="activity-search" type="text" placeholder="활동 이름 검색">
+                        <select id="activity-status-filter">
+                            <option value="">전체 상태</option>
+                            <option value="ACTIVE">진행 중</option>
+                            <option value="PAUSED">일시정지</option>
+                            <option value="DRAFT">작성 중</option>
+                            <option value="ENDED">종료</option>
+                        </select>
+                        <select id="activity-type-filter">
+                            <option value="">전체 유형</option>
+                            <option value="FIRST_COME_FIRST_SERVE">선착순</option>
+                            <option value="COUPON">쿠폰</option>
+                            <option value="GIVEAWAY">경품</option>
+                        </select>
                     </div>
-                    <div class="p-4 rounded-lg bg-gray-50 border border-gray-100">
-                        <div class="text-xs text-gray-500 mb-1">진행중인 활동</div>
-                        <div id="stat-active-activities" class="text-xl font-bold text-green-600">0</div>
-                    </div>
-                    <div class="p-4 rounded-lg bg-gray-50 border border-gray-100">
-                        <div class="text-xs text-gray-500 mb-1">총 참여자</div>
-                        <div id="stat-total-participants" class="text-xl font-bold text-blue-600">0</div>
-                    </div>
+                    <table>
+                        <thead><tr><th>활동</th><th>유형</th><th>상태</th><th>기간</th><th>진행률</th><th class="r">예산</th><th style="width:36px"></th></tr></thead>
+                        <tbody id="activity-table-body"></tbody>
+                    </table>
                 </div>
-            </div>
+            </section>
+        </div>
+    </main>
+</div>
 
-            <!-- Empty State for No Selection -->
-            <div id="no-campaign-selected" class="flex-1 flex flex-col items-center justify-center text-gray-400">
-                <i class="fa-regular fa-folder-open text-4xl mb-4"></i>
-                <p>왼쪽 목록에서 캠페인을 선택해주세요.</p>
-            </div>
-
-            <!-- Activity Content (Filter + Table) -->
-            <div id="activity-content" class="flex-1 flex flex-col overflow-hidden hidden">
-                <!-- Filter Bar -->
-                <div class="px-8 py-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-3 items-center">
-                    <div class="relative">
-                        <i
-                            class="fa-solid fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
-                        <input type="text" placeholder="활동 검색"
-                            class="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black w-64">
-                    </div>
-                    <div class="h-6 w-px bg-gray-300 mx-1"></div>
-                    <select
-                        class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-black bg-white">
-                        <option>전체 상태</option>
-                        <option>진행중</option>
-                        <option>일시중지</option>
-                        <option>종료</option>
-                    </select>
-                    <select
-                        class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-black bg-white">
-                        <option>전체 유형</option>
-                        <option>선착순</option>
-                        <option>조건부</option>
-                        <option>응모/추첨</option>
-                    </select>
-                </div>
-
-                <!-- Table -->
-                <div class="flex-1 overflow-y-auto p-8">
-                    <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                        <table class="campaign-table w-full text-left text-sm">
-                            <thead class="bg-gray-50 border-b border-gray-200 text-gray-500 font-medium">
-                                <tr>
-                                    <th class="py-3 px-4">활동 이름</th>
-                                    <th class="py-3 px-4">상태</th>
-                                    <th class="py-3 px-4">유형</th>
-                                    <th class="py-3 px-4">기간</th>
-                                    <th class="py-3 px-4">진행률</th>
-                                    <th class="py-3 px-4">생성일</th>
-                                    <th class="py-3 px-4 w-10"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="activity-table-body" class="divide-y divide-gray-100">
-                                <!-- Activity Rows -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-    <script src="/js/campaign-activity-module.js"></script>
-    <script th:src="@{/js/admin_modal_handler.js}"></script>
-    <script th:src="@{/js/admin_board.js}"></script>
-</section>
-
+<script th:src="@{/js/campaign-activity-module.js}"></script>
+<script th:src="@{/js/admin_modal_handler.js}"></script>
+<script th:src="@{/js/admin_board.js}"></script>
+<script th:src="@{/js/axon-tracker-config.js}"></script>
+</body>
 </html>

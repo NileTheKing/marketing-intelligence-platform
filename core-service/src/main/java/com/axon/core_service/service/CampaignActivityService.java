@@ -2,17 +2,22 @@ package com.axon.core_service.service;
 
 import com.axon.core_service.domain.campaign.Campaign;
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRequest;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityResponse;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivityentry.CampaignActivityEntryCount;
 import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.AbandonedCartCouponCampaign;
+import com.axon.core_service.domain.marketing.DormantCustomerCampaign;
 import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.domain.product.Product;
 import com.axon.core_service.exception.BusinessConflictException;
 import com.axon.core_service.exception.ResourceNotFoundException;
 import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignActivityRepository;
+import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
+import com.axon.core_service.repository.DormantCustomerCampaignRepository;
 import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.CouponRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
@@ -36,6 +41,8 @@ public class CampaignActivityService {
     private final ProductRepository productRepository;
     private final CouponRepository couponRepository;
     private final MarketingActionRepository marketingActionRepository;
+    private final AbandonedCartCouponCampaignRepository abandonedCartRepository;
+    private final DormantCustomerCampaignRepository dormantCustomerRepository;
     private final StringRedisTemplate redisTemplate;
 
     /**
@@ -50,6 +57,9 @@ public class CampaignActivityService {
      *                                  {@code campaignId}
      */
     public CampaignActivityResponse createCampaignActivity(Long campaignId, CampaignActivityRequest request) {
+        CouponDeliveryMode deliveryMode = request.getCouponDeliveryMode() == null
+                ? CouponDeliveryMode.DIRECT : request.getCouponDeliveryMode();
+        validateCouponDeliverySettings(request, deliveryMode);
         Campaign campaign = findCampaign(campaignId);
         Product product = null;
         com.axon.core_service.domain.coupon.Coupon coupon = null;
@@ -79,8 +89,10 @@ public class CampaignActivityService {
                 .endDate(request.getEndDate())
                 .activityType(request.getActivityType())
                 .filters(request.getFilters())
-                .price(request.getPrice())
-                .quantity(request.getQuantity())
+                .price(request.getActivityType() == com.axon.messaging.CampaignActivityType.COUPON
+                        ? request.getPrice() == null ? java.math.BigDecimal.ZERO : request.getPrice() : request.getPrice())
+                .quantity(request.getActivityType() == com.axon.messaging.CampaignActivityType.COUPON
+                        ? request.getQuantity() == null ? 0 : request.getQuantity() : request.getQuantity())
                 .product(product)
                 .coupon(coupon)
                 .marketingAction(marketingAction)
@@ -88,10 +100,13 @@ public class CampaignActivityService {
                 .budget(request.getBudget())
                 .expectedRecipientCount(request.getExpectedRecipientCount())
                 .maxRecipientCount(request.getMaxRecipientCount())
+                .holdoutRatePercent(request.getHoldoutRatePercent())
                 .purpose(request.getPurpose())
                 .operatorMemo(request.getOperatorMemo())
+                .couponDeliveryMode(deliveryMode)
                 .build();
         CampaignActivity saved = campaignActivityRepository.save(campaignActivity);
+        saveDeliveryConfig(saved, deliveryMode, request);
         return CampaignActivityResponse.from(saved);
     }
 
@@ -110,6 +125,12 @@ public class CampaignActivityService {
      */
     public CampaignActivityResponse updateCampaignActivity(Long campaignActivityId, CampaignActivityRequest request) {
         CampaignActivity campaignActivity = findCampaignActivity(campaignActivityId);
+        CouponDeliveryMode requestedMode = request.getCouponDeliveryMode() == null
+                ? campaignActivity.getCouponDeliveryMode() : request.getCouponDeliveryMode();
+        validateCouponDeliverySettings(request, requestedMode);
+        if (requestedMode != campaignActivity.getCouponDeliveryMode()) {
+            throw new BusinessConflictException("Coupon delivery mode cannot be changed after activity creation");
+        }
 
         Product requestedProduct = request.getActivityType() == com.axon.messaging.CampaignActivityType.COUPON
                 ? null
@@ -149,6 +170,7 @@ public class CampaignActivityService {
             validateCouponCampaignPolicy(request, newCoupon);
             campaignActivity.updateCouponInfo(newCoupon);
             updateDirectCampaignAction(campaignActivity, newCoupon);
+            updateDeliveryConfig(campaignActivity, requestedMode, request);
         } else {
             campaignActivity.updateProductInfo(requestedProduct, request.getPrice(), request.getQuantity());
             if (campaignActivity.getMarketingAction() != null) {
@@ -161,7 +183,8 @@ public class CampaignActivityService {
 
         // Update Budget
         campaignActivity.updateBudget(request.getBudget());
-        campaignActivity.updateRecipientPolicy(request.getExpectedRecipientCount(), request.getMaxRecipientCount());
+        campaignActivity.updateRecipientPolicy(request.getExpectedRecipientCount(), request.getMaxRecipientCount(),
+                request.getHoldoutRatePercent());
         campaignActivity.updateReviewIntent(request.getPurpose(), request.getOperatorMemo());
 
         // Invalidate Cache
@@ -376,6 +399,82 @@ public class CampaignActivityService {
         }
         if (request.getMaxRecipientCount() != null && request.getMaxRecipientCount() <= 0) {
             throw new BusinessConflictException("Maximum recipient count must be positive");
+        }
+    }
+
+    private void validateCouponDeliverySettings(CampaignActivityRequest request, CouponDeliveryMode mode) {
+        if (mode == null) {
+            throw new BusinessConflictException("Coupon delivery mode is required");
+        }
+        if (request.getActivityType() != com.axon.messaging.CampaignActivityType.COUPON) {
+            if (mode != CouponDeliveryMode.DIRECT || request.getDelayMinutes() != null
+                    || request.getDormantDays() != null) {
+                throw new BusinessConflictException("Automatic coupon delivery settings require a COUPON activity");
+            }
+            return;
+        }
+        switch (mode) {
+            case DIRECT -> {
+                if (request.getDelayMinutes() != null || request.getDormantDays() != null) {
+                    throw new BusinessConflictException("DIRECT coupon delivery does not accept automation settings");
+                }
+            }
+            case ABANDONED_CART -> {
+                if (request.getDelayMinutes() == null || request.getDelayMinutes() <= 0
+                        || request.getDormantDays() != null) {
+                    throw new BusinessConflictException("ABANDONED_CART requires positive delayMinutes only");
+                }
+            }
+            case DORMANT_CUSTOMER -> {
+                if (request.getDormantDays() == null || request.getDormantDays() <= 0
+                        || request.getDelayMinutes() != null) {
+                    throw new BusinessConflictException("DORMANT_CUSTOMER requires positive dormantDays only");
+                }
+            }
+        }
+    }
+
+    private void saveDeliveryConfig(CampaignActivity activity, CouponDeliveryMode mode,
+                                    CampaignActivityRequest request) {
+        if (mode == CouponDeliveryMode.ABANDONED_CART) {
+            AbandonedCartCouponCampaign config = AbandonedCartCouponCampaign.builder()
+                    .campaignActivity(activity)
+                    .marketingAction(activity.getMarketingAction())
+                    .delayMinutes(request.getDelayMinutes())
+                    .isActive(activity.getStatus() == CampaignActivityStatus.ACTIVE)
+                    .build();
+            activity.assignAbandonedCartCouponCampaign(abandonedCartRepository.save(config));
+        } else if (mode == CouponDeliveryMode.DORMANT_CUSTOMER) {
+            DormantCustomerCampaign config = DormantCustomerCampaign.builder()
+                    .campaignActivity(activity)
+                    .marketingAction(activity.getMarketingAction())
+                    .dormantDays(request.getDormantDays())
+                    .isActive(activity.getStatus() == CampaignActivityStatus.ACTIVE)
+                    .build();
+            activity.assignDormantCustomerCampaign(dormantCustomerRepository.save(config));
+        }
+    }
+
+    private void updateDeliveryConfig(CampaignActivity activity, CouponDeliveryMode mode,
+                                      CampaignActivityRequest request) {
+        if (mode == CouponDeliveryMode.ABANDONED_CART) {
+            if (activity.getAbandonedCartCouponCampaign() == null) {
+                throw new BusinessConflictException("ABANDONED_CART configuration is not linked to this activity");
+            }
+            if (activity.getStatus() == CampaignActivityStatus.ACTIVE
+                    && activity.getAbandonedCartCouponCampaign().getDelayMinutes() != request.getDelayMinutes()) {
+                throw new BusinessConflictException("Pause the activity before changing delayMinutes");
+            }
+            activity.getAbandonedCartCouponCampaign().updateDelayMinutes(request.getDelayMinutes());
+        } else if (mode == CouponDeliveryMode.DORMANT_CUSTOMER) {
+            if (activity.getDormantCustomerCampaign() == null) {
+                throw new BusinessConflictException("DORMANT_CUSTOMER configuration is not linked to this activity");
+            }
+            if (activity.getStatus() == CampaignActivityStatus.ACTIVE
+                    && activity.getDormantCustomerCampaign().getDormantDays() != request.getDormantDays()) {
+                throw new BusinessConflictException("Pause the activity before changing dormantDays");
+            }
+            activity.getDormantCustomerCampaign().updateDormantDays(request.getDormantDays());
         }
     }
 

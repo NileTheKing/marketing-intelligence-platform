@@ -2,10 +2,12 @@ package com.axon.core_service.controller;
 
 import com.axon.core_service.domain.dashboard.DashboardPeriod;
 import com.axon.core_service.domain.dto.dashboard.CampaignDashboardResponse;
+import com.axon.core_service.domain.dto.dashboard.CampaignRunIncrementalityResponse;
 import com.axon.core_service.domain.dto.dashboard.CohortAnalysisResponse;
 import com.axon.core_service.domain.dto.dashboard.DashboardResponse;
 import com.axon.core_service.repository.LTVBatchRepository;
 import com.axon.core_service.service.CohortAnalysisService;
+import com.axon.core_service.service.CampaignRunIncrementalityService;
 import com.axon.core_service.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,7 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final CohortAnalysisService cohortAnalysisService;
+    private final CampaignRunIncrementalityService campaignRunIncrementalityService;
     private final LTVBatchRepository ltvBatchRepository;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
 
@@ -106,6 +109,13 @@ public class DashboardController {
 
         log.info("No cohort batch data found for activity {}; batch aggregation is pending", activityId);
         return ResponseEntity.accepted().build();
+    }
+
+    @GetMapping("/campaign-runs/{runId}/incrementality")
+    public ResponseEntity<CampaignRunIncrementalityResponse> getCampaignRunIncrementality(
+            @PathVariable Long runId,
+            @RequestParam(defaultValue = "7") int windowDays) {
+        return ResponseEntity.ok(campaignRunIncrementalityService.analyze(runId, windowDays));
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -14,6 +14,11 @@ class SecurityProbeController {
         return "ok";
     }
 
+    @GetMapping("/api/v1/products")
+    String productList() {
+        return "ok";
+    }
+
     @PostMapping("/api/v1/events")
     String createEvent() {
         return "ok";

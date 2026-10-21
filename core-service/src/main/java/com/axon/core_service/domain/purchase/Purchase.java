@@ -22,6 +22,10 @@ import java.util.Objects;
         @UniqueConstraint(
             name = "uk_campaign_purchase_user",
             columnNames = {"campaign_activity_id", "user_id"}
+        ),
+        @UniqueConstraint(
+            name = "uk_purchase_user_coupon",
+            columnNames = {"user_coupon_id"}
         )
     }
 )
@@ -64,10 +68,19 @@ public class Purchase {
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
 
+    @Column(name = "user_coupon_id")
+    private Long userCouponId;
+
+    public Purchase(Long userId, Long productId, Long campaignActivityId,
+                    PurchaseType purchaseType, BigDecimal price,
+                    Integer quantity, Instant purchasedAt) {
+        this(userId, productId, campaignActivityId, purchaseType, price, quantity, purchasedAt, null);
+    }
+
     @Builder
     public Purchase(Long userId, Long productId, Long campaignActivityId,
                      PurchaseType purchaseType, BigDecimal price,
-                     Integer quantity, Instant purchasedAt) {
+                     Integer quantity, Instant purchasedAt, Long userCouponId) {
         this.userId = Objects.requireNonNull(userId, "userId must not be null");
         this.productId = Objects.requireNonNull(productId, "productId must not be null");
         this.purchaseType = Objects.requireNonNull(purchaseType, "purchaseType must not be null");
@@ -92,6 +105,7 @@ public class Purchase {
         } else {
             this.campaignActivityId = campaignActivityId;
         }
+        this.userCouponId = userCouponId;
     }
 
     public boolean cancel(String reason, Instant occurredAt) {

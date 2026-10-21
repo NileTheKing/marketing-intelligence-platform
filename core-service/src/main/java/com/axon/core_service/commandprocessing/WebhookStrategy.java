@@ -76,13 +76,18 @@ public class WebhookStrategy implements BatchStrategy {
         Long userId = message.getUserId();
         Long productId = message.getProductId();
 
+        boolean isDormantCustomerCampaign = ruleId == null;
+        String idempotencyKey = isDormantCustomerCampaign
+                ? "dormant-customer:%d:%d:%d".formatted(actionId, templateId, userId)
+                : "webhook:%d:%d:%d:%d:%d".formatted(ruleId, actionId, templateId, userId, productId);
+
         return WebhookRequest.builder()
-                .idempotencyKey("webhook:%d:%d:%d:%d:%d".formatted(ruleId, actionId, templateId, userId, productId))
+                .idempotencyKey(idempotencyKey)
                 .ruleId(ruleId)
                 .userId(userId)
                 .productId(productId)
                 .templateId(templateId)
-                .eventType("MARKETING_RULE_MATCHED")
+                .eventType(isDormantCustomerCampaign ? "DORMANT_CUSTOMER_REENGAGEMENT" : "MARKETING_RULE_MATCHED")
                 .timestamp(message.getTimestamp() != null ? message.getTimestamp() : System.currentTimeMillis())
                 .build();
     }
