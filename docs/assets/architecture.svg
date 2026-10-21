@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="980" viewBox="0 0 900 980" role="img" aria-labelledby="title desc">
-<title id="title">Axon 시스템 핵심 구조와 구매 후처리 내부</title>
+<title id="title">시스템 핵심 구조와 구매 후처리 내부</title>
 <desc id="desc">상단은 요청 수신 서버, Kafka, 비즈니스 처리 서버와 Redis, Elasticsearch, MySQL의 연결 구조다. 하단은 상단 core-service의 구매 후처리를 확대한 설명으로, 별도의 서버가 아니다. 구매 데이터 저장과 집계 데이터 갱신은 별도 트랜잭션이며, 구매 데이터는 배치 처리와 JDBC 벌크 저장을 사용한다.</desc>
   <defs>
     <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L8 4L0 8Z" fill="#687382"/></marker>
@@ -19,7 +19,7 @@
     </style>
   </defs>
 <rect width="900" height="980" fill="#fff"/>
-<text x="30" y="38" class="title" style="font-size:23px;letter-spacing:-0.4px">Axon 시스템 핵심 구조</text>
+<text x="30" y="38" class="title" style="font-size:23px;letter-spacing:-0.4px">시스템 핵심 구조</text>
 <path d="M566 32H596" stroke="#356bd0" stroke-width="2"/>
 <text x="606" y="38" class="note" >구매 처리</text>
 <path d="M734 32H764" stroke="#d47927" stroke-width="2"/>
