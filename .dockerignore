@@ -17,3 +17,6 @@ mermaid
 scripts
 core_full.log
 seeding_debug.log
+
+# Historical deployment material is not application build input
+archive

@@ -1,0 +1,1108 @@
+# OTel + Jaeger APM Plan
+
+> 읽기 안내: 현재 운영 관측 설정은 [관측 구성](observability-correlation-v1-plan.md)이 기준이다. 이 문서는 2026년 6~7월 APM 진단 절차와 후속 기록을 포함한다. 절별 과거 측정값·대기 작업을 현재 운영 상태로 일반화하지 않는다.
+
+Status: active
+
+## Purpose
+
+Use OpenTelemetry Java Agent and Jaeger to diagnose the Axon FCFS spike path.
+
+The goal is not to adopt a specific APM product. The goal is to split request latency with evidence before changing code or infrastructure.
+
+## Why Switch From Pinpoint
+
+Pinpoint was tested first because it gives Java/Spring friendly call-tree views.
+
+The Oracle VM currently used for Axon is ARM64. The official Pinpoint Docker stack pulled several `linux/amd64` images, and `pinpoint-hbase` restarted with HBase/ZooKeeper initialization failures. Pinpoint Web then failed with:
+
+```text
+KeeperErrorCode = NoNode for /hbase/hbaseid
+```
+
+This made the task drift from APM diagnosis into Pinpoint/HBase platform porting.
+
+Decision:
+
+- Stop the Pinpoint path on the ARM VM.
+- Keep Pinpoint files as legacy/reference only.
+- Use OpenTelemetry Java Agent + Jaeger for the current APM diagnosis.
+
+## Architecture
+
+```text
+k6
+  -> nginx / entry-service
+      -> OTel Java Agent spans
+      -> Jaeger OTLP endpoint
+      -> Jaeger UI
+
+core-service
+  -> OTel Java Agent spans
+  -> Jaeger OTLP endpoint
+  -> Jaeger UI
+```
+
+Jaeger runs in the same Docker Compose network as Axon services.
+
+Axon services export traces to:
+
+```text
+http://jaeger:4318
+```
+
+Jaeger UI is exposed on:
+
+```text
+http://127.0.0.1:16686
+```
+
+Override `JAEGER_UI_PORT` if the host port is already in use.
+
+## Files
+
+- `infrastructure/compose/compose.otel.yml`: starts Jaeger and injects OTel Java Agent options into Entry/Core.
+- `infrastructure/compose/compose.diagnostic.yml`: enables Entry diagnostic profile and stage timing.
+- `observability/otel-agent.env.example`: example environment values for trace runs.
+- `scripts/observability/install-otel-agent.sh`: downloads `opentelemetry-javaagent.jar`.
+
+## VM Setup
+
+Install the OTel Java agent:
+
+```bash
+cd ~/apps/axon
+./scripts/observability/install-otel-agent.sh
+```
+
+Prepare trace environment:
+
+```bash
+cp observability/otel-agent.env.example .env.otel
+
+set -a
+. ./.env.otel
+set +a
+```
+
+Start Jaeger and traced Axon services:
+
+```bash
+docker compose \
+  -f compose.app.yml \
+  -f infrastructure/compose/compose.resources.yml \
+  -f infrastructure/compose/compose.otel.yml \
+  up -d --build jaeger core-service entry-service axon-nginx
+```
+
+Verify agent options:
+
+```bash
+docker logs --since=2m axon-entry 2>&1 | grep -E 'Picked up JAVA_TOOL_OPTIONS|opentelemetry|OpenTelemetry'
+docker logs --since=2m axon-core 2>&1 | grep -E 'Picked up JAVA_TOOL_OPTIONS|opentelemetry|OpenTelemetry'
+```
+
+Verify Jaeger DNS from app containers:
+
+```bash
+docker exec axon-entry getent hosts jaeger
+docker exec axon-core getent hosts jaeger
+```
+
+Verify Jaeger UI:
+
+```bash
+curl -I http://127.0.0.1:${JAEGER_UI_PORT:-16686}
+```
+
+## First Trace Test
+
+Do not start with the 3,000 VU diagnostic burst.
+
+Use a small run first:
+
+```bash
+SCENARIO=waiting_burst \
+FLOW=reservation \
+NUM_USERS=100 \
+FCFS_LIMIT_COUNT=20 \
+MAX_VUS=100 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+./scripts/load-test/run-baseline-compose.sh 100 1
+```
+
+Expected:
+
+- Jaeger UI shows `axon-entry`.
+- If payment flow is used, Jaeger UI also shows `axon-core`.
+- Trace contains HTTP server spans and downstream Redis/Kafka/HTTP/JDBC spans where the OTel agent can auto-instrument them.
+
+## Diagnosis Boundary
+
+OTel/Jaeger runs are diagnostic runs.
+
+Do not compare OTel-attached latency directly against the headline baseline because the Java agent adds overhead.
+
+Use OTel/Jaeger to decide what to fix. Then run the final before/after measurement without `infrastructure/compose/compose.otel.yml`.
+
+## Diagnostic Entry Stage Metrics
+
+OTel auto-instrumentation did not split the successful Entry `200` path enough. Long root spans still had gaps between child Redis/Kafka spans.
+
+Decision:
+
+- Do not add inline timers to `EntryApplicationService`.
+- Keep production default behavior unchanged.
+- Add diagnostic-only AOP timing behind the `diagnostic` Spring profile.
+
+Implementation:
+
+- `entry-service/src/main/java/com/axon/entry_service/config/diagnostic/EntryDiagnosticTimingAspect.java`
+- Active only when `SPRING_PROFILES_ACTIVE` includes `diagnostic`.
+- Records Micrometer timer `axon.entry.diagnostic.stage`.
+- Emits structured slow-stage logs only when a stage exceeds `axon.diagnostic.entry.slow-threshold-ms` (default `100ms`).
+
+Stages:
+
+- `entry_total`
+- `meta_lookup`
+- `token_generate`
+- `token_lookup`
+- `token_issue`
+- `fast_validation`
+- `heavy_validation`
+- `redis_reserve`
+- `backend_event_publish_async`
+
+Suggested diagnostic run settings:
+
+```bash
+ENTRY_SPRING_PROFILES_ACTIVE=diagnostic \
+AXON_DIAGNOSTIC_ENTRY_SLOW_THRESHOLD_MS=100 \
+ENTRY_CPUS=1.5 \
+docker compose \
+  -f compose.app.yml \
+  -f infrastructure/compose/compose.resources.yml \
+  -f infrastructure/compose/compose.diagnostic.yml \
+  up -d --build entry-service axon-nginx
+```
+
+Use Prometheus or actuator metrics to inspect:
+
+```text
+axon_entry_diagnostic_stage_seconds_count
+axon_entry_diagnostic_stage_seconds_sum
+axon_entry_diagnostic_stage_seconds_max
+```
+
+Guardrails:
+
+- Treat this as a diagnostic profile, not the operating profile.
+- Do not use diagnostic-profile latency as portfolio headline latency.
+- After identifying the bottleneck, rerun headline measurements with `diagnostic` and OTel disabled.
+
+### 2026-07-07 Diagnostic Pool A/B
+
+Diagnostic-only run shape:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+PRELOAD_CAMPAIGN_META: true
+Entry URL: http://127.0.0.1:28080
+```
+
+Important operational note:
+
+- After recreating `axon-entry`, restart `axon-nginx`.
+- Otherwise nginx can keep a stale Docker DNS resolution and send traffic to the old Entry container IP.
+- Symptom: direct `127.0.0.1:8081` responds, but nginx returns `502` with `connect() failed (113: Host is unreachable) while connecting to upstream`.
+
+Baseline pool 8 artifact:
+
+```text
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-081646-diagnostic-pool8-valid
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 5335.25ms
+http_req_duration p95: 5.33s
+Redis counter/users: 600/600
+```
+
+Diagnostic stage totals from Prometheus:
+
+```text
+entry_total OK: 600 calls, sum 1844.83s, max 6.91s
+entry_total GONE: 2400 calls, sum 1482.53s, max 3.59s
+meta_lookup: 3000 calls, sum 866.22s, max 1.32s
+token_lookup: 3000 calls, sum 973.39s, max 2.29s
+redis_reserve: 3000 calls, sum 457.50s, max 1.33s
+token_issue: 600 calls, sum 438.33s, max 2.29s
+backend_event_publish_async: 600 calls, sum 388.04s, max 1.99s
+token_generate: 3000 calls, sum 0.57s, max 0.06s
+```
+
+Temporary Redis pool 64 artifact:
+
+```text
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-081857-diagnostic-pool64-valid
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 6792.50ms
+http_req_duration p95: 6.72s
+Redis counter/users: 600/600
+```
+
+Diagnostic stage totals from Prometheus:
+
+```text
+entry_total OK: 600 calls, sum 2060.99s, max 8.30s
+entry_total GONE: 2400 calls, sum 1321.15s, max 6.01s
+meta_lookup: 3000 calls, sum 819.51s, max 2.01s
+token_lookup: 3000 calls, sum 1161.15s, max 2.72s
+redis_reserve: 3000 calls, sum 359.00s, max 2.00s
+token_issue: 600 calls, sum 573.88s, max 2.77s
+backend_event_publish_async: 600 calls, sum 693.68s, max 2.29s
+token_generate: 3000 calls, sum 0.44s, max 0.06s
+```
+
+Interpretation:
+
+- Increasing Lettuce pool from `8` to `64` did not improve the end-to-end p95 in this shape.
+- `redis_reserve` improved, but `token_lookup`, `token_issue`, and `backend_event_publish_async` worsened.
+- Current evidence does not support "Redis connection pool size is the dominant bottleneck."
+- The next stronger candidate is successful-path side work competing for Entry resources, especially backend approved-event Kafka publish running asynchronously during the burst.
+
+Next focused test:
+
+- Add a diagnostic-only way to disable backend `ReservationApprovedEvent` publishing, or isolate it with a bounded/tuned async executor.
+- Compare the same shape with and without backend behavior event publish.
+- If it improves, the fix should be designed as async executor isolation/backpressure or outbox/staging, not as blind Redis pool tuning.
+
+### Backend Event Publish Toggle
+
+For the next focused A/B, `BackendEventPublisher` supports a diagnostic-only toggle:
+
+```text
+axon.diagnostic.backend-event-publish-enabled=true
+```
+
+`infrastructure/compose/compose.diagnostic.yml` exposes it as:
+
+```text
+AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED
+```
+
+Use this only to isolate whether successful-path backend behavior-event publishing competes with Entry resources during the burst.
+
+Example off run:
+
+```bash
+ENTRY_SPRING_PROFILES_ACTIVE=diagnostic \
+AXON_DIAGNOSTIC_ENTRY_SLOW_THRESHOLD_MS=100 \
+AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED=false \
+ENTRY_CPUS=1.5 \
+docker compose \
+  -f compose.app.yml \
+  -f infrastructure/compose/compose.resources.yml \
+  -f infrastructure/compose/compose.diagnostic.yml \
+  up -d --build entry-service axon-nginx
+
+docker restart axon-nginx
+```
+
+Interpretation guardrail:
+
+- If the off run improves, do not remove analytics publishing as the final fix.
+- Treat it as evidence to isolate or backpressure the async publisher, tune its executor, or move it behind a more durable staging/outbox path.
+- Final performance measurements must run with the production behavior restored.
+
+### 2026-07-07 Backend Event Publish Off Run
+
+Artifact:
+
+```text
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-083033-diagnostic-backend-publish-off
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-083638-backend-publish-ab
+/home/ubuntu/apps/axon/artifacts/load-test/20260707-085112-diagnostic-backend-publish-off2
+```
+
+Run shape:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+PRELOAD_CAMPAIGN_META: true
+AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED=false
+```
+
+Result:
+
+```text
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 4433.05ms
+http_req_duration p95: 4.43s
+http_reqs: 162.08/s
+Redis counter/users: 600/600
+```
+
+Diagnostic stage totals from Prometheus:
+
+```text
+entry_total OK: 600 calls, sum 1725.71s, max 4.38s
+entry_total GONE: 2400 calls, sum 872.72s, max 2.53s
+meta_lookup: 3000 calls, sum 729.87s, max 1.31s
+token_lookup: 3000 calls, sum 748.85s, max 1.32s
+redis_reserve: 3000 calls, sum 584.93s, max 1.31s
+token_issue: 600 calls, sum 388.22s, max 1.31s
+backend_event_publish_async: 600 calls, sum 0.01s, max 0.002s
+token_generate: 3000 calls, sum 0.38s, max 0.06s
+```
+
+Comparison to pool 8 baseline:
+
+```text
+pool 8 baseline:
+reservation p95 5335.25ms, http p95 5.33s, http_reqs 148.86/s
+backend publish off:
+reservation p95 4433.05ms, http p95 4.43s, http_reqs 162.08/s
+```
+
+Repeated A/B summary:
+
+```text
+on1:
+success 600, error 0, reservation p95 5963.2ms, http p95 5901.877ms, http_reqs 158.623/s
+backend_event_publish_async sum 573.361s
+
+off1:
+success 600, error 0, reservation p95 3291.05ms, http p95 3289.556ms, http_reqs 160.606/s
+backend_event_publish_async sum 0.008s
+
+on2:
+success 51, error 2949, reservation p95 10002ms, http p95 10000ms, http_reqs 45.307/s
+Redis counter/users 229/229
+
+off2:
+success 600, error 0, reservation p95 3963.05ms, http p95 3.96s, http_reqs 156.321/s
+backend_event_publish_async sum 0.008s
+```
+
+Interpretation:
+
+- Disabling backend approved-event publish improved repeated diagnostic runs.
+- `on2` also reproduced a severe timeout/error run while the corresponding `off` runs remained stable.
+- This supports the hypothesis that successful-path side work, especially async backend behavior-event publish, competes with Entry resources during the burst.
+- It does not justify removing analytics publishing.
+- The next production-oriented fix should isolate this async work from the hot path, e.g. a dedicated bounded executor, backpressure policy, or durable staging/outbox-like path.
+- After these off runs, the VM was restored to `AXON_DIAGNOSTIC_BACKEND_EVENT_PUBLISH_ENABLED=true`.
+
+### Backend Event Executor Isolation
+
+Production-candidate change:
+
+- `BackendEventPublisher` now uses `@Async("backendEventTaskExecutor")`.
+- `backendEventTaskExecutor` is a dedicated `ThreadPoolTaskExecutor`.
+- Default thread prefix: `backend-event-`.
+- Default pool: `core=2`, `max=2`, `queue=1000`.
+
+Configuration:
+
+```text
+AXON_BACKEND_EVENT_EXECUTOR_CORE_SIZE=2
+AXON_BACKEND_EVENT_EXECUTOR_MAX_SIZE=2
+AXON_BACKEND_EVENT_EXECUTOR_QUEUE_CAPACITY=1000
+AXON_BACKEND_EVENT_EXECUTOR_THREAD_NAME_PREFIX=backend-event-
+```
+
+Why:
+
+- The previous `@Async` path used the default async executor, making backend analytics publish hard to isolate in dumps and metrics.
+- A dedicated executor makes thread dumps identifiable by `backend-event-*`.
+- Spring Boot Actuator/Micrometer can expose executor metrics tagged by the bean name `backendEventTaskExecutor`.
+
+Next validation:
+
+- Re-run the same `3000/600/MAX_VUS=600` publish-on scenario.
+- Compare against the prior publish-on baseline and publish-off runs.
+- During a bad run, collect thread dumps and inspect whether `backend-event-*` threads are active, queued, or blocked around Kafka send/callback work.
+
+### 2026-07-08 Backend Event Executor Validation
+
+Run shape:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+PRELOAD_CAMPAIGN_META: true
+Entry URL: http://127.0.0.1:28080
+Profile: diagnostic
+OTel Java agent: off
+Backend publish: enabled
+Commit: 5c52e26
+```
+
+Initial run after redeploy:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-020049-diagnostic-backend-dedicated-executor
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 6084.1ms
+http_req_duration p95: 6003.34ms
+http_reqs: 152.67/s
+```
+
+Actuator snapshot after the initial run:
+
+```text
+backend_event_publish_async: 600 calls, sum 19.25s
+spring_kafka_template_seconds: 600 calls, sum 12.25s
+executor_completed_tasks_total{name="backendEventTaskExecutor"}: 600
+executor_queued_tasks{name="backendEventTaskExecutor"}: 0
+executor_active_threads{name="backendEventTaskExecutor"}: 0
+```
+
+Interpretation:
+
+- The dedicated executor reduced the measured `backend_event_publish_async` stage compared with the previous publish-on baseline.
+- However, the initial post-redeploy run still had a high p95.
+- This means executor isolation alone was not enough evidence to call Kafka publish the steady-state bottleneck.
+- The result needed repeat runs under the same shape before making a production claim.
+
+Follow-up sampling wrapper:
+
+```text
+scripts/observability/run-entry-kafka-sampling.sh
+```
+
+The wrapper:
+
+- Restarts `axon-nginx`.
+- Requires the unauthenticated nginx probe to return `403` before load generation.
+- Runs the existing `scripts/load-test/run-baseline-compose.sh`.
+- Samples Entry actuator/Prometheus metrics during the run.
+
+Warm repeated runs under the same shape:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-021037-entry-kafka-sampling-compose-baseline
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 162ms
+http_req_duration p95: 125.16ms
+http_reqs: 241.45/s
+
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-021150-entry-kafka-sampling-compose-baseline
+fcfs_success_count: 600
+fcfs_error_count: 0
+reservation p95: 143ms
+http_req_duration p95: 119.12ms
+http_reqs: 250.03/s
+```
+
+Sampling observations:
+
+- `spring_kafka_template_seconds_count` increased by `600` per measured run.
+- `spring_kafka_template_seconds_sum` increased by only a few seconds per measured run.
+- `executor_queued_tasks` remained `0` in sampled tails.
+- `executor_active_threads` returned to `0` after publish completion.
+- The successful warm runs show Kafka publish is not currently proven to be the steady-state p95 bottleneck for this reservation-only shape.
+
+Current interpretation:
+
+- The first slow dedicated-executor run is likely affected by cold/warm-up factors such as JVM/JIT, Kafka producer metadata/connection warm-up, or immediately-after-redeploy runtime state.
+- Do not use the first post-redeploy run alone as the baseline.
+- For portfolio-grade before/after measurements, run an explicit warm-up and then compare repeated measured runs.
+- If cold-start behavior itself becomes the target, treat it as a separate problem from steady-state burst handling.
+
+Warm-run protocol:
+
+```text
+deploy
+-> restart nginx and require 403 unauthenticated Entry probe
+-> small hot-path warm-up
+-> reset test data
+-> measured run 1
+-> reset test data
+-> measured run 2
+```
+
+Helper:
+
+```bash
+SCENARIO=waiting_burst \
+FLOW=reservation \
+WARMUP_NUM_USERS=50 \
+WARMUP_MAX_VUS=5 \
+WARMUP_FCFS_LIMIT_COUNT=50 \
+MEASURED_NUM_USERS=3000 \
+MEASURED_MAX_VUS=600 \
+MEASURED_FCFS_LIMIT_COUNT=600 \
+MEASURED_RUNS=2 \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+./scripts/load-test/run-warm-baseline-compose.sh 1
+```
+
+Use this for steady-state before/after comparisons. Use the first post-deploy run only when the explicit target is cold-start readiness.
+
+Validated warm baseline on 2026-07-08:
+
+```text
+commit: be6975a
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-074127-warm-baseline
+shape: waiting_burst / reservation / 3000 users / MAX_VUS 600 / FCFS 600 / nginx path
+
+warmup:    status 0, success 50,  error 0, reservation p95 5ms
+measured1: status 0, success 600, error 0, reservation p95 127.10ms, http p95 111.28ms, http_reqs/s 244.25
+measured2: status 0, success 600, error 0, reservation p95 115.05ms, http p95 102.43ms, http_reqs/s 248.36
+```
+
+Harness fixes made before this run:
+
+- `FLOW=reservation` now treats Redis reservation count as the domain check target; DB entry/purchase persistence is not expected.
+- Nested `RESULT_DIR` artifact paths are archived relative to their actual parent directory, avoiding false `tar: measured-* Cannot stat` failures.
+
+Executor before/after check with the same warm wrapper:
+
+```text
+CPU: ENTRY_CPUS=1.5
+shape: waiting_burst / reservation / 3000 users / MAX_VUS 600 / FCFS 600 / nginx path
+
+Weak warm-up: 50 users / 5 VUs / FCFS 50
+before executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-before-executor-warm
+  measured1: status 0, success 600, error 0, reservation p95 2648.05ms
+  measured2: status 0, success 600, error 0, reservation p95 343.05ms
+after executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-after-executor-warm
+  measured1: status 0, success 600, error 0, reservation p95 3008.15ms
+  measured2: status 0, success 600, error 0, reservation p95 365.05ms
+
+Strong warm-up: 3000 users / 600 VUs / FCFS 600
+before executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-before-executor-strong-warm
+  warmup:    status 99, success 600, error 0, reservation p95 6100.20ms
+  measured1: status 0,  success 600, error 0, reservation p95 390.00ms
+  measured2: status 0,  success 600, error 0, reservation p95 349.05ms
+after executor artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-after-executor-strong-warm
+  warmup:    status 0, success 600, error 0, reservation p95 412.05ms
+  measured1: status 0, success 600, error 0, reservation p95 206.05ms
+  measured2: status 0, success 600, error 0, reservation p95 99.00ms
+```
+
+Interpretation:
+
+- The weak warm-up is not enough after entry redeploy; measured-1 still includes cold-start/JIT/Kafka/connection effects.
+- The strong warm-up makes the steady-state comparison more useful.
+- Dedicated backend-event executor shows a favorable steady-state signal under strong warm-up, but do not claim it as a standalone proven p95 optimization without more repeated A/B runs.
+- Safe portfolio wording: "Separated backend event publishing into a dedicated executor and validated that the warmed reservation path remained stable under 3,000 waiting users / FCFS 600; repeated measurements showed lower tail latency, while cold-start readiness was treated as a separate concern."
+
+Reservation-path timeline:
+
+```text
+0.6 CPU baseline:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: timeout-class errors, p95 around 10s
+  interpretation: Entry CPU quota was insufficient for the burst.
+
+1.5 CPU early runs:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: success 600, error 0, but p95 still around 4~6s
+  interpretation: CPU quota fixed timeout-class errors, but tail latency was still unstable.
+
+Cache preload A/B:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: Core metadata lookups fell from 60~70 to 0; p95 moved toward the 100~200ms range.
+  interpretation: campaign meta cache warm-up removed unnecessary Core metadata calls.
+
+Repeated warmed runs:
+  shape: reservation / waiting_burst / 3000 users / FCFS 600 / MAX_VUS 600
+  result: p95 143~162ms, then validated warm wrapper p95 115~127ms.
+  interpretation: cold-start and measurement-protocol effects were a major part of the earlier 4~6s tail.
+
+Strong warm-up:
+  shape: first full-size warm-up, then measured runs under the same reservation shape
+  result: before executor warmup p95 6100ms -> measured p95 390/349ms; after executor measured p95 206/99ms.
+  interpretation: warm-up is likely the largest factor behind the sudden p95 drop, but the exact warm-up component is not isolated.
+```
+
+Warm-up uncertainty:
+
+- Strong evidence: the same code/resource/shape can move from multi-second p95 on the first full-size run to sub-second p95 on immediately following measured runs.
+- Not yet proven: which warm-up component dominates. Candidate contributors are JVM/JIT, Kafka producer metadata/connection, Redis connection reuse, nginx/Tomcat connection path, campaign meta preload, OS/page cache, and k6/load-generator warm-up.
+- Portfolio-safe framing: the improvement should be described as separating cold-start readiness from warmed steady-state measurement, not as proving one internal warm-up mechanism.
+
+Next scope: payment/end-to-end diagnosis:
+
+- Reservation-only now covers Entry FCFS hot path.
+- Core follow-up cannot be evaluated from reservation-only because Kafka/Core DB persistence is skipped.
+- Next run should use `FLOW=payment` to drive reservation -> payment prepare -> payment confirm -> Kafka -> Core consume -> DB persistence.
+- Main metrics should shift from HTTP p95 alone to DB convergence and asynchronous processing health.
+
+Payment-flow metrics to add/check:
+
+- DB entries convergence seconds.
+- DB purchases convergence seconds.
+- Final Redis counter/users vs DB entries/purchases consistency.
+- DLQ count.
+- Kafka consumer-group lag, listener batch duration/size, Hikari active/pending,
+  DB convergence, DLT count, and individual retry fallback count.
+
+### VU-Capped Waiting Burst Boundary
+
+`waiting_burst` uses k6 `shared-iterations`. Its interpretation depends on the relationship between total users and VUs:
+
+```text
+NUM_USERS = MAX_VUS
+-> every user starts the reaction delay at event open
+-> flash-crowd / waiting-room model
+
+NUM_USERS > MAX_VUS
+-> only MAX_VUS users start initially
+-> each completed VU receives the next unique user iteration
+-> VU-capped throughput and Core drain model, not a full waiting-room flash crowd
+```
+
+Therefore every `3000 users / MAX_VUS 600` result below means 3,000 unique users processed through 600 active k6 execution slots. It is valid for capped end-to-end throughput, queue drain, and DB convergence, but must not be described as 3,000 simultaneous event-open clicks.
+
+Scope boundary:
+
+- If payment prepare/confirm becomes the dominant bottleneck, treat it as a separate prerequisite bottleneck rather than forcing it into the Core follow-up story.
+- If payment confirm succeeds but DB convergence is slow or inconsistent, move into Core consumer/buffer/flush/DB persistence diagnosis.
+
+2026-07-08/09 payment-flow validation:
+
+```text
+shape: payment / waiting_burst / 3000 users / MAX_VUS 600 / nginx path
+tooling: run-warm-baseline-compose.sh + check-results-compose.sh DB convergence output
+
+smoke:
+  artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-payment-smoke-300
+  FCFS limit: 300
+  result: status 0, success 300, error 0
+  reservation p95: 2654ms
+  http p95: 2894ms
+  DB entries/purchases: 300/300
+  entries convergence: 0s
+  purchases convergence: 0s
+
+main:
+  artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260708-payment-main-600
+  FCFS limit: 600
+  result: status 0, success 600, error 0
+  reservation p95: 1194ms
+  http p95: 1621ms
+  DB entries/purchases: 600/600
+  entries convergence: 0s
+  purchases convergence: 0s
+
+repeat:
+  artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260709-payment-main-600-repeat
+  FCFS limit: 600
+  result: status 0, success 600, error 0
+  reservation p95: 613ms
+  http p95: 799ms
+  DB entries/purchases: 600/600
+  entries convergence: 0s
+  purchases convergence: 0s
+```
+
+Interpretation:
+
+- At `3000 users / FCFS 600 / MAX_VUS 600`, payment prepare/confirm did not fail in the measured runs.
+- Core DB persistence also did not show delayed convergence in these runs.
+- Therefore the next Core-focused diagnosis needs either a higher success load, finer async pipeline metrics, or a separate scenario that stresses Core independently of Entry reservation capacity.
+- Do not claim this proves Core has no bottleneck. It only proves the current warmed payment scenario did not expose one.
+
+## Questions To Answer
+
+- Is p95 dominated by k6 connection wait, nginx forwarding, Entry request handling, Redis Lua, token issuance, or Kafka publish?
+- In payment flow, does latency move from Entry to Core consume/DB persistence?
+- Are failed payment-path runs failing before successful confirmation, during Kafka publish, or during Core persistence?
+- Is Redis actually slow under burst load, or only near a timeout boundary caused elsewhere?
+
+## 2026-07-06 FCFS Entry CPU Diagnosis
+
+### Test Shape
+
+- Scenario: `waiting_burst`
+- Flow: `reservation`
+- Users: `3000`
+- FCFS limit: `600`
+- Entry URL: `http://127.0.0.1:28080`
+- Warm-up: campaign meta cache preloaded before k6
+- Primary metrics: k6 p95/error/RPS, Redis counter/users, Entry Prometheus CPU/thread/http metrics, Jaeger traces
+
+The first warm-up attempt used `POST /entry/api/v1/entries`, which consumed one FCFS slot. This was useful for diagnosis but not clean enough for repeatable portfolio measurements.
+
+Follow-up fix:
+
+- `scripts/load-test/prepare-load-test-compose.sh` now supports `PRELOAD_CAMPAIGN_META=true`.
+- This preloads `campaign:{activityId}:meta` directly from MySQL into Redis after prepare clears test keys.
+- It avoids consuming a reservation slot during warm-up.
+
+### Findings
+
+Cache stampede was a real contributor:
+
+- Without a prepared meta cache, Entry traces showed Core `GET /api/v1/campaign/activities/{id}` during the burst.
+- After meta warm-up, Core GET disappeared from recent Entry traces.
+- k6 p95 improved from roughly `8.5s` to the `3s` range in comparable diagnostic runs.
+
+Focused A/B script:
+
+```bash
+# PRELOAD_CAMPAIGN_META=false/true is controlled by the wrapper below.
+REPEATS=3 \
+NUM_USERS=3000 \
+FCFS_LIMIT_COUNT=600 \
+MAX_VUS=600 \
+SCENARIO=waiting_burst \
+FLOW=reservation \
+K6_ENTRY_SERVICE_URL=http://127.0.0.1:28080 \
+./scripts/load-test/run-cache-stampede-ab-compose.sh
+```
+
+Use this only when cache stampede needs an independent evidence table. The script keeps the FCFS scenario fixed and alternates `PRELOAD_CAMPAIGN_META=false` and `true`, then writes a summary under `artifacts/load-test/*-cache-stampede-ab/summary.md`.
+
+Portfolio wording guardrail:
+
+- Strong: Jaeger showed repeated Core metadata lookup on cache miss, and metadata preload removes that lookup from the burst path.
+- Strong if the focused A/B confirms it: timeout/error tendency and p95 improved under the same resource profile.
+- Weak unless re-run as focused A/B: exact percentage improvement caused only by cache stampede removal.
+
+Focused A/B result from `20260707-040148-cache-stampede-ab`:
+
+```text
+Scenario: waiting_burst
+Flow: reservation
+Users: 3000
+FCFS limit: 600
+MAX_VUS: 600
+Entry CPU: 1.5
+
+PRELOAD_CAMPAIGN_META=false
+run1: Core activity markers 70, success 600, error 0, reservation p95 170.05ms
+run2: Core activity markers 60, success 600, error 0, reservation p95 297ms
+avg reservation p95: 233.52ms
+
+PRELOAD_CAMPAIGN_META=true
+run1: Core activity markers 0, success 600, error 0, reservation p95 118ms
+run2: Core activity markers 0, success 600, error 0, reservation p95 115ms
+avg reservation p95: 116.50ms
+```
+
+Interpretation:
+
+- At the current `600` VU diagnostic shape, cache stampede did not cause failures.
+- It still produced `60~70` unnecessary Core metadata lookups during the cache-miss window.
+- Metadata preload removed those lookups and reduced reservation p95 by roughly half in this run.
+- This should be positioned as proactive hot-path risk removal for larger bursts, not as the main outage-level bottleneck fix.
+
+Redis Lua and Kafka were not the dominant bottlenecks:
+
+- Sold-out `410` traces mostly contained `GET`, `GET`, and `EVALSHA`.
+- Successful `200` traces contained `GET`, `GET`, `EVALSHA`, `SET`, and `axon.event.behavior publish`.
+- Jaeger showed successful handler spans around `1.4s` in sampled traces, while k6/nginx still observed higher end-to-end latency.
+
+Entry CPU quota was the dominant remaining bottleneck:
+
+```text
+baseline ENTRY_CPUS=0.6
+run1: error 567, success 32,  p95 10000ms, rps 79.8
+run2: error 494, success 105, p95 10000ms, rps 84.5
+
+improved ENTRY_CPUS=1.5
+run1: error 0, success 599, p95 4325ms, rps 162.2
+run2: error 0, success 599, p95 4311ms, rps 167.8
+
+follow-up ENTRY_CPUS=2.0 with PRELOAD_CAMPAIGN_META=true
+run1: error 0, success 600, p95 4200ms, rps 185.7
+```
+
+Clean measurement was re-run after stopping non-Axon containers (`opicnic_*`) and Jaeger:
+
+```text
+clean baseline ENTRY_CPUS=0.6
+run1: error 706,  success 71,  p95 10000ms, rps 79.6
+run2: error 1078, success 70,  p95 10000ms, rps 77.6
+
+clean improved ENTRY_CPUS=1.5
+run1: error 0, success 600, p95 4390ms, rps 161.9
+run2: error 0, success 600, p95 6480ms, rps 156.8
+```
+
+The clean runs keep the same conclusion:
+
+- `ENTRY_CPUS=0.6` cannot reliably return responses before the k6 timeout even though Redis eventually reaches `600`.
+- `ENTRY_CPUS=1.5` removes timeout-class errors and returns all `600` successful reservation responses.
+- p95 still has run-to-run variance, so it should not be overclaimed as fully solved.
+- The defensible headline is stability/error elimination and roughly doubled throughput, not perfect tail latency.
+
+Prometheus samples supported the CPU diagnosis:
+
+- Entry CPU hit `1.0` during tests.
+- JVM live threads stayed low, around the 20s.
+- This points to CPU quota / CPU contention rather than Tomcat thread exhaustion.
+- With `ENTRY_CPUS=2.0`, throughput improved again, but p95 stayed around the `4s` range. This suggests `0.6 -> 1.5` fixed the dominant CPU quota bottleneck, while the remaining tail latency is likely in the successful `200` reservation path or same-VM load-generator contention.
+
+### Current Conclusion
+
+The main FCFS spike bottleneck after cache warm-up is not Redis Lua, Kafka publish, or Core metadata lookup. The remaining dominant bottleneck is Entry service CPU quota under burst load.
+
+The result is strong enough for an engineering note:
+
+> APM and nginx/k6 logs were compared to narrow the p95 delay. Cache stampede on campaign metadata was removed with warm-up, and repeated tests showed that increasing Entry CPU quota from `0.6` to `1.5` eliminated timeout-class errors and roughly doubled observed throughput.
+
+### Remaining Work
+
+- Re-run the `ENTRY_CPUS=1.5` comparison with `PRELOAD_CAMPAIGN_META=true` if a clean `success=600` table is needed.
+- Inspect successful `200` traces with `{"http.response.status_code":"200"}` to reduce the remaining p95.
+- Compare an external k6 run against the VM-local k6 run to separate application latency from same-VM load-generator contention.
+- For headline portfolio numbers, keep OTel disabled and collect only k6/nginx/Prometheus summaries.
+
+## Next Session Handoff
+
+Status at compact time:
+
+- Cache stampede A/B script exists at `scripts/load-test/run-cache-stampede-ab-compose.sh`.
+- The VM also has the latest quiet version of that script copied manually.
+- Java production code should not contain manual stage timers. A direct `EntryStageMetrics` attempt was reverted.
+- `entry-service/gradlew compileJava` passed after reverting that manual instrumentation.
+
+Important evidence:
+
+```text
+Cache stampede focused A/B:
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260707-040148-cache-stampede-ab
+shape: 3000 users / FCFS 600 / MAX_VUS 600 / reservation / Entry CPU 1.5
+
+PRELOAD=false:
+Core activity markers: 70, 60
+reservation p95 avg: 233.52ms
+success: 600
+error: 0
+
+PRELOAD=true:
+Core activity markers: 0, 0
+reservation p95 avg: 116.50ms
+success: 600
+error: 0
+```
+
+Interpretation:
+
+- Cache stampede was not the outage-level bottleneck at this scale.
+- It is still valid as proactive hot-path risk removal because burst-time Core metadata lookup fell from `60~70` to `0`.
+- Portfolio wording should say `hot-path external lookup removal`, not `system failure fixed`.
+
+OTel run caution:
+
+```text
+OTel diagnostic run:
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260707-043055-otel-entry15-preload-200path
+shape: Entry CPU 1.5 / PRELOAD=true / 3000 users / FCFS 600 / MAX_VUS 600
+result: success 600, error 0, sold out 2400
+http p95: 7885ms
+```
+
+- Do not use OTel-attached latency as performance evidence.
+- The OTel run is useful only for trace shape.
+- Jaeger showed successful `200` traces with these child spans:
+  - `GET campaign:1:meta`
+  - `GET RESERVATION_TOKEN:*`
+  - `EVALSHA`
+  - `SET RESERVATION_TOKEN:*`
+  - `axon.event.behavior publish`
+- In long `200` traces, child Redis/Kafka spans were small; the root span had large gaps between child spans.
+- This does not prove the remaining bottleneck is any specific method. It means automatic instrumentation is insufficient to split the Entry internal path.
+
+Rules for next session:
+
+- Do not scp uncommitted Java production code to the VM for performance claims.
+- If code changes are needed, use git commit/push/pull or an explicitly named diagnostic branch.
+- Do not permanently pollute `EntryApplicationService` with inline timing wrappers.
+- If stage-level timing is needed, prefer one of:
+  - a diagnostic-only Spring profile,
+  - an AOP/aspect around `EntryApplicationService.createEntry`,
+  - Micrometer timers isolated behind a small instrumentation component and clearly documented as diagnostic,
+  - or non-code evidence from existing Jaeger/Prometheus/nginx logs.
+- Before claiming OTel overhead, run a controlled `OTel off -> OTel on -> OTel off` comparison under the same `ENTRY_CPUS`, `PRELOAD_CAMPAIGN_META`, and traffic shape.
+
+Recommended next action:
+
+1. Add Core-side pipeline metrics before changing queue or persistence behavior: consumer lag, internal queue depth, flush duration, retry/DLT count, and DB convergence.
+2. Run a warmed `FLOW=payment` boundary test above FCFS `600` (start at `800`, then `1000` if clean) with OTel off for headline latency.
+3. If Core delay or inconsistency appears, use OTel only to inspect trace shape and diagnose the relevant consumer/flush/DB path.
+4. Apply the smallest evidence-backed improvement, then repeat the same payment scenario and compare DB convergence and consistency.
+5. Do not start pre-event scale-out/warm-up automation until this Core capacity boundary and operational metric set are established.
+
+## 2026-07-10 Core Pipeline Metric Baseline
+
+Implemented metric exposure before changing Core queue or persistence behavior:
+
+```text
+axon.pipeline.queue.depth{pipeline=campaign-command|purchase}
+axon.pipeline.flush{pipeline=campaign-command|purchase}
+axon.pipeline.flush.batch.size{pipeline=campaign-command|purchase}
+axon.pipeline.retry.individual{pipeline=purchase}
+axon.pipeline.dlt.routed{source=campaign-command|purchase|webhook}
+axon.reconciliation.mismatch.count
+axon.reconciliation.run{outcome=clean|mismatch|failure}
+```
+
+`infrastructure/compose/compose.metrics.yml` now scrapes `core-service:8080/actuator/prometheus`; Core permits this endpoint while its application port remains bound to the host loopback and is not proxied by the public Nginx route.
+
+Oracle VM verification:
+
+- Prometheus reports `up{job="axon-core"} = 1` for `core-service:8080`.
+- Core exposes the custom queue/flush/retry/reconciliation metrics after deployment.
+- Kafka client metrics already expose `kafka_consumer_fetch_manager_records_lag_max` for `consumer-axon-group-1`, so no group-offset poller is needed for the current single consumer scenario.
+
+Metric boundary:
+
+- `records_lag_max` is the active consumer client's maximum fetch lag, not a separately calculated committed group lag across all group members.
+- If multi-partition/group-wide lag becomes an operating requirement, add a broker/group-offset exporter or dedicated lag collector then.
+- Alert routing/thresholds remain out of scope for this baseline. There is no Alertmanager or Slack notification path yet.
+
+2026-07-10 warmed payment boundary run:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260710-payment-main-800
+shape: payment / waiting_burst executor / 3000 total users / 600 active VUs / FCFS 800 / nginx path
+warmup: 50 users / FCFS 50 / MAX_VUS 5
+
+result:
+  success: 800
+  error: 0
+  reservation p95: 883.35ms
+  HTTP p95: 700.25ms
+  DB entries/purchases: 800 / 800
+  entries/purchases convergence: 0s / 0s
+  purchase individual retry: 0
+  reconciliation mismatch: 0
+
+Prometheus observation:
+  command queue max: 143
+  purchase queue max: 20
+  command flush: 87 batches / 4.33s total / 20 max batch size
+  purchase flush: 87 batches / 5.10s total / 20 max batch size
+  Kafka records_lag_max: 0 at observed scrape points
+```
+
+Interpretation:
+
+- The internal queues absorbed a short burst and drained without persistence mismatch at FCFS 800.
+- `records_lag_max = 0` does not prove there was no sub-5-second lag spike because Prometheus scrapes every 5 seconds; it only shows no lag was observed at sampled points.
+- Step 0 minimum observability is now live. Step 1 should increase the same payment shape to FCFS 1000 before changing queue or persistence code.
+
+2026-07-10 warmed payment boundary repeat:
+
+```text
+artifact: /home/ubuntu/apps/axon/artifacts/load-test/20260710-payment-main-1000
+shape: payment / waiting_burst executor / 3000 total users / 600 active VUs / FCFS 1000 / nginx path
+warmup: 50 users / FCFS 50 / MAX_VUS 5
+
+result:
+  success: 1000
+  error: 0
+  reservation p95: 659.05ms
+  HTTP p95: 705.99ms
+  DB entries/purchases: 1000 / 1000
+  entries/purchases convergence: 0s / 0s
+  purchase individual retry: 0
+  reconciliation mismatch: 0
+
+Prometheus observation:
+  command queue max: 103
+  purchase queue max: 20
+  Kafka records_lag_max: 0 at observed scrape points
+```
+
+Interpretation:
+
+- FCFS 1000 also completed without an observed Core persistence or consistency failure at the same 600-VU concurrency cap.
+- The 800 and 1000 runs changed successful transaction volume while holding the VU cap fixed; they do not yet establish a higher-concurrency Entry/payment boundary.
+- Before changing Core code, either raise FCFS success volume again with the same cap to test sustained drain capacity, or separately raise `MAX_VUS` when the next question is end-to-end concurrency capacity.
+
+## 2026-07-15 External 3000-VU Boundary Follow-up
+
+This follow-up closes the diagnostic loop from application APM to the public
+ingress boundary. It does **not** replace the 2026-07-10 successful 600-VU
+Core-pipeline records above; it answers a different question: why the current
+external `MAX_VUS=3000` payment measurement is highly variable.
+
+The Jaeger, Micrometer, and executor evidence documented above narrowed the
+application-side candidates. The new observation needed for this follow-up was
+host nginx interval logging, because Entry/Core instrumentation cannot see a
+request that never arrives.
+
+### Host nginx interval evidence
+
+The external path was direct origin (`https://134.185.100.15` with the Axon
+virtual host), so Cloudflare was bypassed:
+
+```text
+Mac k6 -> network/TCP -> VM host nginx -> axon-nginx -> Entry -> Core
+```
+
+For measured `payment / waiting_burst / 3000 users / 3000 VUs / FCFS 800`
+runs, the difference between 3000 attempted reservations and host nginx
+access-log records matched k6 `fcfs_error_count` (within interval boundaries).
+Those failed requests did not reach host nginx user-space access logging.
+Requests that did arrive completed through host/Axon nginx as business `200` or
+`410`; captured host error signals (`worker_connections`, upstream timeout,
+connect failure, reset) were zero.
+
+Host-to-Axon upstream-connect p95 still varied from `0.000s` to `1.493s` across
+similar runs. That remains a latency-variance signal, but is not evidence that
+host nginx caused the missing requests.
+
+### Added observability and configuration
+
+`run-external-compose-baseline.sh` now persists per-run:
+
+- host nginx access/error log slices,
+- host reservation status counts,
+- host request-time and host-to-Axon upstream connect/response p95,
+- host nginx connection/upstream error counts,
+- existing Axon nginx completion summary and Entry/Core Prometheus snapshots.
+
+The VM host nginx Axon vhost temporarily tested an upstream keep-alive pool for
+`127.0.0.1:28080` (`keepalive 256`, HTTP/1.1, cleared `Connection` header).
+`nginx -t` and a local proxy smoke test passed, but later requests produced
+Tomcat `400 Bad Request` responses in this environment, so the trial was
+reverted. The current configuration keeps upstream keep-alive off; this is not
+a portfolio performance-improvement claim.
+
+### Load-generator network boundary
+
+The Mac network used during these runs measured approximately `38ms` unloaded
+latency and `1.2s` latency under a speed-test load (about `46Mbps` down /
+`39Mbps` up). This is strong evidence of client-network queueing/bufferbloat
+and is consistent with failures occurring before host nginx access logging.
+It is not proof that Wi-Fi is the only cause; Mac k6 connection handling and
+VM kernel TCP admission remain secondary candidates.
+
+### Measurement rule
+
+Do not use the 2026-07-15 external artifacts as final T27/portfolio latency or
+RPS evidence. Re-run on stable home wired/Wi-Fi or an independent generator
+with the fixed `1.5/1.2/0.5` Entry/Core/Axon-nginx profile, 3 full warm-ups,
+and 3 measured runs. Accept a final value only when every measured run has
+FCFS `800`, k6 error `0`, Redis `800`, DB entries/purchases `800`, and the
+host/Axon ingress summaries are retained alongside it.
+
+Detailed artifacts and run IDs are recorded in
+`docs/experiments/dev-log-2026-07-15-external-load-generator-boundary.md`.

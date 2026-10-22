@@ -180,11 +180,11 @@ curl http://127.0.0.1:8081/actuator/health
 분석 파이프라인은 아래 compose 파일을 함께 사용합니다.
 
 ```bash
-docker compose -f compose.app.yml -f compose.analytics.yml up -d
+docker compose -f compose.app.yml -f infrastructure/compose/compose.analytics.yml up -d
 ```
 
 메트릭과 추적 화면은 아래 compose 파일을 함께 사용합니다.
 
 ```bash
-docker compose -f compose.app.yml -f compose.metrics.yml -f compose.otel.yml up -d
+docker compose -f compose.app.yml -f infrastructure/compose/compose.metrics.yml -f infrastructure/compose/compose.otel.yml up -d
 ```

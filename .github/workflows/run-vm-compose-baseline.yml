@@ -33,7 +33,7 @@ on:
         type: boolean
         default: true
       use_resource_profile:
-        description: "Apply compose.resources.yml fixed resource limits"
+        description: "Apply infrastructure/compose/compose.resources.yml fixed resource limits"
         required: true
         type: boolean
         default: true
@@ -61,8 +61,8 @@ jobs:
             COMPOSE_FILES="-f compose.app.yml"
             RESOURCE_PROFILE="unlimited-compose-app"
             if [ "${{ inputs.use_resource_profile }}" = "true" ]; then
-              COMPOSE_FILES="$COMPOSE_FILES -f compose.resources.yml"
-              RESOURCE_PROFILE="compose.resources.yml"
+              COMPOSE_FILES="$COMPOSE_FILES -f infrastructure/compose/compose.resources.yml"
+              RESOURCE_PROFILE="infrastructure/compose/compose.resources.yml"
             fi
 
             if [ "${{ inputs.redeploy }}" = "true" ]; then

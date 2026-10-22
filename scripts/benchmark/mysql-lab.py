@@ -12,7 +12,7 @@ from datetime import datetime
 
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPOSE = ["docker", "compose", "-p", "axon-benchmark", "-f", str(ROOT / "compose.benchmark.yml")]
+COMPOSE = ["docker", "compose", "--project-directory", str(ROOT), "-p", "axon-benchmark", "-f", str(ROOT / "infrastructure/compose/compose.benchmark.yml")]
 DATABASES = {"candidates": "bench_candidates", "purchases": "bench_purchases"}
 VERSION = "1"
 ANCHOR = "2026-10-14 12:00:00"

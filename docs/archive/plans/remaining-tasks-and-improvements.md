@@ -1,0 +1,171 @@
+# Legacy Backlog — 남은 2주 개발 및 개선 계획
+
+> Status: legacy (archived 2026-10-21)
+> 과거 계획·검토·작업 기록이다. 완료 표시와 작업 지시는 당시 기준이며 현재 백로그가 아니다. [현재 문서 안내](../../README.md)에서 현행 정본을 확인한다.
+
+> 현재 상태: **레거시 백로그**
+>
+> 이 문서는 2025년 말 기준 계획과 당시 미완료/완료 항목이 섞여 있다. 현재 포트폴리오·구현 기준의 source of truth로 사용하지 않는다.
+>
+> 현재 진행 방향은 `docs/plans/2026-h2-portfolio-hardening-roadmap.md`, `docs/experiments/spike-traffic-observability-plan.md`, `docs/operations/otel-jaeger-apm-plan.md`를 우선한다.
+>
+> 특히 Redisson, Webhook 미구현, Prometheus/Grafana 전제 등은 현재 코드/전략과 다를 수 있으므로 재사용 전 반드시 코드와 최신 T파일을 확인한다.
+
+> **작성일**: 2025-11-28
+> **목표**: 시스템 안정화, 대시보드 고도화, 그리고 포트폴리오 퀄리티 향상
+
+---
+
+## 1. 📊 대시보드 고도화 (Priority: High)
+
+### A. Campaign Level 성능 최적화 (Refactoring) ✅ **완료**
+*   **현재 상황 (As-Is):** 캠페인 대시보드 조회 시, 소속된 `Activity` 개수(N)만큼 ES와 DB를 반복 조회하는 **N+1 문제** 존재. (초기 구현의 한계)
+*   **개선 목표 (To-Be):** `campaignId`를 Elasticsearch 인덱스에 직접 적재하여, **단 1회의 Aggregation 쿼리**로 캠페인 전체 통계를 집계.
+*   **Action Items:**
+    - [x] `Entry-Service`: Kafka 이벤트 발행 시 `campaignId` 필드 추가 (DTO 수정)
+    - [x] `Core-Service`: ES 인덱싱 로직 확인
+    - [x] `DashboardService`: 루프 로직 제거 및 `terms aggregation` 기반 단일 쿼리로 변경
+    - [x] **성과 측정:** 개선 전/후 API 응답 속도(Latency) 비교하여 포트폴리오에 기재
+
+### B. CDP 심층 분석 지표 추가
+*   **Click Rate (Engagement):** ✅ **완료**
+    - [x] CTR (Click-Through Rate) = `engagementRate` 구현
+    - [x] CVR (Conversion Rate) 구현
+    - [x] Dashboard UI에 표시 중
+
+*   **Device Breakdown:** ❌ **미완료**
+    - [ ] `User-Agent` 문자열 파싱 (Mobile/Desktop/Tablet)
+    - [ ] 원형 차트(Pie Chart) 시각화 구현
+
+*   **New vs Returning (재방문 분석):** ❌ **미완료**
+    - [ ] `Entry-Service`: 이벤트 발행 시 유저 가입일/방문이력 조회
+    - [ ] `isNewUser: true/false` 필드 추가
+    - [ ] ES 필터링 및 대시보드 UI 구현
+
+---
+
+## 2. ⚡ 성능 및 안정성 검증 (Priority: Medium)
+
+### A. 대규모 부하 테스트 (Load Testing)
+*   **도구:** k6 (Javascript 기반)
+*   **시나리오:**
+    - [ ] **Scenario 1 (Spike):** 선착순 오픈 직후 1초에 10,000명 동시 요청
+    - [ ] **Scenario 2 (Sustained):** 5분간 지속적인 트래픽 유입 시 시스템 리소스(CPU/Memory) 변화
+*   **목표:** `Redisson` 분산 락이 100% 동작하여 **Over-booking이 0건**임을 증명
+    - [ ] k6 스크립트 작성 및 실행
+    - [ ] 결과 리포트 작성 (Grafana 대시보드 캡처)
+
+### B. 장애 복구 훈련 (Chaos Engineering)
+*   **시나리오:**
+    - [ ] Redis Master 노드 강제 종료 → Slave 승격 확인
+    - [ ] Kafka Broker 1대 종료 → 데이터 유실 없이 처리되는지 확인
+*   **목표:** **SPOF(Single Point of Failure) 없음**을 증명
+    - [ ] 장애 시나리오 테스트 수행
+    - [ ] 복구 절차 문서화
+
+---
+
+## 3. 🧪 Activity 시뮬레이션 기능 (Priority: Medium-High)
+
+> **📄 상세 계획**: `simulation-feature-plan.md` (현재 저장소에 없는 과거 참조) (`simulation-feature-plan.md`, 현재 저장소에 없는 과거 참조)
+
+### 개요
+마케터와 개발자가 새로운 Activity를 등록할 때, 실제 트래픽 없이 대시보드 데이터를 미리 시뮬레이션하여 확인할 수 있는 기능.
+
+### 핵심 기능
+*   **UI**: Admin Dashboard에 "🧪 시뮬레이션 실행" 버튼 추가
+*   **파라미터 설정**: 방문자 수, 전환율, 시간 범위 조정 가능
+*   **실시간 진행 상황**: SSE를 통한 Progress 스트리밍
+*   **안전장치**:
+    - DRAFT/TEST 상태 Activity만 시뮬레이션 가능
+    - ADMIN/MANAGER 권한 필요
+    - Redis 분산 락으로 동시 실행 방지
+    - 데이터 격리 (user_id >= 1000)
+
+### 기술 스택
+*   **Backend**: Spring @Async + SSE (Server-Sent Events)
+*   **Frontend**: JavaScript EventSource API + Modal UI
+*   **데이터 처리**: 기존 스크립트 로직을 Java로 포팅
+*   **진행 관리**: Redis + MySQL (simulation_jobs 테이블)
+
+### 예상 일정
+| Phase | 작업 | 기간 |
+|-------|------|------|
+| Phase 1 | Backend API 구현 (Controller, Service, Executor) | 2-3일 |
+| Phase 2 | Frontend UI 구현 (Modal, Progress Bar, SSE) | 1-2일 |
+| Phase 3 | 테스트 & QA (단위/통합 테스트) | 1일 |
+| **Total** | | **4-6일** |
+
+### Action Items
+1. [ ] Database Migration (simulation_jobs 테이블 생성)
+2. [ ] SimulationController + Service 구현
+3. [ ] SimulationExecutor (비동기 실행 로직)
+4. [ ] Dashboard UI에 버튼 및 모달 추가
+5. [ ] SSE 연동 및 Progress 스트리밍
+6. [ ] 권한 체크 및 안전장치 구현
+7. [ ] 단위/통합 테스트 작성
+
+### 포트폴리오 어필 포인트
+*   **비동기 처리**: Spring @Async를 활용한 대용량 데이터 생성
+*   **실시간 통신**: SSE를 통한 사용자 경험 개선
+*   **안전성**: 분산 락, 권한 체크, 데이터 격리 등 프로덕션급 안전장치
+*   **재사용성**: 기존 테스트 스크립트를 API로 전환하여 활용도 증대
+
+---
+
+## 4. 🔗 MarketingRule 액션 모델 고도화 (Priority: Medium)
+
+> **현재 상태**: `BehaviorTriggerScheduler`가 행동 조건을 평가하고 Kafka `CAMPAIGN_ACTIVITY_COMMAND`를 발행한다. 현재 코드는 `RewardType.COUPON`이면 `CouponStrategy`가 `UserCoupon`을 저장하고, `RewardType.WEBHOOK`이면 `WebhookStrategy`가 외부 endpoint를 호출한 뒤 실패 시 3회 재시도 및 `WEBHOOK_FAILED_DLT`로 격리한다. 단, `MarketingRule` 하나가 단일 `rewardType`/`rewardReferenceId`만 가지므로 "쿠폰 발급 + 알림 발송"처럼 한 조건에 여러 액션을 붙이는 구조는 아직 아니다.
+
+### 목표
+*   행동 조건 판정(`MarketingRule`)과 실행할 일(`MarketingAction`)을 분리한다.
+*   한 조건 만족이 쿠폰 발급, 외부 CRM webhook, 카카오/앱푸시, 이메일 같은 복수 액션으로 이어질 수 있게 한다.
+*   외부 발송 실패가 트리거 배치나 내부 쿠폰 발급 파이프라인을 막지 않도록 재시도와 DLQ 또는 실패 이력으로 격리한다.
+*   포트폴리오에서는 구현 전/후 표현 범위를 명확히 분리한다.
+
+### 구현 범위
+*   **도메인 확장**
+    - [x] `RewardType.WEBHOOK` 추가
+    - [ ] `MarketingRule.rewardType/rewardReferenceId` 단일 액션 모델을 `MarketingRule` 1:N `MarketingAction` 모델로 확장
+    - [ ] 외부 발송 대상 URL, 인증 헤더, payload 템플릿을 저장할 `WebhookEndpoint` 또는 `WebhookTemplate` 설계
+    - [ ] 액션별 `actionType`, `referenceId`, `executionOrder`, `failurePolicy` 정의
+*   **이벤트 발행**
+    - [x] `BehaviorTriggerScheduler`가 `WEBHOOK` 룰에 대해 `CampaignActivityType.WEBHOOK` Kafka 메시지 발행
+    - [ ] 한 `MarketingRule`에 연결된 active action들을 조회해 action별 command 발행
+    - [ ] 메시지에 `activityId`, `userId`, `ruleId`, `eventId`, `payload`를 포함하여 추적 가능하게 설계
+*   **외부 호출 처리**
+    - [x] `WebhookStrategy`에서 외부 URL로 HTTP POST 호출
+    - [ ] 2xx는 성공 처리, 4xx/5xx/timeout은 실패 이력 저장
+*   **실패 처리**
+    - [x] 최대 3회 재시도 후 `WEBHOOK_FAILED_DLT` 격리
+    - [ ] `retryCount`, `nextRetryAt`, `lastError` 기반 재시도 정책과 실패 테이블 추가
+    - [ ] 같은 `eventId`가 중복 처리되지 않도록 idempotency key 적용 검토
+*   **검증**
+    - [ ] WireMock 또는 MockWebServer로 외부 시스템을 대체한 통합 테스트 작성
+    - [ ] 2xx 성공, 5xx 재시도, timeout, DLT 이동 시나리오 검증
+    - [ ] 테스트 결과를 `docs/` 또는 k6/검증 리포트에 근거 파일로 남김
+
+### 포트폴리오 표현 기준
+*   **현재 표현 가능**: "MarketingRule 기반 행동 조건 감지", "쿠폰 발급과 webhook 호출을 reward type별 strategy로 분기", "Webhook 실패를 retry/DLT로 격리"
+*   **고도화 후 표현 가능**: "한 조건에 쿠폰·CRM webhook·푸시·이메일 등 복수 액션을 연결하는 마케팅 자동화 모델", "액션별 실행 이력/재시도/실패 정책 관리"
+*   **구현 전 금지**: "쿠폰 발급 후 카카오/이메일 알림까지 자동 발송 완료", "multi-action CRM automation 운영 경험"
+
+---
+
+## 5. 🤖 확장 기능 (Wishlist / Low)
+
+### A. LLM 기반 자연어 쿼리 시스템
+*   **기능:** "지난주 아이폰 캠페인 성과 어때?"라고 물으면 요약된 텍스트나 차트를 보여줌.
+*   **구현:** OpenAI API (or Claude) 프롬프트 엔지니어링 + `DashboardService` API 연결.
+*   **전략:** 실제 구현이 어렵다면 아키텍처 설계와 프롬프트 예시만이라도 문서화하여 **"AI 도입 가능성"** 어필.
+
+---
+
+## 🗓️ 주차별 실행 계획
+
+| 주차 | 주요 작업 | 담당 |
+| :--- | :--- | :--- |
+| **이번 주 (잔여)** | `Click Rate`, `Device Breakdown` 지표 추가 (Frontend/Backend) | 미배정 |
+| **다음 주 (1주차)** | 🧪 **시뮬레이션 기능 구현** (Phase 1-2), 부하 테스트(k6) 수행 | Dev A |
+| **다음 주 (2주차)** | `campaignId` 최적화 작업, 시뮬레이션 기능 완료 (Phase 3) | Dev A |
+| **다다음 주 (3주차)** | 장애 복구 훈련, 최종 문서(README, PPT) 정리, LLM 기획 | 미배정 |

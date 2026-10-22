@@ -2,7 +2,7 @@
 
 > **목적**: 새로 투입된 사람/에이전트가 30초에 "무엇이 무엇에게 무엇을 보내는지" 잡는 반 페이지 지도.
 > **원칙**: 짧게 유지. 상세는 각 flow 문서로. **충돌 시 코드가 이긴다.**
-> 개정: 2026-08-11.
+> 개정: 2026-10-21 (문서 구조·관측 구성 정리; VM 재검증 아님).
 
 ## 정체성 (왜 존재하나)
 1. **선착순(FCFS) 스파이크 트래픽을 안정적으로 수용·판정** (한정 상품 응모, 2초에 수천 명)
@@ -14,6 +14,23 @@
 - **entry-service** (`:8081`, virtual threads on) — 요청 수신부. FCFS 판정·인증·결제 준비. **빠르게 받고 즉시 응답**이 사명.
 - **core-service** (`:8080`) — 비즈니스 처리부. Kafka로 온 후속 이벤트 처리, MySQL/Elasticsearch 적재, 대시보드, 마케팅 룰.
 - **infra**: Redis(원자 연산), Kafka(KRaft), MySQL(정합성), Elasticsearch(행동 분석), nginx **2겹**(host nginx systemd + axon-nginx 컨테이너 `infrastructure/nginx/`).
+
+현재 배포는 Oracle Cloud VM의 Docker Compose다. 과거 K8s 배포 기록은
+`docs/archive/k8s/`에 보관하며 현재 스택에 포함하지 않는다. 단일 VM 배포는
+현재 자원 제약에 따른 선택이며, 서비스 인스턴스나 Kafka 소비 병렬성을
+구조적으로 1개로 제한한다는 뜻은 아니다. 다중 인스턴스 운영 시에는 아래
+문서 목록의 consumer group 및 전역 scheduler 경계 원칙을 따른다.
+
+## 운영 관측과 행동 로그
+
+- 운영 로그: Entry/Core/AI 및 nginx → Alloy → Loki → Grafana.
+- 메트릭: Prometheus → Grafana. 요청 지연, 오류, 자원 사용량과 Kafka lag 등을 확인한다.
+- 트레이스: OTel → Jaeger → Grafana. 일반 실행은 표본 수집이며, 공식 성능 비교에서는 OTel을 비활성화한다.
+- 행동 로그: Kafka → Kafka Connect → Elasticsearch. 마케팅 분석용이며 운영 로그 저장소와 구분한다.
+
+현재 구성에 Fluent Bit/Fluentd는 필요하지 않다. 설정과 마지막 VM 배포 확인은
+`docs/operations/observability-correlation-v1-plan.md`를 기준으로 하며, 문서의 확인
+날짜를 현재 VM의 실시간 가동 확인으로 해석하지 않는다.
 
 ## HTTP 계약 원칙
 - SSR 화면은 `/shop`, `/products/{id}`, `/campaign-activities/{id}`, `/admin/**`처럼 API와 분리한다.
@@ -108,7 +125,7 @@ AbandonedCartCouponScheduler
 - Kafka 이후 Core 후속처리, 관측, DB 수렴은 현재 고도화 범위다.
 
 ## 더 깊이
-- 문서 목록/권위 → `docs/plan/document-map.md`
-- 흐름 상세 → `docs/flow/*` (reservation-payment, token-based-payment, payment-resilience 등 — document-map에서 정본 확인)
-- 발견/결정(왜) → session memory. 사용 불가하면 `docs/devlog/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md`
-- 부하/병목 → `docs/devlog/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md`
+- 문서 목록/권위 → `docs/README.md`
+- 흐름 상세 → `docs/architecture/` (예약·결제, 구매 후처리, 행동 이벤트 계약 등 — `docs/README.md`에서 상태 확인)
+- 발견/결정(왜) → session memory. 사용 불가하면 `docs/experiments/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md`
+- 부하/병목 → `docs/experiments/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md`

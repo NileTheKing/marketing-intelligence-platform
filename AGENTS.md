@@ -8,13 +8,13 @@
 
 ## 먼저 읽을 것 (진입 순서)
 1. **시스템 지도** → `docs/architecture-map.md` (서비스·이벤트 흐름·토픽·스코프)
-2. **문서 목록/권위** → `docs/plan/document-map.md` (topic당 정본 확인)
+2. **문서 목록/권위** → `docs/catalog.md` (topic당 정본 확인)
 3. **발견·결정(왜)** → memory 인덱스 (자동 로드됨)
 - **충돌 시 코드가 이긴다.** `reference`/`legacy`/`draft` 문서는 코드 대조 전까지 미신뢰.
 
 ## 스코프 경계
 - 이 레포 = 개발/고도화. 자소서·포폴 산출물은 별도(obsidian).
-- 포트폴리오 증거 정본(T 파일) 위치·주제는 `docs/plan/document-map.md`의 `Current Portfolio Source Notes`를 확인한다. T 파일 작성/수정 요청은 `docs/portfolio-evidence-writing.md`를 먼저 읽는다.
+- 포트폴리오 증거 정본(T 파일)은 별도 Obsidian vault에서 관리한다. T 파일 작성/수정 요청은 `docs/portfolio-evidence-writing.md`를 먼저 읽고 해당 주제의 기존 T 파일을 확인한다. 비공개 경로는 공개 문서 목록에 싣지 않는다.
 - **결제(payment) 내부 로직 = 다른 개발자 담당** → 고도화는 앞단 게이트로만.
 - **실험·테스트·성능 수치 확인** → `docs/experiment-evidence-workflow.md`의 증거 확인 순서와 재실행 기준을 따른다.
 
@@ -89,7 +89,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 When creating or editing project documents:
 - Check for existing documents on the same topic before creating a new one.
 - Prefer updating the existing active document over creating another overlapping plan.
-- If a new planning document is created under `docs/plan`, register it in `docs/plan/document-map.md`.
+- If a new project document is created under `docs/`, register it in `docs/catalog.md`. New planning documents belong under `docs/plans/`.
 - If an older document is replaced, do not delete it silently. Mark it as `legacy` or `superseded` at the top and point to the replacement.
 - Keep old documents when they are useful history, but do not let them look like current source of truth.
 
