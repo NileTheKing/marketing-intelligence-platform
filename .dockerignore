@@ -10,7 +10,7 @@
 .env.*
 !.env.compose.example
 docs/private
-observability
+infrastructure/observability
 helm
 k8s
 mermaid

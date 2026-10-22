@@ -78,13 +78,13 @@ else
 fi
 
 (
-  cd core-service
+  cd services/core-service
   ./gradlew test \
     --rerun-tasks \
     -Dcohort.benchmark.docker-api-version=1.40 \
     -Dcohort.benchmark.max-heap=2g \
-    -Dcohort.benchmark.artifact-dir="../$artifact_dir" \
-    -Dpurchase.index.write.artifact-dir="../$artifact_dir" \
+    -Dcohort.benchmark.artifact-dir="../../$artifact_dir" \
+    -Dpurchase.index.write.artifact-dir="../../$artifact_dir" \
     "${benchmark_args[@]}" \
     --tests "$test_class"
 )

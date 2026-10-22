@@ -19,7 +19,7 @@ the next internal FCFS command and its offset progress?
 - deterministic Webhook blocking delay: 2,000 ms
 - three repetitions in one test execution
 - test artifact:
-  `core-service/src/test/java/com/axon/core_service/commandprocessing/WebhookTopicIsolationExperiment.java`
+  `services/core-service/src/test/java/com/axon/core_service/commandprocessing/WebhookTopicIsolationExperiment.java`
 
 This is a causal topology experiment. It reconstructs the previous shared-topic execution boundary
 in a focused Kafka test harness; it is not an OCI capacity test or a real external-provider test.

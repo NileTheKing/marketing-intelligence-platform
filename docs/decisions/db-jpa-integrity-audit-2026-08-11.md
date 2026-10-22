@@ -137,7 +137,7 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 
 ### 코호트 SQL 오프로딩 재현 harness
 
-과거 JVM 집계와 현재 SQL 오프로딩의 포트폴리오 근거는 별도 테스트 harness로 재측정한다. `core-service/src/test/java/com/axon/core_service/benchmark/CohortSqlOffloadingBenchmarkIT.java`는 과거의 Purchase 엔티티 적재 + Java 집계와 현재 SQL 집계만 비교하며, 전체 scheduler/HTTP 성능을 주장하지 않는다. 같은 Testcontainers MySQL 데이터에서 결과 일치, 반복 실행시간, `EXPLAIN ANALYZE`, 마지막 실행의 JFR allocation/GC 기록을 남긴다.
+과거 JVM 집계와 현재 SQL 오프로딩의 포트폴리오 근거는 별도 테스트 harness로 재측정한다. `services/core-service/src/test/java/com/axon/core_service/benchmark/CohortSqlOffloadingBenchmarkIT.java`는 과거의 Purchase 엔티티 적재 + Java 집계와 현재 SQL 집계만 비교하며, 전체 scheduler/HTTP 성능을 주장하지 않는다. 같은 Testcontainers MySQL 데이터에서 결과 일치, 반복 실행시간, `EXPLAIN ANALYZE`, 마지막 실행의 JFR allocation/GC 기록을 남긴다.
 
 ```bash
 ./scripts/benchmark/run-cohort-sql-offloading-benchmark.sh smoke
@@ -440,4 +440,4 @@ Median은 각각 A0 847.660/771.434/768.247ms, A1 857.075/779.227/771.250ms, B 0
 
 A1 계획은 300개 activity scan 후 `(campaign_activity_id,user_id)` unique lookup을 300회 수행해 10행을 반환했다. B는 `user_id` index에서 10행을 읽고 sort한 뒤 activity PK를 10회 조회했다. 이 DTO join으로 A1도 이미 빠르게 실행되어 세 고객의 HTTP client-wall median 차이는 3–4ms였다. B 인덱스 DDL의 local client wall은 9,481ms였으며 요청 시간에는 포함하지 않았다. A1→B의 순차 DDL/cache transition이 결과에 영향을 줄 수 있다.
 
-HTTP 측정은 테스트 전용 `X-Benchmark-UserId` filter로 실제 `CustomOAuth2User` principal을 만들었다. production JWT/`SecurityConfig`, coupon/UserCoupon 이력, 실제 고객별 이력 분포, 운영 부하를 측정하지 않았다. 이전 SQL-only 3M 실험은 activity metadata JOIN이 없었으며 A1은 약 0.8초(800ms), user index arm은 약 0.5ms였으므로 해당 값을 API baseline으로 삼지 않았다. artifact와 실행용 harness는 `core-service/build/benchmark/campaign-entry-history-http/20261019-101304/` 및 `core-service/src/test/java/com/axon/core_service/benchmark/CampaignEntryHistoryHttpBenchmarkIT.java`에 보존했다. 테스트 XML은 `core-service/build/test-results/test/TEST-com.axon.core_service.benchmark.CampaignEntryHistoryHttpBenchmarkIT.xml`이다.
+HTTP 측정은 테스트 전용 `X-Benchmark-UserId` filter로 실제 `CustomOAuth2User` principal을 만들었다. production JWT/`SecurityConfig`, coupon/UserCoupon 이력, 실제 고객별 이력 분포, 운영 부하를 측정하지 않았다. 이전 SQL-only 3M 실험은 activity metadata JOIN이 없었으며 A1은 약 0.8초(800ms), user index arm은 약 0.5ms였으므로 해당 값을 API baseline으로 삼지 않았다. artifact와 실행용 harness는 `services/core-service/build/benchmark/campaign-entry-history-http/20261019-101304/` 및 `services/core-service/src/test/java/com/axon/core_service/benchmark/CampaignEntryHistoryHttpBenchmarkIT.java`에 보존했다. 테스트 XML은 `services/core-service/build/test-results/test/TEST-com.axon.core_service.benchmark.CampaignEntryHistoryHttpBenchmarkIT.xml`이다.

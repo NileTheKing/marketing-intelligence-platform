@@ -6,7 +6,7 @@
 *.iml
 build/
 .gradle/
-common-messaging/.gradle/
+libs/common-messaging/.gradle/
 
 # Secret files
 application-oauth.yml

@@ -25,7 +25,7 @@ Code is authoritative when it conflicts with a document.
 
 ## Verified State
 
-- `cd core-service && ./gradlew test` completed after Colima was started.
+- `cd services/core-service && ./gradlew test` completed after Colima was started.
 - 42 test result XML files were generated; no `<failure>` or `<error>` elements remained.
 - `git diff --check` passed before each feature commit.
 - Colima was initially off in this session. It is currently running, but do not assume that remains true in a later session.

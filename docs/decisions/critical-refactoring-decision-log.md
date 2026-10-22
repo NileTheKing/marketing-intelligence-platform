@@ -859,8 +859,8 @@ Use this section when turning the refactoring into a portfolio or interview stor
 1. Transaction boundary correction in batch fallback
 
 - Code evidence:
-  - `core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryService.java`
-  - `core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryRetryService.java`
+  - `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryService.java`
+  - `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryRetryService.java`
 - Before:
   - Batch fallback intended to retry each failed entry with `REQUIRES_NEW`, but the method was called inside the same class.
   - In Spring proxy-based transaction AOP, same-class self-invocation can bypass the new transaction boundary.
@@ -876,12 +876,12 @@ Use this section when turning the refactoring into a portfolio or interview stor
 2. View/Controller lazy loading risk reduction
 
 - Code evidence:
-  - `core-service/src/main/java/com/axon/core_service/repository/CampaignActivityRepository.java`
-  - `core-service/src/main/java/com/axon/core_service/repository/UserCouponRepository.java`
-  - `core-service/src/main/java/com/axon/core_service/repository/LTVBatchRepository.java`
-  - `core-service/src/main/java/com/axon/core_service/service/CohortAnalysisService.java`
-  - `core-service/src/main/java/com/axon/core_service/controller/DashboardController.java`
-  - `core-service/src/test/java/com/axon/core_service/performance/JpaAssociationQueryCountTest.java`
+  - `services/core-service/src/main/java/com/axon/core_service/repository/CampaignActivityRepository.java`
+  - `services/core-service/src/main/java/com/axon/core_service/repository/UserCouponRepository.java`
+  - `services/core-service/src/main/java/com/axon/core_service/repository/LTVBatchRepository.java`
+  - `services/core-service/src/main/java/com/axon/core_service/service/CohortAnalysisService.java`
+  - `services/core-service/src/main/java/com/axon/core_service/controller/DashboardController.java`
+  - `services/core-service/src/test/java/com/axon/core_service/performance/JpaAssociationQueryCountTest.java`
 - Before:
   - Some controller/view paths accessed lazy associations such as campaign, product, coupon, and campaignActivity.
   - This can hide query execution behind OSIV and make N+1 or lazy loading behavior harder to reason about.
@@ -903,8 +903,8 @@ Use this section when turning the refactoring into a portfolio or interview stor
 3. Entity mutation boundary cleanup
 
 - Code evidence:
-  - `core-service/src/main/java/com/axon/core_service/domain/campaignactivity/CampaignActivity.java`
-  - `core-service/src/main/java/com/axon/core_service/service/CampaignActivityService.java`
+  - `services/core-service/src/main/java/com/axon/core_service/domain/campaignactivity/CampaignActivity.java`
+  - `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityService.java`
 - Before:
   - Entity exposed `setFilters(...)`, which reads like arbitrary field assignment.
 - After:
@@ -917,7 +917,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 4. Payment confirm success boundary clarification
 
 - Code evidence:
-  - `entry-service/src/main/java/com/axon/entry_service/service/payment/PaymentService.java`
+  - `services/entry-service/src/main/java/com/axon/entry_service/service/payment/PaymentService.java`
 - Current behavior:
   - Payment confirm waits for Kafka broker ack with bounded timeout.
   - It does not wait for core-service consumption or DB persistence.
@@ -933,7 +933,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 5. Internal implementation exposure reduction
 
 - Code evidence:
-  - `core-service/src/main/java/com/axon/core_service/service/purchase/LogDeadLetterHandler.java`
+  - `services/core-service/src/main/java/com/axon/core_service/service/purchase/LogDeadLetterHandler.java`
 - Change:
   - `LogDeadLetterHandler` made package-private.
 - Portfolio-safe message:
@@ -1150,11 +1150,11 @@ Classification: `portfolio upgrade` / possible `real bug` under multi-instance d
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/scheduler/BehaviorTriggerScheduler.java:39` runs hourly with `@Scheduled`.
-- `core-service/src/main/java/com/axon/core_service/service/scheduler/CampaignStockSyncScheduler.java:28` runs every five minutes with `@Scheduled`.
-- `core-service/src/main/java/com/axon/core_service/scheduler/CohortLtvBatchScheduler.java:23` runs monthly with `@Scheduled`.
-- `core-service/src/main/java/com/axon/core_service/scheduler/RfmSegmentationScheduler.java:30` runs daily with `@Scheduled`.
-- `core-service/src/main/java/com/axon/core_service/scheduler/UserPurchaseScheduler.java:28` runs with `fixedRate`.
+- `services/core-service/src/main/java/com/axon/core_service/scheduler/BehaviorTriggerScheduler.java:39` runs hourly with `@Scheduled`.
+- `services/core-service/src/main/java/com/axon/core_service/service/scheduler/CampaignStockSyncScheduler.java:28` runs every five minutes with `@Scheduled`.
+- `services/core-service/src/main/java/com/axon/core_service/scheduler/CohortLtvBatchScheduler.java:23` runs monthly with `@Scheduled`.
+- `services/core-service/src/main/java/com/axon/core_service/scheduler/RfmSegmentationScheduler.java:30` runs daily with `@Scheduled`.
+- `services/core-service/src/main/java/com/axon/core_service/scheduler/UserPurchaseScheduler.java:28` runs with `fixedRate`.
 - There is no `ShedLock`, leader election, DB job lock, or distributed scheduler guard found in these scheduler entry points.
 
 Why it matters:
@@ -1179,8 +1179,8 @@ Classification: `resolved` (2026-07-30, `d5f396b`).
 
 Previous evidence:
 
-- `core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java:32` uses `ConcurrentLinkedQueue` for Kafka command buffering.
-- `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java:38` uses `ConcurrentLinkedQueue` for purchase buffering.
+- `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java:32` uses `ConcurrentLinkedQueue` for Kafka command buffering.
+- `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java:38` uses `ConcurrentLinkedQueue` for purchase buffering.
 - Both queues are unbounded.
 - `CampaignActivityConsumerService.consume()` only does `buffer.offer(...)` at line 54.
 - `PurchaseHandler.handle()` only does `purchaseBuffer.offer(...)` at line 46.
@@ -1201,10 +1201,10 @@ Classification: `performance investigation` / `portfolio wording correction`.
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java:29` drains purchase events in batches of 20.
-- `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseService.java:64` uses `purchaseRepository.saveAll(purchaseEntities)`.
-- `core-service/src/main/java/com/axon/core_service/domain/purchase/Purchase.java:31` uses `GenerationType.IDENTITY`.
-- `core-service/src/main/resources/application.yml` has no `hibernate.jdbc.batch_size`, `hibernate.order_inserts`, or `hibernate.order_updates` setting.
+- `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java:29` drains purchase events in batches of 20.
+- `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseService.java:64` uses `purchaseRepository.saveAll(purchaseEntities)`.
+- `services/core-service/src/main/java/com/axon/core_service/domain/purchase/Purchase.java:31` uses `GenerationType.IDENTITY`.
+- `services/core-service/src/main/resources/application.yml` has no `hibernate.jdbc.batch_size`, `hibernate.order_inserts`, or `hibernate.order_updates` setting.
 
 Why it matters:
 
@@ -1232,9 +1232,9 @@ Classification: `portfolio upgrade`.
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java:120-124` catches batch processing failure and sends failed messages to `CAMPAIGN_ACTIVITY_COMMAND_DLT`.
-- `core-service/src/main/java/com/axon/core_service/service/purchase/LogDeadLetterHandler.java:28` sends permanently failed purchase data to `PURCHASE_FAILED_DLT`.
-- `core-service/src/main/java/com/axon/core_service/service/strategy/WebhookStrategy.java:75-77` sends permanently failed webhook requests to `WEBHOOK_FAILED_DLT`.
+- `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityConsumerService.java:120-124` catches batch processing failure and sends failed messages to `CAMPAIGN_ACTIVITY_COMMAND_DLT`.
+- `services/core-service/src/main/java/com/axon/core_service/service/purchase/LogDeadLetterHandler.java:28` sends permanently failed purchase data to `PURCHASE_FAILED_DLT`.
+- `services/core-service/src/main/java/com/axon/core_service/service/strategy/WebhookStrategy.java:75-77` sends permanently failed webhook requests to `WEBHOOK_FAILED_DLT`.
 - DLT messages are sent, but there is no durable failure audit table, retry state, operator status, or DLT consumer found in the current code.
 
 Why it matters:
@@ -1259,9 +1259,9 @@ Classification: `real bug` if deployed publicly as-is; otherwise `code smell`.
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/config/auth/SecurityConfig.java:81` permits `/actuator/**`.
-- `core-service/src/main/resources/application.yml:62-66` exposes `health,info,prometheus,metrics`.
-- `entry-service/src/main/resources/application.yml` also exposes `health,info,prometheus,metrics`.
+- `services/core-service/src/main/java/com/axon/core_service/config/auth/SecurityConfig.java:81` permits `/actuator/**`.
+- `services/core-service/src/main/resources/application.yml:62-66` exposes `health,info,prometheus,metrics`.
+- `services/entry-service/src/main/resources/application.yml` also exposes `health,info,prometheus,metrics`.
 
 Why it matters:
 
@@ -1289,7 +1289,7 @@ Classification: `code smell`.
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/controller/StoreController.java:37-42` injects repositories directly.
+- `services/core-service/src/main/java/com/axon/core_service/controller/StoreController.java:37-42` injects repositories directly.
 - `StoreController.java:49` calls `productRepository.findAll()`.
 - `StoreController.java:196-198` calls `campaignActivityRepository.findAllByStatus(...)`.
 - `StoreController.java:255` calls `campaignActivityRepository.findWithProductAndCouponById(...)`.
@@ -1323,9 +1323,9 @@ Classification: `portfolio upgrade`.
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/service/strategy/WebhookStrategy.java:37-40` maps each message and sends sequentially.
+- `services/core-service/src/main/java/com/axon/core_service/service/strategy/WebhookStrategy.java:37-40` maps each message and sends sequentially.
 - `WebhookStrategy.java:63-77` retries three times and sends to DLT after final failure.
-- `core-service/src/main/java/com/axon/core_service/config/WebhookClientConfig.java` configures connect/read timeouts, so indefinite blocking was addressed.
+- `services/core-service/src/main/java/com/axon/core_service/config/WebhookClientConfig.java` configures connect/read timeouts, so indefinite blocking was addressed.
 
 Why it matters:
 
@@ -1348,10 +1348,10 @@ Classification: `code smell` / possible security issue if deployed publicly.
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/config/auth/SecurityConfig.java:64-67` permits `/test/**`.
-- `entry-service/src/main/java/com/axon/entry_service/config/auth/SecurityConfig.java` also permits `/actuator/health`; test endpoint exposure should be checked similarly.
-- `entry-service/src/main/java/com/axon/entry_service/controller/TestReservationController.java` is explicitly test-only and uses mock metadata.
-- `core-service/src/main/java/com/axon/core_service/scheduler/UserPurchaseScheduler.java:32-40` contains test-oriented batch parameters and comments.
+- `services/core-service/src/main/java/com/axon/core_service/config/auth/SecurityConfig.java:64-67` permits `/test/**`.
+- `services/entry-service/src/main/java/com/axon/entry_service/config/auth/SecurityConfig.java` also permits `/actuator/health`; test endpoint exposure should be checked similarly.
+- `services/entry-service/src/main/java/com/axon/entry_service/controller/TestReservationController.java` is explicitly test-only and uses mock metadata.
+- `services/core-service/src/main/java/com/axon/core_service/scheduler/UserPurchaseScheduler.java:32-40` contains test-oriented batch parameters and comments.
 
 Why it matters:
 
@@ -1378,7 +1378,7 @@ Classification: `portfolio upgrade` / defer unless coupon issuance becomes a mai
 
 Evidence:
 
-- `core-service/src/main/java/com/axon/core_service/service/strategy/CouponStrategy.java` bulk-loads coupon entities.
+- `services/core-service/src/main/java/com/axon/core_service/service/strategy/CouponStrategy.java` bulk-loads coupon entities.
 - It still checks duplicates with `userCouponRepository.existsByUserIdAndCouponId(userId, couponId)` per message before `saveAll`.
 - The source comment already notes that `INSERT IGNORE` or a composite unique key would be faster for large batches.
 

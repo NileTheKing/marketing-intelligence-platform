@@ -69,23 +69,23 @@ projection 실패 기록 작업의 현재 정본이다.
 
 ### 먼저 읽을 파일
 
-1. `core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityConsumerService.java`
-2. `core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityCommandDispatcher.java`
-3. `core-service/src/main/java/com/axon/core_service/commandprocessing/FirstComeFirstServeStrategy.java`
-4. `core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryService.java`
-5. `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java`
-6. `core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseService.java`
-7. `core-service/src/main/java/com/axon/core_service/service/UserSummaryService.java`
-8. `core-service/src/main/java/com/axon/core_service/domain/campaignactivityentry/CampaignActivityEntry.java`
-9. `core-service/src/main/java/com/axon/core_service/domain/purchase/Purchase.java`
-10. `core-service/src/main/java/com/axon/core_service/repository/CampaignActivityEntryRepository.java`
-11. `core-service/src/main/java/com/axon/core_service/repository/PurchaseRepository.java`
-12. `common-messaging/src/main/java/com/axon/messaging/topic/KafkaTopics.java`
+1. `services/core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityConsumerService.java`
+2. `services/core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityCommandDispatcher.java`
+3. `services/core-service/src/main/java/com/axon/core_service/commandprocessing/FirstComeFirstServeStrategy.java`
+4. `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryService.java`
+5. `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java`
+6. `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseService.java`
+7. `services/core-service/src/main/java/com/axon/core_service/service/UserSummaryService.java`
+8. `services/core-service/src/main/java/com/axon/core_service/domain/campaignactivityentry/CampaignActivityEntry.java`
+9. `services/core-service/src/main/java/com/axon/core_service/domain/purchase/Purchase.java`
+10. `services/core-service/src/main/java/com/axon/core_service/repository/CampaignActivityEntryRepository.java`
+11. `services/core-service/src/main/java/com/axon/core_service/repository/PurchaseRepository.java`
+12. `libs/common-messaging/src/main/java/com/axon/messaging/topic/KafkaTopics.java`
 
 ### 해당 작업을 할 때만 읽을 파일
 
 - 행동 로그:
-  `core-service/src/main/java/com/axon/core_service/service/behavior/BackendEventPublisher.java`
+  `services/core-service/src/main/java/com/axon/core_service/service/behavior/BackendEventPublisher.java`
 - 기존 테스트:
   `PurchaseFlowIntegrationTest.java`, `CampaignActivityEntryRetryTest.java`,
   `PurchaseHandlerTest.java`, `CampaignActivityCommandDispatcherTest.java`,

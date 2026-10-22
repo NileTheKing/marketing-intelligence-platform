@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[3]
 
 
 def test_optional_ai_upstream_is_lazy_and_ai_service_has_no_host_port():

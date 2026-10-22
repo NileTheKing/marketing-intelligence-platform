@@ -132,7 +132,7 @@ Before merge, old URLs may remain only in legacy/reference/history documents or 
 1. Build/test relevant modules:
 
 ```bash
-cd core-service && ./gradlew test
+cd services/core-service && ./gradlew test
 cd ../entry-service && ./gradlew test
 ```
 

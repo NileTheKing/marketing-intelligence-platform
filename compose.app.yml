@@ -89,7 +89,7 @@ services:
   core-service:
     build:
       context: .
-      dockerfile: core-service/Dockerfile
+      dockerfile: services/core-service/Dockerfile
     container_name: axon-core
     depends_on:
       - mysql
@@ -152,7 +152,7 @@ services:
 
   ai-triage-service:
     build:
-      context: ./ai-triage-service
+      context: ./services/ai-triage-service
     container_name: axon-ai-triage
     profiles: ["ai"]
     restart: unless-stopped
@@ -183,7 +183,7 @@ services:
   entry-service:
     build:
       context: .
-      dockerfile: entry-service/Dockerfile
+      dockerfile: services/entry-service/Dockerfile
     container_name: axon-entry
     depends_on:
       - redis

@@ -10,7 +10,7 @@ Status: reference
 
 ## BehaviorEventService.java
 
-**파일**: `core-service/src/main/java/com/axon/core_service/service/BehaviorEventService.java`
+**파일**: `services/core-service/src/main/java/com/axon/core_service/service/BehaviorEventService.java`
 
 - `java.util.Map`, `java.util.List`, `java.util.Collections` 등 FQCN 인라인 사용 → import로 정리
 - `getHourlyTraffic(Long campaignId, ...)` deprecated placeholder 제거 또는 구현
@@ -21,7 +21,7 @@ Status: reference
 
 ## GeminiLLMQueryService.java — Function 고도화
 
-**파일**: `core-service/src/main/java/com/axon/core_service/service/llm/GeminiLLMQueryService.java`
+**파일**: `services/core-service/src/main/java/com/axon/core_service/service/llm/GeminiLLMQueryService.java`
 
 - 현재 Function 3개: `get_global_dashboard`, `get_campaign_dashboard`, `get_cohort_analysis`
 - `get_activity_dashboard` 추가 고려 — 캠페인 활동(CampaignActivity) 단위 지표 조회 Function 부재

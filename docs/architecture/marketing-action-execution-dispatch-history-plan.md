@@ -156,7 +156,7 @@ Update existing lifecycle tests and add these cases:
 Run:
 
 ```bash
-cd core-service
+cd services/core-service
 ./gradlew test
 ```
 

@@ -84,7 +84,7 @@ class KafkaLedgerBatchBenchmarkIT {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void comparesSingleAndTwentyRecordTransactions() throws Exception {
         Path output = Path.of(System.getenv().getOrDefault("BENCHMARK_ARTIFACT_DIR",
-                "../artifacts/benchmark/kafka-ledger-" + System.currentTimeMillis()));
+                "../../artifacts/benchmark/kafka-ledger-" + System.currentTimeMillis()));
         Files.createDirectories(output);
         List<String> rows = new ArrayList<>(List.of(
                 "run,batch_limit,records,elapsed_ms,records_per_second,transactions,max_committed_lag,final_lag"));

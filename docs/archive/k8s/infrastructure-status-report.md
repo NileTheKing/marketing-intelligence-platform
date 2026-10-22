@@ -260,7 +260,7 @@ kubectl edit deployment entry-service
 - Spring Batch 기본 스키마: PRIMARY KEY 없음
 
 **해결:**
-- 커스텀 스키마 생성: `core-service/src/main/resources/org/springframework/batch/core/schema-mysql.sql`
+- 커스텀 스키마 생성: `services/core-service/src/main/resources/org/springframework/batch/core/schema-mysql.sql`
 - `BATCH_JOB_EXECUTION_PARAMS`에 복합 PRIMARY KEY 추가
 - `BatchInitialTableConfig`: INFORMATION_SCHEMA로 테이블 존재 확인
 
@@ -461,7 +461,7 @@ kubectl rollout restart statefulset axon-kafka-controller
 
 ### 설정 파일
 - Kafka Connect: `/Users/dem/Project/Axon/archive/k8s/helm/kafka-connect.yaml`
-- Elasticsearch: `/Users/dem/Project/Axon/core-service/k8s/elasticsearch.yaml`
+- Elasticsearch: `/Users/dem/Project/Axon/services/core-service/k8s/elasticsearch.yaml`
 - Prometheus: `/Users/dem/Project/Axon/archive/k8s/helm/prometheus-values.yaml`
 - Grafana: `/Users/dem/Project/Axon/archive/k8s/helm/grafana-values.yaml`
 - Kibana: `/Users/dem/Project/Axon/archive/k8s/helm/kibana.yaml`

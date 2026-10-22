@@ -63,7 +63,7 @@ Override `JAEGER_UI_PORT` if the host port is already in use.
 
 - `infrastructure/compose/compose.otel.yml`: starts Jaeger and injects OTel Java Agent options into Entry/Core.
 - `infrastructure/compose/compose.diagnostic.yml`: enables Entry diagnostic profile and stage timing.
-- `observability/otel-agent.env.example`: example environment values for trace runs.
+- `infrastructure/observability/otel-agent.env.example`: example environment values for trace runs.
 - `scripts/observability/install-otel-agent.sh`: downloads `opentelemetry-javaagent.jar`.
 
 ## VM Setup
@@ -78,7 +78,7 @@ cd ~/apps/axon
 Prepare trace environment:
 
 ```bash
-cp observability/otel-agent.env.example .env.otel
+cp infrastructure/observability/otel-agent.env.example .env.otel
 
 set -a
 . ./.env.otel
@@ -157,7 +157,7 @@ Decision:
 
 Implementation:
 
-- `entry-service/src/main/java/com/axon/entry_service/config/diagnostic/EntryDiagnosticTimingAspect.java`
+- `services/entry-service/src/main/java/com/axon/entry_service/config/diagnostic/EntryDiagnosticTimingAspect.java`
 - Active only when `SPRING_PROFILES_ACTIVE` includes `diagnostic`.
 - Records Micrometer timer `axon.entry.diagnostic.stage`.
 - Emits structured slow-stage logs only when a stage exceeds `axon.diagnostic.entry.slow-threshold-ms` (default `100ms`).
@@ -879,7 +879,7 @@ Status at compact time:
 - Cache stampede A/B script exists at `scripts/load-test/run-cache-stampede-ab-compose.sh`.
 - The VM also has the latest quiet version of that script copied manually.
 - Java production code should not contain manual stage timers. A direct `EntryStageMetrics` attempt was reverted.
-- `entry-service/gradlew compileJava` passed after reverting that manual instrumentation.
+- `services/entry-service/gradlew compileJava` passed after reverting that manual instrumentation.
 
 Important evidence:
 

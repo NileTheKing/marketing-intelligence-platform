@@ -57,7 +57,7 @@ Virtual Thread 도입 및 JVM 튜닝
 
 ##### Step 1: 의존성 추가
 
-**파일**: `core-service/build.gradle`
+**파일**: `services/core-service/build.gradle`
 
 ```gradle
 dependencies {
@@ -71,7 +71,7 @@ dependencies {
 
 ##### Step 2: Redisson 설정
 
-**파일**: `core-service/src/main/java/com/axon/core_service/config/RedissonConfig.java` (신규)
+**파일**: `services/core-service/src/main/java/com/axon/core_service/config/RedissonConfig.java` (신규)
 
 ```java
 package com.axon.core_service.config;
@@ -107,7 +107,7 @@ public class RedissonConfig {
 
 ##### Step 3: 분산락 AOP 구현
 
-**파일**: `core-service/src/main/java/com/axon/core_service/aop/DistributedLock.java` (신규)
+**파일**: `services/core-service/src/main/java/com/axon/core_service/aop/DistributedLock.java` (신규)
 
 ```java
 package com.axon.core_service.aop;
@@ -139,7 +139,7 @@ public @interface DistributedLock {
 }
 ```
 
-**파일**: `core-service/src/main/java/com/axon/core_service/aop/DistributedLockAspect.java` (신규)
+**파일**: `services/core-service/src/main/java/com/axon/core_service/aop/DistributedLockAspect.java` (신규)
 
 ```java
 package com.axon.core_service.aop;
@@ -219,7 +219,7 @@ public class DistributedLockAspect {
 
 ##### Step 4: CampaignActivityEntryService에 적용
 
-**파일**: `core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryService.java`
+**파일**: `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityEntryService.java`
 
 ```java
 // 기존 코드 상단에 import 추가
@@ -286,7 +286,7 @@ public CampaignActivityEntry upsertEntry(
 
 #### **구현**
 
-**파일**: `core-service/src/main/java/com/axon/core_service/repository/CampaignActivityEntryRepository.java`
+**파일**: `services/core-service/src/main/java/com/axon/core_service/repository/CampaignActivityEntryRepository.java`
 
 ```java
 import jakarta.persistence.LockModeType;
@@ -352,7 +352,7 @@ java {
 
 ##### Step 2: Virtual Thread 활성화
 
-**파일**: `core-service/src/main/resources/application.yml`
+**파일**: `services/core-service/src/main/resources/application.yml`
 
 ```yaml
 spring:
@@ -363,7 +363,7 @@ spring:
 
 ##### Step 3: Tomcat Virtual Thread Executor 설정
 
-**파일**: `core-service/src/main/java/com/axon/core_service/config/VirtualThreadConfig.java` (신규)
+**파일**: `services/core-service/src/main/java/com/axon/core_service/config/VirtualThreadConfig.java` (신규)
 
 ```java
 package com.axon.core_service.config;
@@ -389,7 +389,7 @@ public class VirtualThreadConfig {
 
 ##### Step 4: Kafka Listener Virtual Thread 설정
 
-**파일**: `core-service/src/main/java/com/axon/core_service/config/KafkaConsumerConfig.java` (신규)
+**파일**: `services/core-service/src/main/java/com/axon/core_service/config/KafkaConsumerConfig.java` (신규)
 
 ```java
 package com.axon.core_service.config;
@@ -440,7 +440,7 @@ public class KafkaConsumerConfig {
 
 #### **구현**
 
-**파일**: `core-service/Dockerfile` 또는 실행 스크립트
+**파일**: `services/core-service/Dockerfile` 또는 실행 스크립트
 
 ```bash
 # ZGC 옵션 (JDK 21 권장)
@@ -477,7 +477,7 @@ curl http://localhost:8080/actuator/metrics/jvm.gc.pause
 
 #### **테스트 시나리오**
 
-**파일**: `core-service/src/test/java/com/axon/core_service/service/DistributedLockTest.java` (신규)
+**파일**: `services/core-service/src/test/java/com/axon/core_service/service/DistributedLockTest.java` (신규)
 
 ```java
 package com.axon.core_service.service;
@@ -534,7 +534,7 @@ class DistributedLockTest {
 
 #### **Spring Boot Actuator 설정**
 
-**파일**: `core-service/build.gradle`
+**파일**: `services/core-service/build.gradle`
 
 ```gradle
 dependencies {

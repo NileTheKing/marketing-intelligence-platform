@@ -31,7 +31,7 @@ fi
 snapshot_sources() {
   git -C "$ROOT" diff HEAD --binary | shasum -a 256
   shasum -a 256 \
-    "$ROOT/core-service/src/test/java/com/axon/core_service/service/CampaignRunWorkflowIntegrationTest.java" \
+    "$ROOT/services/core-service/src/test/java/com/axon/core_service/service/CampaignRunWorkflowIntegrationTest.java" \
     "$ROOT/scripts/test/run-backend-regression.sh"
 }
 
@@ -40,7 +40,7 @@ git -C "$ROOT" status --porcelain=v1 > "$RESULT_DIR/worktree-before.txt"
 snapshot_sources > "$RESULT_DIR/sources-before.sha256"
 printf 'Running backend integration regression; log: %s/run.log\n' "$RESULT_DIR"
 if ! (
-  cd "$ROOT/core-service"
+  cd "$ROOT/services/core-service"
   ./gradlew test --rerun-tasks \
     --tests '*PurchaseFlowIntegrationTest' \
     --tests '*CampaignRunWorkflowIntegrationTest' \
@@ -53,7 +53,7 @@ fi
 for suite in \
   com.axon.core_service.service.PurchaseFlowIntegrationTest \
   com.axon.core_service.service.CampaignRunWorkflowIntegrationTest; do
-  report="$ROOT/core-service/build/test-results/test/TEST-$suite.xml"
+  report="$ROOT/services/core-service/build/test-results/test/TEST-$suite.xml"
   bash "$ROOT/scripts/ci/assert-test-suite-ran.sh" "$report"
   cp "$report" "$RESULT_DIR/"
 done

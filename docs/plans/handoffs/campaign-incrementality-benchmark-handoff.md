@@ -19,9 +19,9 @@ InnoDB의 일반 일관 읽기는 Purchase 행 잠금을 잡지 않는다. 따�
 
 ## Current implementation
 
-- Benchmark: `core-service/src/test/java/com/axon/core_service/benchmark/CampaignRunIncrementalityIndexBenchmarkTest.java`
+- Benchmark: `services/core-service/src/test/java/com/axon/core_service/benchmark/CampaignRunIncrementalityIndexBenchmarkTest.java`
 - Runner: `scripts/benchmark/run-campaign-incrementality-index-benchmark.sh`
-- Gradle system property forwarding: `core-service/build.gradle`
+- Gradle system property forwarding: `services/core-service/build.gradle`
 - Data shape: Campaign Run target 100,000명, TREATMENT 90,000명, HOLDOUT 10,000명. Purchase profile은 100만, 500만 건을 측정했다.
 - A/B index: `(user_id, purchase_at)` absent vs present
 - Foreground writes are deliberately stored 30 days after the observed window. A/B read result가 동시 쓰기로 달라지지 않게 하기 위함이다.

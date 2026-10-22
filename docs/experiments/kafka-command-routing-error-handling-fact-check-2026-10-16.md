@@ -23,15 +23,15 @@ This document records code-observed facts and items that still require checking.
 
 Source call sites found:
 
-- `entry-service/.../PaymentService.java`
-- `entry-service/.../CouponEntryService.java`
-- `entry-service/.../TestReservationController.java`
-- `core-service/.../CampaignActivityRunService.java`
-- `core-service/.../AbandonedCartCouponScheduler.java`
-- `core-service/.../BehaviorTriggerScheduler.java` when the action is not `WEBHOOK`
-- `core-service/.../MarketingActionExecutionService.java` when the channel is not `WEBHOOK`
-- `core-service/.../MarketingActionTriageService.java` when the retried channel is not `WEBHOOK`
-- `core-service/.../DormantCustomerCampaignScheduler.java` when the action is not `WEBHOOK`
+- `services/entry-service/.../PaymentService.java`
+- `services/entry-service/.../CouponEntryService.java`
+- `services/entry-service/.../TestReservationController.java`
+- `services/core-service/.../CampaignActivityRunService.java`
+- `services/core-service/.../AbandonedCartCouponScheduler.java`
+- `services/core-service/.../BehaviorTriggerScheduler.java` when the action is not `WEBHOOK`
+- `services/core-service/.../MarketingActionExecutionService.java` when the channel is not `WEBHOOK`
+- `services/core-service/.../MarketingActionTriageService.java` when the retried channel is not `WEBHOOK`
+- `services/core-service/.../DormantCustomerCampaignScheduler.java` when the action is not `WEBHOOK`
 
 ### `axon.webhook.command`
 

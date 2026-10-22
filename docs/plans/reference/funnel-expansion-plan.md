@@ -61,7 +61,7 @@ Frontend JS Tracker → Entry-service → Kafka → Elasticsearch
 #### 1. CampaignActivityType 추가
 
 ```java
-// common-messaging/src/main/java/com/axon/messaging/CampaignActivityType.java
+// libs/common-messaging/src/main/java/com/axon/messaging/CampaignActivityType.java
 public enum CampaignActivityType {
     FIRST_COME_FIRST_SERVE, // 기존
     RAFFLE,                 // 새로 추가

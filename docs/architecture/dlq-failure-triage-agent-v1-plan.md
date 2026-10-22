@@ -10,7 +10,7 @@
 Slack으로 운영자의 판단을 받는다. 승인 후 재발행은 Core가 담당한다.
 
 - 코드: Core의 `MarketingActionTriageService`와 내부 triage API,
-  `ai-triage-service/app/agent.py`, `main.py`, `slack.py`.
+  `services/ai-triage-service/app/agent.py`, `main.py`, `slack.py`.
 - 배포 근거: [운영 관측 기록](../operations/observability-correlation-v1-plan.md)의
   2026-09-26 실패 → 분석 → 재분석 → 승인 → 재시도 확인.
 - 아래의 변경 목록·구현 순서는 초기 구현 명세를 보존한 것이다.

@@ -63,7 +63,7 @@ Mac k6
   -> Cloudflare
   -> VM host Nginx
   -> axon-nginx container
-  -> entry-service/core-service
+  -> services/entry-service/core-service
 ```
 
 Same-VM k6 is allowed only for debugging because it shares CPU, network, and Docker resources with the system under test.

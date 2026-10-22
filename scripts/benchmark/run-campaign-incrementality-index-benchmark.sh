@@ -37,14 +37,14 @@ write_rows="${CAMPAIGN_INCREMENTALITY_BENCHMARK_WRITE_ROWS:-2000}"
 } > "$artifact_dir/execution-metadata.txt"
 
 (
-  cd core-service
+  cd services/core-service
   ./gradlew test \
     --rerun-tasks \
     -Dcampaign.incrementality.benchmark=true \
     -Dcampaign.incrementality.benchmark.purchases="$purchases" \
     -Dcampaign.incrementality.benchmark.iterations="$iterations" \
     -Dcampaign.incrementality.benchmark.write-rows="$write_rows" \
-    -Dcampaign.incrementality.benchmark.artifact-dir="../$artifact_dir" \
+    -Dcampaign.incrementality.benchmark.artifact-dir="../../$artifact_dir" \
     --tests com.axon.core_service.benchmark.CampaignRunIncrementalityIndexBenchmarkTest
 )
 

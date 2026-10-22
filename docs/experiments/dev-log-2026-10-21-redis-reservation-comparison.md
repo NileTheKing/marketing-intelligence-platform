@@ -68,7 +68,7 @@ p95 65.4% 단축, 처리량 약 2.6배. 워밍업과 측정 모두 승인 100명
 
 이 비교는 정상 요청의 성능 측정이다. 프로세스 강제 종료나 네트워크 단절을 주입하지 않았으므로, 장애 시 복구까지 실증한 결과는 아니다.
 
-- 코드: `entry-service/src/test/java/com/axon/entry_service/service/RedisLegacyLuaComparisonIT.java`
+- 코드: `services/entry-service/src/test/java/com/axon/entry_service/service/RedisLegacyLuaComparisonIT.java`
 - Git 보관 원본 CSV: `docs/experiments/evidence/redis-reservation-comparison/redis-20261021/per-run.csv`
 - 결과, 실행 명령, 원본 CSV: `artifacts/benchmark/redis-legacy-lua-20261021-115257/`
 
@@ -104,7 +104,7 @@ HTTP 요청 -> JWT 인증 -> 메타 캐시 조회 -> 기존 토큰 조회
 
 API 완료는 Kafka 소비나 구매 DB 저장 완료를 뜻하지 않는다. 별도 API인 결제 prepare/confirm, Core/MySQL/Elasticsearch, nginx와 외부망은 이번 범위에 없다.
 
-- 코드: `entry-service/src/test/java/com/axon/entry_service/controller/EntryReservationHttpComparisonIT.java`
+- 코드: `services/entry-service/src/test/java/com/axon/entry_service/controller/EntryReservationHttpComparisonIT.java`
 - Git 보관 원본 CSV: `docs/experiments/evidence/redis-reservation-comparison/http-20261021/per-run.csv`
 - 결과와 원본 CSV, 로그, JUnit: `artifacts/benchmark/entry-http-legacy-lua-20261021-122157/`
 - 실행: `HTTP_BENCHMARK_DIR=<절대 결과 경로> ./gradlew test -PincludeRedisExperiments=true --tests '*EntryReservationHttpComparisonIT' --rerun-tasks` (`entry-service`에서 실행, Docker 필요)

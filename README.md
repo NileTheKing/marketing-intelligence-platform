@@ -165,6 +165,18 @@ Consumer 측정: 단일 Core 인스턴스, 1.2 CPU, 3 GiB, Kafka 소비 스레�
 
 ---
 
+## 디렉터리 구조
+
+```text
+services/         Entry, Core, AI 서비스
+libs/             서비스 간 공통 메시지 모듈
+infrastructure/   Compose, Kafka, nginx와 관측 설정
+scripts/          실행, 실험, 데모와 DB 마이그레이션
+docs/             구조, 설계 결정과 개발 기록
+archive/          과거 배포 자료와 도구
+compose.app.yml   기본 실행 구성
+```
+
 ## 실행 방법
 
 ```bash

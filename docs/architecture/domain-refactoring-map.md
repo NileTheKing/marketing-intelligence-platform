@@ -128,9 +128,9 @@ These are candidates, not mandatory package moves.
 
 | File | Evidence | Risk | Small refactoring direction |
 |---|---|---|---|
-| `core-service/src/main/java/com/axon/core_service/service/DashboardService.java` | One service assembles activity, campaign, global dashboard, heatmap, GMV, ROAS, ranking, and ES error fallback. | Hard to test dashboard calculations independently; future metric changes can touch a large class. | Extract calculation helpers such as `DashboardMetricCalculator`; later extract query assemblers by dashboard level. |
-| `entry-service/src/main/java/com/axon/entry_service/service/entry/EntryApplicationService.java` | FCFS and coupon-entry use cases are intentionally orchestrated here after the controller extraction. | It is a central application-flow class, so unrelated activity flows must not accumulate here. | Keep controllers HTTP-only; split only if coupon and FCFS validation rules diverge materially. |
-| `core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityConsumerService.java` | Owns the Kafka batch listener and delegates dispatch/metrics. | A slow strategy holds the poll open, which is visible as Kafka lag. | Keep the listener thin; split a slow strategy by topic/group only when metrics justify it. |
+| `services/core-service/src/main/java/com/axon/core_service/service/DashboardService.java` | One service assembles activity, campaign, global dashboard, heatmap, GMV, ROAS, ranking, and ES error fallback. | Hard to test dashboard calculations independently; future metric changes can touch a large class. | Extract calculation helpers such as `DashboardMetricCalculator`; later extract query assemblers by dashboard level. |
+| `services/entry-service/src/main/java/com/axon/entry_service/service/entry/EntryApplicationService.java` | FCFS and coupon-entry use cases are intentionally orchestrated here after the controller extraction. | It is a central application-flow class, so unrelated activity flows must not accumulate here. | Keep controllers HTTP-only; split only if coupon and FCFS validation rules diverge materially. |
+| `services/core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityConsumerService.java` | Owns the Kafka batch listener and delegates dispatch/metrics. | A slow strategy holds the poll open, which is visible as Kafka lag. | Keep the listener thin; split a slow strategy by topic/group only when metrics justify it. |
 
 ### 4.2 Long Method
 

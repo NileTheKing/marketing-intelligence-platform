@@ -27,7 +27,7 @@ if [[ "$mode" == purchase-overlap* ]]; then
   [[ "$mode" != purchase-overlap-smoke ]] || artifact_dir="$artifact_dir/smoke"
   artifact_dir="$(new_artifact_dir "$artifact_dir")"
   (
-    cd "$root/core-service"
+    cd "$root/services/core-service"
     ./gradlew --no-daemon test --stacktrace --tests '*AbandonedCartCouponIssuanceE2EBenchmarkTest' \
       -Dabandoned.cart.issuance.e2e=true \
       -Dabandoned.cart.issuance.purchase-overlap=true \
@@ -79,7 +79,7 @@ if [[ "$mode" == single-page* ]]; then
   [[ "$mode" != single-page-smoke ]] || artifact_dir="$artifact_dir/smoke"
   artifact_dir="$(new_artifact_dir "$artifact_dir")"
   (
-    cd "$root/core-service"
+    cd "$root/services/core-service"
     ./gradlew --no-daemon --rerun-tasks test --tests '*AbandonedCartCouponIssuanceE2EBenchmarkTest' \
       -Dabandoned.cart.issuance.e2e=true \
       -Dabandoned.cart.issuance.single-page=true \
@@ -95,7 +95,7 @@ if [[ "$mode" == single-page* ]]; then
       "$mode" "$child_pid" > "$artifact_dir/progress.json"
     exit 1
   fi
-  python3 - "$root/core-service/build/test-results/test/TEST-com.axon.core_service.benchmark.AbandonedCartCouponIssuanceE2EBenchmarkTest.xml" \
+  python3 - "$root/services/core-service/build/test-results/test/TEST-com.axon.core_service.benchmark.AbandonedCartCouponIssuanceE2EBenchmarkTest.xml" \
     "$artifact_dir/summary.json" "$mode" <<'PY'
 import json
 import sys
@@ -125,7 +125,7 @@ run_arm() {
     "$mode" "$arm" "$$" "$([[ "$mode" == smoke ]] && echo 20 || echo 50000)" "$arm" \
     > "$artifact_dir/progress.json"
   (
-    cd "$root/core-service"
+    cd "$root/services/core-service"
     ./gradlew --no-daemon --rerun-tasks test --tests '*AbandonedCartCouponIssuanceE2EBenchmarkTest' \
       -Dabandoned.cart.issuance.e2e=true \
       -Dabandoned.cart.issuance.arm="$arm" \
@@ -142,7 +142,7 @@ run_arm() {
     tail -n 60 "$log" > "$artifact_dir/${mode}-arm-${arm}-failure-tail.txt"
     return 1
   fi
-  python3 - "$root/core-service/build/test-results/test/TEST-com.axon.core_service.benchmark.AbandonedCartCouponIssuanceE2EBenchmarkTest.xml" \
+  python3 - "$root/services/core-service/build/test-results/test/TEST-com.axon.core_service.benchmark.AbandonedCartCouponIssuanceE2EBenchmarkTest.xml" \
     "$artifact_dir" "$mode" "$arm" <<'PY'
 import pathlib
 import sys

@@ -47,15 +47,15 @@ The previous Luna agent hit its usage limit and was closed. The main agent conti
 
 ## Implementation Map
 
-- Candidate model: `core-service/src/main/java/com/axon/core_service/domain/marketing/AbandonedCartCouponCandidate.java`.
-- Repository: `core-service/src/main/java/com/axon/core_service/repository/AbandonedCartCouponCandidateRepository.java`.
+- Candidate model: `services/core-service/src/main/java/com/axon/core_service/domain/marketing/AbandonedCartCouponCandidate.java`.
+- Repository: `services/core-service/src/main/java/com/axon/core_service/repository/AbandonedCartCouponCandidateRepository.java`.
 - Candidate service and scheduler: `AbandonedCartCouponCandidateService`, `AbandonedCartCouponScheduler`.
 - Core cart-event handler: `AbandonedCartBehaviorConsumer`.
 - Candidate states: SCHEDULED, PROCESSING, DISPATCHED, CANCELLED. Conditional updates claim individual candidates; existing Execution/Dispatch and coupon Kafka consumer are reused.
 - Current application index is `(campaign_id, status, due_at, id)`. New ID-first query design is ONLY in the benchmark harness, not adopted into the production repository.
 - Creation migration: `scripts/migrations/2026-10-14-add-abandoned-cart-coupon-candidates.sql`.
 - Existing old-index DB replacement: `scripts/migrations/2026-10-15-replace-abandoned-cart-candidate-due-index.sql`. Not deployed by this session.
-- Real pipeline harness: `core-service/src/test/java/com/axon/core_service/benchmark/AbandonedCartCouponIssuanceE2EBenchmarkTest.java`.
+- Real pipeline harness: `services/core-service/src/test/java/com/axon/core_service/benchmark/AbandonedCartCouponIssuanceE2EBenchmarkTest.java`.
 - Runner: `scripts/benchmark/run-abandoned-cart-issuance-e2e.sh`.
 
 ## Results: Keep The Measurement Boundaries Separate
@@ -179,7 +179,7 @@ This is a temporary handoff, not a new competing source of truth. After reading 
 ## Resume Update: 1M Candidate / Purchase Overlap Complete (2026-10-15)
 
 - User explicitly requested Luna to test shared-DB interference: even if coupons finish in time, does candidate processing consume resources and slow real purchase persistence? Table split was not requested. No invented delay SLA, automatic stress escalation, or 600s full run.
-- Luna implemented an opt-in `purchase-overlap` / `purchase-overlap-smoke` mode in the existing issuance benchmark and runner, plus property forwarding and conditional benchmark-only test compilation in `core-service/build.gradle`. Application query/index adoption was not changed.
+- Luna implemented an opt-in `purchase-overlap` / `purchase-overlap-smoke` mode in the existing issuance benchmark and runner, plus property forwarding and conditional benchmark-only test compilation in `services/core-service/build.gradle`. Application query/index adoption was not changed.
 - Main artifact: `build/benchmark/abandoned-cart-purchase-overlap-20261015T182311/`. Disposable MySQL/Kafka/Redis + actual scheduler/coupon consumer; 1M candidate rows seeded once, due 50k across 20 campaigns, 500/page. Future/due/cancelled/dispatched distribution: 4/5/10/81 percent. Existing persistent 5M/1M lab databases were not touched.
 - Six windows baseline-A/A/B/baseline-B/B/A, each 10s warm-up then 60s fixed offers of 10 twenty-message ledger transactions/s. Actual `FcfsLedgerPersistenceService.persistBatch` commits Entry+Purchase; excludes Entry confirm HTTP, Kafka ingress and UserSummary projection. Every measured window offered/committed 600 tx, 12,000 Entry + 12,000 Purchase rows; fail/drop/missing/duplicate/DLT/final Kafka lag zero. All due state restored between windows. Core source-file fingerprints before/after match (`files` maps; capturedAt naturally differs).
 - Results: purchase scheduled-offer-to-commit p95 baseline 70.16/66.27ms, A 51.51/50.19ms, B 72.28/70.03ms. Transaction-only p95 baseline 61.86/62.10ms, A 39.87/41.42ms, B 45.40/50.22ms. Thus neither purchase-delay harm from A nor purchase-delay relief from B was demonstrated under this load. Do not claim CPU reduction improved purchase latency. Causes of A's lower p95 were not isolated.

@@ -9,7 +9,7 @@
 | `demo/` | 시연 데이터 생성·정리와 요청 발생 |
 | `demo/dashboard/` | 초기 대시보드용 데이터 조작·조회 도구 |
 | `migrations/` | 날짜별 DB 스키마 변경 |
-| `observability/` | OTel agent 설치와 관측 실험 |
+| `infrastructure/observability/` | OTel agent 설치와 관측 실험 |
 | `test/`, `ci/` | 회귀 테스트 실행과 CI 결과 확인 |
 
 Compose 부하 준비는 `load-test/prepare-load-test-compose.sh`에서 시작한다.

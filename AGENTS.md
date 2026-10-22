@@ -6,6 +6,8 @@
 ## 프로젝트 한 줄
 **Axon** = ① 선착순(FCFS) 스파이크 트래픽 수용·판정 + ② 거기서 나온 행동 로그 → 마케팅 통계/대시보드. (entry=수신부 `:8081`, core=처리부 `:8080`, Redis/Kafka/MySQL/Elasticsearch)
 
+코드: `services/{entry-service,core-service,ai-triage-service}`, 공통 모듈: `libs/common-messaging`, 실행·관측 설정: `infrastructure/`.
+
 ## 먼저 읽을 것 (진입 순서)
 1. **시스템 지도** → `docs/architecture-map.md` (서비스·이벤트 흐름·토픽·스코프)
 2. **문서 목록/권위** → `docs/catalog.md` (topic당 정본 확인)
