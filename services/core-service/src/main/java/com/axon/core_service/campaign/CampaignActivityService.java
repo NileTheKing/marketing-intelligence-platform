@@ -25,13 +25,21 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class CampaignActivityService {
+
+    private static final DefaultRedisScript<Long> INVALIDATE_META = new DefaultRedisScript<>("""
+            redis.call('INCR', KEYS[2])
+            return redis.call('DEL', KEYS[1])
+            """, Long.class);
 
     private final CampaignRepository campaignRepository;
     private final CampaignActivityRepository campaignActivityRepository;
@@ -510,6 +518,16 @@ public class CampaignActivityService {
 
     private void evictMetaCache(Long campaignActivityId) {
         String key = "campaign:%s:meta".formatted(campaignActivityId);
-        redisTemplate.delete(key);
+        Runnable invalidate = () -> redisTemplate.execute(INVALIDATE_META, List.of(key, key + ":version"));
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    invalidate.run();
+                }
+            });
+        } else {
+            invalidate.run();
+        }
     }
 }
