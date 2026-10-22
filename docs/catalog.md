@@ -57,7 +57,7 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
-| [Redis 선착순 판정 비교](experiments/dev-log-2026-10-21-redis-reservation-comparison.md) | active evidence | 개별 호출·WATCH·Lua 비교. Redis 구간과 HTTP 측정 범위 구분 |
+| [Redis 선착순 판정 비교](experiments/dev-log-2026-10-21-redis-reservation-comparison.md) | active evidence | 개별 호출·WATCH·Lua 비교. Redis 구간과 두 HTTP API 비교(개별 호출, WATCH) 구분 |
 | [장바구니 이탈 후보 조회](experiments/abandoned-cart-coupon-candidate-query-v1-plan.md) | active | 후보 상태, SQL·인덱스 비교와 실제 쿠폰 발급 측정 |
 | [인프라·애플리케이션 병목 진단](experiments/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md) | reference | 선착순 부하에서 nginx·CPU·측정 조건을 진단한 기록 |
 | [외부 부하 발생기와 측정 경계](experiments/dev-log-2026-07-15-external-load-generator-boundary.md) | reference | 네트워크 영향과 유효한 비교 조건 |

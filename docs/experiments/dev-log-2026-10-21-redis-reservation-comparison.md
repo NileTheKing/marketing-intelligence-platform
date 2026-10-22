@@ -13,8 +13,10 @@
 | 개별 Redis 호출 vs Lua | Redis 판정 구간 | 9.445ms | 3.273ms | 10/21, 실행별 p95의 3회 중앙값 |
 | 개별 Redis 호출 vs Lua | 선착순 API 서버 내부 | 34.890ms | 22.596ms | 10/21, 실행별 p95의 3회 중앙값, 35.2% 단축 |
 | 개별 Redis 호출 vs Lua | HTTP 클라이언트 응답 | 44.907ms | 33.903ms | 10/21, 실행별 p95의 3회 중앙값, 24.5% 단축 |
+| WATCH + MULTI/EXEC vs Lua | 선착순 API 서버 내부 | 245.283ms | 23.370ms | 10/21, 실행별 p95의 3회 중앙값, 90.5% 단축 |
+| WATCH + MULTI/EXEC vs Lua | HTTP 클라이언트 응답 | 246.965ms | 37.553ms | 10/21, 실행별 p95의 3회 중앙값, 84.8% 단축 |
 
-WATCH와 Lua의 기존 비교는 HTTP API 실험이 아니다. 이 자료에서 WATCH 대비 API 응답시간 63% 단축이라는 주장을 뒷받침하는 원본은 확인하지 못했다.
+10/13 WATCH와 Lua 비교는 HTTP API 실험이 아니다. 이를 보완한 실제 HTTP 비교는 4번이다. 기존의 WATCH 대비 API 응답시간 63% 단축이라는 수치와 이번 4번 결과를 혼용하지 않는다.
 
 ## 무엇을 비교했나
 
@@ -109,14 +111,43 @@ API 완료는 Kafka 소비나 구매 DB 저장 완료를 뜻하지 않는다. �
 - 결과와 원본 CSV, 로그, JUnit: `artifacts/benchmark/entry-http-legacy-lua-20261021-122157/`
 - 실행: `HTTP_BENCHMARK_DIR=<절대 결과 경로> ./gradlew test -PincludeRedisExperiments=true --tests '*EntryReservationHttpComparisonIT' --rerun-tasks` (`entry-service`에서 실행, Docker 필요)
 
+## 4. WATCH + MULTI/EXEC vs Lua: 실제 선착순 HTTP API
+
+기존 WATCH 결과만으로 API 성능을 설명할 수 없어 3번과 같은 HTTP 실험 코드에 WATCH 구현을 추가했다. 이번 실행은 WATCH와 Lua만 비교했고 개별 호출 비교는 다시 실행하지 않았다.
+
+- 코드 기준: HEAD `33bf667`, HTTP 비교 테스트만 수정한 상태.
+- 요청 300건, 정원 100명, HTTP workers 64, 전략별 워밍업 3회와 교차 순서 측정 3회.
+- 실제 JWT 인증, 메타 캐시 조회, 토큰 조회와 저장, 승인 행동 이벤트 발행을 그대로 거친다. 서버 처리 스레드는 모두 가상 스레드다.
+- WATCH는 1번의 보관 코드를 기준으로 `SessionCallback` 안에서 감시, 사전 조회, `MULTI/EXEC`를 수행한다. 충돌 시 1~3ms 대기 후 재시도하며 재시도 제한은 1,000회다.
+- 동일한 앱 풀 설정 최대 8개와 기본 연결 공유 설정을 사용한다. WATCH 트랜잭션은 전용 연결, Lua는 일반 공유 연결 경로를 사용하는 실제 차이를 유지했다.
+- 측정 범위와 제외 항목은 3번과 같다. 승인 토큰의 추가 확인 조회와 Kafka 결과 확인은 HTTP 부하 구간 밖에서 수행한다.
+
+| 실행별 p95의 중앙값 | WATCH + MULTI/EXEC | Lua |
+|---|---:|---:|
+| 서버 내부, 전체 요청 | 245.283ms | 23.370ms |
+| 서버 내부, 승인 요청 | 210.178ms | 23.738ms |
+| 서버 내부, 매진 요청 | 262.745ms | 22.981ms |
+| HTTP 클라이언트, 전체 요청 | 246.965ms | 37.553ms |
+
+전체 요청의 서버 내부 p95는 90.5%, HTTP 응답 p95는 84.8% 단축됐다. 서버 p95 범위는 WATCH 234.634~282.636ms, Lua 20.081~29.137ms다. HTTP 구간 처리량 중앙값은 832건/초와 2,411건/초이며, WATCH 충돌 재시도는 측정 실행별 565/527/563회, 중앙값 563회다.
+
+모든 워밍업과 측정에서 HTTP 승인 100명, 매진 200명, 예상 밖 오류 0, 서버 표본 300개, 예약 토큰 100건, Kafka 승인 이벤트 100건과 사용자 100명, Redis 카운터와 참여자 수 100을 확인했다. 테스트 1개 통과, skip 0이다.
+
+이 결과는 64 workers가 동일한 두 키를 변경하는 로컬 경합 조건이다. WATCH가 모든 환경에서 10배 느리다는 의미가 아니며, VM 부하나 과거 구현 교체 당시의 개선율로 사용하지 않는다. 최초 시도는 테스트 컴파일에서 중단됐고, 수정 후 실행에서 위 결과를 얻었다. 두 로그 모두 보존했다.
+
+- 코드: `entry-service/src/test/java/com/axon/entry_service/controller/EntryReservationHttpComparisonIT.java`
+- Git 보관 원본 CSV: `docs/experiments/evidence/redis-reservation-comparison/http-watch-20261021/per-run.csv`
+- 결과, 로그, JUnit: `artifacts/benchmark/entry-http-watch-lua-20261021-135638/`
+- 실행: `HTTP_BENCHMARK_BASELINE=WATCH_MULTI HTTP_BENCHMARK_DIR=<절대 결과 경로> ./gradlew test -PincludeRedisExperiments=true --tests '*EntryReservationHttpComparisonIT' --rerun-tasks` (`entry-service`에서 실행, Docker 필요)
+
 ## 연결 풀과 결과 사용 범위
 
 `docs/experiments/evidence/`의 원본은 Git으로 보관한다. `artifacts/benchmark/`는 로컬 실행 상세 자료이며 Git에 포함되지 않는다. 이 통합 문서가 비교 설명의 정본이다.
 
 풀 설정 8개와 workers 64개는 서로 다른 값이다. Spring Data Redis의 Lettuce 기본값은 일반 명령에 공유 native 연결을 사용한다. `SADD`, `INCR`, Lua가 각각 풀 연결을 독점하는 구조가 아니므로, 풀 8개를 모든 요청의 동시성 제한으로 설명하지 않는다. WATCH 트랜잭션은 전용 연결 경로를 사용하므로, 두 방식의 실질적인 연결 사용까지 같다고 주장하지 않는다.
 
-- WATCH 결과는 충돌 재시도 비용을 설명하는 Redis 구간 근거로 사용한다.
+- 기존 WATCH 결과는 Redis 구간 근거로 사용하고, WATCH 대비 API 비교는 4번 결과를 사용한다.
 - 개별 호출과 Lua의 Redis 결과는 왕복 감소 효과를 설명하는 근거로 사용한다.
-- API 성능을 설명할 때는 3번의 서버/HTTP 구분과 로컬 조건을 함께 사용한다.
+- API 성능을 설명할 때는 3번과 4번의 서버/HTTP 구분과 로컬 조건을 함께 사용한다. 서로 다른 실행의 Lua 수치를 섞지 않는다.
 - Lua는 Redis 내부 명령 실행 오류를 자동 롤백하지 않으며, 응답 유실 시 성공 여부의 불확실성까지 해결하지 않는다.
 - 비교 실험은 자동 CI 대상이 아니다. 두 신규 비교 테스트는 `redis-experiment` 태그로 기본 테스트에서 제외된다.
