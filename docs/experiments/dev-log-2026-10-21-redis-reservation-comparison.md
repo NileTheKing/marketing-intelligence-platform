@@ -135,7 +135,7 @@ API 완료는 Kafka 소비나 구매 DB 저장 완료를 뜻하지 않는다. �
 
 이 결과는 64 workers가 동일한 두 키를 변경하는 로컬 경합 조건이다. WATCH가 모든 환경에서 10배 느리다는 의미가 아니며, VM 부하나 과거 구현 교체 당시의 개선율로 사용하지 않는다. 최초 시도는 테스트 컴파일에서 중단됐고, 수정 후 실행에서 위 결과를 얻었다. 두 로그 모두 보존했다.
 
-- 코드: `entry-service/src/test/java/com/axon/entry_service/controller/EntryReservationHttpComparisonIT.java`
+- 코드: `services/entry-service/src/test/java/com/axon/entry_service/controller/EntryReservationHttpComparisonIT.java`
 - Git 보관 원본 CSV: `docs/experiments/evidence/redis-reservation-comparison/http-watch-20261021/per-run.csv`
 - 결과, 로그, JUnit: `artifacts/benchmark/entry-http-watch-lua-20261021-135638/`
 - 실행: `HTTP_BENCHMARK_BASELINE=WATCH_MULTI HTTP_BENCHMARK_DIR=<절대 결과 경로> ./gradlew test -PincludeRedisExperiments=true --tests '*EntryReservationHttpComparisonIT' --rerun-tasks` (`entry-service`에서 실행, Docker 필요)
