@@ -12,18 +12,14 @@ import com.axon.core_service.coupon.dto.ApplicableCouponDto;
 import com.axon.core_service.catalog.dto.ProductListItemDto;
 import com.axon.core_service.catalog.dto.ProductListResponse;
 import com.axon.core_service.catalog.domain.Product;
-import com.axon.core_service.domain.purchase.Purchase;
-import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.exception.CampaignActivityNotFoundException;
 import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.catalog.ProductRepository;
-import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.coupon.UserCouponRepository;
 import com.axon.messaging.CampaignActivityType;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.function.Function;
@@ -50,7 +46,6 @@ public class StoreViewService {
     private final CampaignActivityRepository campaignActivityRepository;
     private final ProductRepository productRepository;
     private final UserCouponRepository userCouponRepository;
-    private final PurchaseRepository purchaseRepository;
     private final CouponService couponService;
 
     @Transactional(readOnly = true)
@@ -225,30 +220,6 @@ public class StoreViewService {
         return activity.getActivityType() != CampaignActivityType.COUPON
                 || activity.getCouponDeliveryMode() == null
                 || activity.getCouponDeliveryMode() == CouponDeliveryMode.DIRECT;
-    }
-
-    @Transactional
-    public void recordPaymentSuccess(Long userId, Long productId, Long userCouponId, BigDecimal finalPrice) {
-        if (userId != null && productId != null && finalPrice != null) {
-            productRepository.findByIdAndCampaignOnlyFalse(productId)
-                    .orElseThrow(() -> new IllegalArgumentException("Campaign-only products cannot use shop checkout"));
-            if (userCouponId != null) {
-                couponService.useCoupon(userCouponId, userId);
-                log.info("User coupon {} successfully used by user {} during payment", userCouponId, userId);
-            }
-            Purchase purchase = Purchase.builder()
-                    .userId(userId)
-                    .productId(productId)
-                    .campaignActivityId(null)
-                    .purchaseType(PurchaseType.SHOP)
-                    .price(finalPrice)
-                    .quantity(1)
-                    .purchasedAt(Instant.now())
-                    .userCouponId(userCouponId)
-                    .build();
-            purchaseRepository.save(purchase);
-            log.info("Purchase saved: userId={}, productId={}, price={}", userId, productId, finalPrice);
-        }
     }
 
     @Transactional(readOnly = true)

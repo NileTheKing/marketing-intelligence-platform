@@ -130,6 +130,13 @@ entry/
 옮기지 않았다. 관련 테스트와 CI의 필수 통합 테스트 경로도 함께 변경했다.
 HTTP 경로, JPA 엔티티·테이블 이름, 스케줄과 트랜잭션 경계는 유지한다.
 
+2026-10-22: `StoreViewService`의 일반 구매 저장을 `purchase/ShopPurchaseService`로
+분리했다. `StoreController`는 조회를 `StoreViewService`에, 구매 기록 저장을
+`ShopPurchaseService`에 맡긴다. 쿠폰 사용과 구매 저장은 같은 트랜잭션을 유지한다.
+이번 변경은 책임 분리이며 기존 결제 시뮬레이션, 가격 입력과 HTTP 계약을 바꾸지 않는다.
+캠페인 메타 캐시의 커밋 후 무효화·버전 비교·single-flight 경계는
+[시스템 지도](../architecture-map.md#캠페인-메타-캐시)를 따른다.
+
 | Style | Example | Reading impact |
 |---|---|---|
 | Layer package | `controller`, `service`, `repository`, `domain/dto` | Easy to find Spring stereotypes, but business boundary is not visible from the package tree. |

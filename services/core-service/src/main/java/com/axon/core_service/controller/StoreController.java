@@ -3,6 +3,7 @@ package com.axon.core_service.controller;
 import com.axon.core_service.config.auth.JwtTokenProvider;
 import com.axon.core_service.domain.user.CustomOAuth2User;
 import com.axon.core_service.service.StoreViewService;
+import com.axon.core_service.purchase.ShopPurchaseService;
 import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class StoreController {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final StoreViewService storeViewService;
+    private final ShopPurchaseService shopPurchaseService;
 
     @Value("${axon.entry-service-url}")
     private String entryServiceUrl;
@@ -120,7 +122,7 @@ public class StoreController {
         Long userId = extractUser(accessToken).userId();
 
         try {
-            storeViewService.recordPaymentSuccess(userId, productId, userCouponId, finalPrice);
+            shopPurchaseService.recordPaymentSuccess(userId, productId, userCouponId, finalPrice);
         } catch (Exception e) {
             log.error("Failed to record payment success", e);
         }

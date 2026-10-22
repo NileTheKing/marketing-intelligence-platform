@@ -5,16 +5,13 @@ import com.axon.core_service.coupon.CouponService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.axon.core_service.catalog.domain.Product;
-import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.catalog.ProductRepository;
-import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.coupon.UserCouponRepository;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -25,7 +22,6 @@ import org.springframework.data.domain.Sort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -35,22 +31,8 @@ class StoreViewServiceTest {
     @Mock private CampaignActivityRepository campaignActivityRepository;
     @Mock private ProductRepository productRepository;
     @Mock private UserCouponRepository userCouponRepository;
-    @Mock private PurchaseRepository purchaseRepository;
     @Mock private CouponService couponService;
     @Mock private Product product;
-
-    @Test
-    void linksTheRecordedPurchaseToTheCouponUsedForCheckout() {
-        when(productRepository.findByIdAndCampaignOnlyFalse(3L)).thenReturn(Optional.of(product));
-
-        service().recordPaymentSuccess(1L, 3L, 9L, BigDecimal.valueOf(8_000));
-
-        ArgumentCaptor<Purchase> purchase = ArgumentCaptor.forClass(Purchase.class);
-        InOrder order = inOrder(couponService, purchaseRepository);
-        order.verify(couponService).useCoupon(9L, 1L);
-        order.verify(purchaseRepository).save(purchase.capture());
-        assertThat(purchase.getValue().getUserCouponId()).isEqualTo(9L);
-    }
 
     @Test
     void productListUsesCaseInsensitiveCategoryAndStablePageAndReturnsMoneyAsNumbers() {
@@ -123,6 +105,6 @@ class StoreViewServiceTest {
 
     private StoreViewService service() {
         return new StoreViewService(campaignActivityRepository, productRepository, userCouponRepository,
-                purchaseRepository, couponService);
+                couponService);
     }
 }
