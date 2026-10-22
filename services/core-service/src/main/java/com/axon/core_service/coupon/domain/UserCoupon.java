@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.coupon;
+package com.axon.core_service.coupon.domain;
 
 import com.axon.core_service.domain.common.BaseTimeEntity;
 import jakarta.persistence.*;

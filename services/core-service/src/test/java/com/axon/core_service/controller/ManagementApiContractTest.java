@@ -1,5 +1,7 @@
 package com.axon.core_service.controller;
 
+import com.axon.core_service.coupon.CouponController;
+
 import com.axon.core_service.config.TestSecurityConfig;
 import com.axon.core_service.config.auth.CustomLogoutHandler;
 import com.axon.core_service.config.auth.CustomOAuth2UserService;
@@ -10,7 +12,7 @@ import com.axon.core_service.domain.event.EventStatus;
 import com.axon.core_service.domain.event.TriggerType;
 import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.exception.ResourceNotFoundException;
-import com.axon.core_service.service.CouponService;
+import com.axon.core_service.coupon.CouponService;
 import com.axon.core_service.service.EventService;
 import com.axon.core_service.support.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;

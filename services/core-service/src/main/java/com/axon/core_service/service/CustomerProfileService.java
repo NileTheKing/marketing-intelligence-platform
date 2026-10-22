@@ -1,8 +1,8 @@
 package com.axon.core_service.service;
 
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
-import com.axon.core_service.domain.coupon.CouponStatus;
-import com.axon.core_service.domain.coupon.UserCoupon;
+import com.axon.core_service.coupon.domain.CouponStatus;
+import com.axon.core_service.coupon.domain.UserCoupon;
 import com.axon.core_service.domain.dto.customer.CustomerBehaviorEvent;
 import com.axon.core_service.domain.dto.customer.CustomerProfileResponse;
 import com.axon.core_service.domain.dto.customer.CustomerProfileResponse.PurchaseItem;
@@ -14,7 +14,7 @@ import com.axon.core_service.domain.user.UserSummary;
 import com.axon.core_service.exception.ResourceNotFoundException;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.repository.UserCouponRepository;
+import com.axon.core_service.coupon.UserCouponRepository;
 import com.axon.core_service.repository.UserRepository;
 import com.axon.core_service.repository.UserSummaryRepository;
 import lombok.RequiredArgsConstructor;

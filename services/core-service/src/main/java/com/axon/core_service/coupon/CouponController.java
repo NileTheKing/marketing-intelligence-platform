@@ -1,8 +1,7 @@
-package com.axon.core_service.controller;
+package com.axon.core_service.coupon;
 
-import com.axon.core_service.domain.dto.coupon.CouponRequest;
-import com.axon.core_service.domain.dto.coupon.CouponResponse;
-import com.axon.core_service.service.CouponService;
+import com.axon.core_service.coupon.dto.CouponRequest;
+import com.axon.core_service.coupon.dto.CouponResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

@@ -19,7 +19,7 @@ import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
 import com.axon.core_service.repository.DormantCustomerCampaignRepository;
 import com.axon.core_service.repository.CampaignRepository;
-import com.axon.core_service.repository.CouponRepository;
+import com.axon.core_service.coupon.CouponRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.ProductRepository;
 import java.util.List;
@@ -62,7 +62,7 @@ public class CampaignActivityService {
         validateCouponDeliverySettings(request, deliveryMode);
         Campaign campaign = findCampaign(campaignId);
         Product product = null;
-        com.axon.core_service.domain.coupon.Coupon coupon = null;
+        com.axon.core_service.coupon.domain.Coupon coupon = null;
 
         if (request.getActivityType() == com.axon.messaging.CampaignActivityType.COUPON) {
             if (request.getCouponId() != null) {
@@ -163,7 +163,7 @@ public class CampaignActivityService {
 
         // Update Product/Coupon Info
         if (request.getActivityType() == com.axon.messaging.CampaignActivityType.COUPON) {
-            com.axon.core_service.domain.coupon.Coupon newCoupon = null;
+            com.axon.core_service.coupon.domain.Coupon newCoupon = null;
             if (request.getCouponId() != null) {
                 newCoupon = findCoupon(request.getCouponId());
             }
@@ -323,7 +323,7 @@ public class CampaignActivityService {
                 .orElseThrow(() -> new ResourceNotFoundException("campaign activity", id));
     }
 
-    private com.axon.core_service.domain.coupon.Coupon findCoupon(Long id) {
+    private com.axon.core_service.coupon.domain.Coupon findCoupon(Long id) {
         return couponRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("coupon", id));
     }
@@ -387,7 +387,7 @@ public class CampaignActivityService {
     }
 
     private void validateCouponCampaignPolicy(CampaignActivityRequest request,
-                                              com.axon.core_service.domain.coupon.Coupon coupon) {
+                                              com.axon.core_service.coupon.domain.Coupon coupon) {
         if (request.getActivityType() != com.axon.messaging.CampaignActivityType.COUPON) {
             return;
         }
@@ -488,7 +488,7 @@ public class CampaignActivityService {
         }
     }
 
-    private MarketingAction createDirectCampaignAction(com.axon.core_service.domain.coupon.Coupon coupon) {
+    private MarketingAction createDirectCampaignAction(com.axon.core_service.coupon.domain.Coupon coupon) {
         if (coupon == null) {
             return null;
         }
@@ -501,7 +501,7 @@ public class CampaignActivityService {
     }
 
     private void updateDirectCampaignAction(CampaignActivity activity,
-                                            com.axon.core_service.domain.coupon.Coupon coupon) {
+                                            com.axon.core_service.coupon.domain.Coupon coupon) {
         MarketingAction action = activity.getMarketingAction();
         if (action == null) {
             activity.assignMarketingAction(createDirectCampaignAction(coupon));

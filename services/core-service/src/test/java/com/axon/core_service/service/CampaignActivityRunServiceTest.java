@@ -13,7 +13,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivityPurpose;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
-import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityRunAnalysisRequest;
 import com.axon.core_service.domain.marketing.MarketingAction;

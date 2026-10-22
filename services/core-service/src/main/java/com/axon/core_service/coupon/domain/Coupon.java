@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.coupon;
+package com.axon.core_service.coupon.domain;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;

@@ -1,5 +1,7 @@
 package com.axon.core_service.service;
 
+import com.axon.core_service.coupon.CouponService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,7 +15,7 @@ import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.repository.UserCouponRepository;
+import com.axon.core_service.coupon.UserCouponRepository;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.List;

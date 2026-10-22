@@ -1,15 +1,13 @@
-package com.axon.core_service.service;
+package com.axon.core_service.coupon;
 
-import com.axon.core_service.domain.coupon.Coupon;
-import com.axon.core_service.domain.coupon.CouponStatus;
-import com.axon.core_service.domain.coupon.UserCoupon;
-import com.axon.core_service.domain.dto.coupon.ApplicableCouponDto;
-import com.axon.core_service.domain.dto.coupon.CouponRequest;
-import com.axon.core_service.domain.dto.coupon.CouponResponse;
+import com.axon.core_service.coupon.domain.Coupon;
+import com.axon.core_service.coupon.domain.CouponStatus;
+import com.axon.core_service.coupon.domain.UserCoupon;
+import com.axon.core_service.coupon.dto.ApplicableCouponDto;
+import com.axon.core_service.coupon.dto.CouponRequest;
+import com.axon.core_service.coupon.dto.CouponResponse;
 import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.exception.ResourceNotFoundException;
-import com.axon.core_service.repository.CouponRepository;
-import com.axon.core_service.repository.UserCouponRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

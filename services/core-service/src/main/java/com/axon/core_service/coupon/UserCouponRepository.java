@@ -1,6 +1,6 @@
-package com.axon.core_service.repository;
+package com.axon.core_service.coupon;
 
-import com.axon.core_service.domain.coupon.UserCoupon;
+import com.axon.core_service.coupon.domain.UserCoupon;
 import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;

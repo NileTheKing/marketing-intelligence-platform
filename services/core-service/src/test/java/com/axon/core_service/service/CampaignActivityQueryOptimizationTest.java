@@ -12,7 +12,7 @@ import com.axon.core_service.domain.dto.campaignactivityentry.CampaignActivityEn
 import com.axon.core_service.repository.CampaignActivityEntryRepository;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.CampaignRepository;
-import com.axon.core_service.repository.CouponRepository;
+import com.axon.core_service.coupon.CouponRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
 import com.axon.core_service.repository.DormantCustomerCampaignRepository;

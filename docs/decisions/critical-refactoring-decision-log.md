@@ -877,7 +877,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 
 - Code evidence:
   - `services/core-service/src/main/java/com/axon/core_service/repository/CampaignActivityRepository.java`
-  - `services/core-service/src/main/java/com/axon/core_service/repository/UserCouponRepository.java`
+  - `services/core-service/src/main/java/com/axon/core_service/coupon/UserCouponRepository.java`
   - `services/core-service/src/main/java/com/axon/core_service/repository/LTVBatchRepository.java`
   - `services/core-service/src/main/java/com/axon/core_service/service/CohortAnalysisService.java`
   - `services/core-service/src/main/java/com/axon/core_service/controller/DashboardController.java`

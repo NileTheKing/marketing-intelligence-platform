@@ -1,10 +1,8 @@
-package com.axon.core_service.service;
+package com.axon.core_service.coupon;
 
-import com.axon.core_service.domain.dto.coupon.CouponRequest;
-import com.axon.core_service.domain.coupon.CouponStatus;
-import com.axon.core_service.domain.coupon.UserCoupon;
-import com.axon.core_service.repository.CouponRepository;
-import com.axon.core_service.repository.UserCouponRepository;
+import com.axon.core_service.coupon.dto.CouponRequest;
+import com.axon.core_service.coupon.domain.CouponStatus;
+import com.axon.core_service.coupon.domain.UserCoupon;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

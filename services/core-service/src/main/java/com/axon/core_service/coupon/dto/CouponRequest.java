@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.dto.coupon;
+package com.axon.core_service.coupon.dto;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;

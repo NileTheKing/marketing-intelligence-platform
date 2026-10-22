@@ -1,12 +1,14 @@
 package com.axon.core_service.service;
 
+import com.axon.core_service.coupon.CouponService;
+
 import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
-import com.axon.core_service.domain.coupon.CouponStatus;
-import com.axon.core_service.domain.coupon.UserCoupon;
+import com.axon.core_service.coupon.domain.CouponStatus;
+import com.axon.core_service.coupon.domain.UserCoupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
-import com.axon.core_service.domain.dto.coupon.ApplicableCouponDto;
+import com.axon.core_service.coupon.dto.ApplicableCouponDto;
 import com.axon.core_service.domain.dto.product.ProductListItemDto;
 import com.axon.core_service.domain.dto.product.ProductListResponse;
 import com.axon.core_service.domain.product.Product;
@@ -17,7 +19,7 @@ import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.repository.UserCouponRepository;
+import com.axon.core_service.coupon.UserCouponRepository;
 import com.axon.messaging.CampaignActivityType;
 import java.math.BigDecimal;
 import java.text.NumberFormat;

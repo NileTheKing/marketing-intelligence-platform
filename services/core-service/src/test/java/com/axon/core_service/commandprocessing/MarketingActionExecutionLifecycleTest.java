@@ -1,10 +1,10 @@
 package com.axon.core_service.commandprocessing;
 
 import com.axon.core_service.client.WebhookClient;
-import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.observability.CorePipelineMetrics;
-import com.axon.core_service.repository.CouponRepository;
-import com.axon.core_service.repository.UserCouponRepository;
+import com.axon.core_service.coupon.CouponRepository;
+import com.axon.core_service.coupon.UserCouponRepository;
 import com.axon.core_service.service.MarketingActionExecutionService;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.MarketingActionFailureCategory;

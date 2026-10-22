@@ -5,7 +5,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTarget;
 import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
-import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.domain.marketing.MarketingActionDispatch;
 import com.axon.core_service.domain.marketing.RewardType;
 import com.axon.core_service.exception.BusinessConflictException;

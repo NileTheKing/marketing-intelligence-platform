@@ -44,12 +44,31 @@ Status: active
 
 The project currently mixes two package styles.
 
+2026-10-22: 쿠폰 정의·발급 내역·사용 처리 코드를 `com.axon.core_service.coupon`에
+모았다. 기능별 패키지 전환의 첫 범위이며, 나머지 계층형 패키지는 아직 유지한다.
+
+```text
+coupon/
+  CouponController.java
+  CouponService.java
+  CouponRepository.java
+  UserCouponRepository.java
+  domain/   Coupon, CouponStatus, UserCoupon
+  dto/      쿠폰 요청·응답과 적용 가능 쿠폰 정보
+```
+
+`CouponServiceTest`도 같은 기능 패키지로 옮겼다. HTTP 계약, 엔티티·테이블 이름,
+트랜잭션과 쿼리는 바꾸지 않는다. Kafka의 `CouponStrategy`는 메시지 처리 경계를
+담당하므로 `commandprocessing`에 유지하고, 구매 매출 귀속 조회인
+`CouponAttributionRepository`도 이번 이동에 포함하지 않는다.
+
 | Style | Example | Reading impact |
 |---|---|---|
 | Layer package | `controller`, `service`, `repository`, `domain/dto` | Easy to find Spring stereotypes, but business boundary is not visible from the package tree. |
-| Partial domain package | `domain/campaignactivity`, `domain/coupon`, `service/strategy`, `service/purchase` | Some business concepts are grouped, but services still cross several concepts. |
+| Feature package | `coupon`, `commandprocessing` | Related code can be followed within the feature or processing boundary. |
+| Partial domain package | `domain/campaignactivity`, `service/purchase` | Some business concepts are grouped, but services still cross several concepts. |
 
-This is a layered Spring application with partial feature packaging, not a full DDD or hexagonal package layout. The directory tree is not the architecture itself: the meaningful architecture is service/module ownership and dependency direction. Packages are useful when they make those boundaries easier to read.
+This is a layered Spring application with partial feature packaging, not a full DDD or hexagonal package layout. The coupon package is an incremental grouping of related code, not an enforced bounded context. The meaningful architecture is service/module ownership and dependency direction. Packages are useful when they make those boundaries easier to read.
 
 ### High-Traffic Flow
 

@@ -2,7 +2,7 @@ package com.axon.core_service.domain.campaignactivity;
 
 import com.axon.core_service.domain.campaign.Campaign;
 import com.axon.core_service.domain.common.BaseTimeEntity;
-import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
 import com.axon.core_service.domain.dto.campaignactivity.filter.converter.FilterDetailConverter;

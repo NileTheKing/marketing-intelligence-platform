@@ -3,7 +3,7 @@ package com.axon.core_service.benchmark;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.axon.core_service.AbstractIntegrationTest;
-import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.domain.marketing.AbandonedCartCouponCampaign;
 import com.axon.core_service.domain.marketing.AbandonedCartCouponCandidate;
 import com.axon.core_service.domain.marketing.AbandonedCartCouponCandidateStatus;
@@ -20,7 +20,7 @@ import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.repository.ProductRepository;
 import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
 import com.axon.core_service.repository.AbandonedCartCouponCandidateRepository;
-import com.axon.core_service.repository.CouponRepository;
+import com.axon.core_service.coupon.CouponRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.scheduler.AbandonedCartCouponScheduler;
 import com.axon.core_service.service.AbandonedCartCouponCandidateService;

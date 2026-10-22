@@ -1,6 +1,6 @@
-package com.axon.core_service.domain.dto.coupon;
+package com.axon.core_service.coupon.dto;
 
-import com.axon.core_service.domain.coupon.Coupon;
+import com.axon.core_service.coupon.domain.Coupon;
 import lombok.Getter;
 
 import java.math.BigDecimal;
