@@ -1,6 +1,6 @@
 package com.axon.core_service.domain.dashboard;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.domain.common.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;

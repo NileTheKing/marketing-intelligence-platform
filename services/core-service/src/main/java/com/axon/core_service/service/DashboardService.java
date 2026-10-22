@@ -3,10 +3,10 @@ package com.axon.core_service.service;
 import com.axon.core_service.domain.dashboard.DashboardPeriod;
 import com.axon.core_service.domain.dashboard.CampaignFunnelDefinition;
 import com.axon.core_service.domain.dashboard.FunnelStep;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.domain.dto.dashboard.*;
-import com.axon.core_service.repository.CampaignActivityRepository;
-import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.campaign.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignRepository;
 import com.axon.core_service.repository.CouponAttributionRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.dashboard.DashboardMetricCalculator;
@@ -222,9 +222,9 @@ public class DashboardService {
 
     private CampaignOverviewResult buildOverviewDataByCampaign(Long campaignId, LocalDateTime start,
             LocalDateTime end) {
-        com.axon.core_service.domain.campaign.Campaign campaign = campaignRepository.findById(campaignId)
+        com.axon.core_service.campaign.domain.Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new IllegalArgumentException("Campaign not found: " + campaignId));
-        List<com.axon.core_service.domain.campaignactivity.CampaignActivity> activities = campaign
+        List<com.axon.core_service.campaign.domain.CampaignActivity> activities = campaign
                 .getCampaignActivities();
 
         // Optimized: Fetch all stats in ONE query
@@ -321,10 +321,10 @@ public class DashboardService {
     }
 
     private HeatmapData getHourlyHeatmap(Long campaignId, LocalDateTime start, LocalDateTime end) {
-        com.axon.core_service.domain.campaign.Campaign campaign = campaignRepository.findById(campaignId)
+        com.axon.core_service.campaign.domain.Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new IllegalArgumentException("Campaign not found: " + campaignId));
         List<Long> activityIds = campaign.getCampaignActivities().stream()
-                .map(com.axon.core_service.domain.campaignactivity.CampaignActivity::getId)
+                .map(com.axon.core_service.campaign.domain.CampaignActivity::getId)
                 .toList();
         try {
             Map<Integer, Long> hourlyTraffic = behaviorEventService.getHourlyTraffic(activityIds, start, end);
@@ -373,7 +373,7 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public GlobalDashboardResponse getGlobalDashboard() {
-        List<com.axon.core_service.domain.campaign.Campaign> campaigns = campaignRepository.findAllWithActivities();
+        List<com.axon.core_service.campaign.domain.Campaign> campaigns = campaignRepository.findAllWithActivities();
         LocalDateTime start = LocalDateTime.now().minusDays(30);
         LocalDateTime end = LocalDateTime.now();
 
@@ -411,7 +411,7 @@ public class DashboardService {
                         PurchaseAggregateByCampaign::campaignId,
                         aggregate -> aggregate));
 
-        for (com.axon.core_service.domain.campaign.Campaign campaign : campaigns) {
+        for (com.axon.core_service.campaign.domain.Campaign campaign : campaigns) {
             Long campaignId = campaign.getId();
             Map<String, Long> stats = allStats.getOrDefault(campaignId, Collections.emptyMap());
 

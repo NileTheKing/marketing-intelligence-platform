@@ -3,11 +3,11 @@ package com.axon.core_service.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
+import com.axon.core_service.campaign.domain.CampaignActivityRun;
+import com.axon.core_service.campaign.domain.CampaignActivityRunTargetGroup;
 import com.axon.core_service.domain.dto.dashboard.CampaignRunGroupPerformance;
-import com.axon.core_service.repository.CampaignActivityRunRepository;
-import com.axon.core_service.repository.CampaignActivityRunTargetRepository;
+import com.axon.core_service.campaign.CampaignActivityRunRepository;
+import com.axon.core_service.campaign.CampaignActivityRunTargetRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;

@@ -11,8 +11,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
-import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
+import com.axon.core_service.campaign.domain.CouponDeliveryMode;
 import org.springframework.transaction.annotation.Transactional;
 
 public interface AbandonedCartCouponCandidateRepository extends JpaRepository<AbandonedCartCouponCandidate, Long> {

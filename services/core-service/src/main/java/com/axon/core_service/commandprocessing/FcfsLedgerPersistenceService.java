@@ -1,13 +1,13 @@
 package com.axon.core_service.commandprocessing;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
-import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntry;
-import com.axon.core_service.domain.campaignactivityentry.CampaignActivityEntryStatus;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.entry.domain.CampaignActivityEntry;
+import com.axon.core_service.entry.domain.CampaignActivityEntryStatus;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import com.axon.core_service.domain.purchase.PurchaseType;
-import com.axon.core_service.repository.CampaignActivityEntryRepository;
-import com.axon.core_service.repository.CampaignActivityRepository;
+import com.axon.core_service.entry.CampaignActivityEntryRepository;
+import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.ActivityUserKey;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;

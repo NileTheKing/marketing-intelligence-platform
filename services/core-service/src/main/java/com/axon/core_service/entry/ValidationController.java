@@ -1,0 +1,37 @@
+package com.axon.core_service.entry;
+
+import com.axon.messaging.dto.validation.ValidationResponse;
+import com.axon.core_service.entry.validation.DynamicValidationService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/v1/validation")
+public class ValidationController {
+    private final DynamicValidationService dynamicValidationService;
+
+    /**
+     * Validate whether the authenticated user is allowed to perform the specified campaign activity.
+     *
+     * @param userdetails          the authenticated user's details (used to identify the user)
+     * @param campaignActivityId   the campaign activity identifier to validate; if `null` the endpoint responds with HTTP 401
+     * @return                     a ResponseEntity containing the validation result as a ValidationResponse, or an empty 401 Unauthorized response when `campaignActivityId` is `null`
+     */
+    @GetMapping
+    public ResponseEntity<ValidationResponse> validateCampaignActivityLimit(@AuthenticationPrincipal UserDetails userdetails, @RequestParam Long campaignActivityId) {
+        long userId = Long.parseLong(userdetails.getUsername());
+        if(campaignActivityId == null) {return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();}
+        ValidationResponse res = dynamicValidationService.validate(userId, campaignActivityId);
+        return ResponseEntity.ok(res);
+    }
+}

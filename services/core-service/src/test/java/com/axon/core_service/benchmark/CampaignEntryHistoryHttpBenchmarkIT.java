@@ -2,10 +2,10 @@ package com.axon.core_service.benchmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.axon.core_service.controller.CampaignEntryHistoryController;
+import com.axon.core_service.entry.CampaignEntryHistoryController;
 import com.axon.core_service.domain.user.CustomOAuth2User;
 import com.axon.core_service.domain.user.Role;
-import com.axon.core_service.service.CampaignEntryHistoryService;
+import com.axon.core_service.entry.CampaignEntryHistoryService;
 import com.axon.core_service.support.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

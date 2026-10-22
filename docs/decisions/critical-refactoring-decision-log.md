@@ -876,7 +876,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 2. View/Controller lazy loading risk reduction
 
 - Code evidence:
-  - `services/core-service/src/main/java/com/axon/core_service/repository/CampaignActivityRepository.java`
+  - `services/core-service/src/main/java/com/axon/core_service/campaign/CampaignActivityRepository.java`
   - `services/core-service/src/main/java/com/axon/core_service/coupon/UserCouponRepository.java`
   - `services/core-service/src/main/java/com/axon/core_service/repository/LTVBatchRepository.java`
   - `services/core-service/src/main/java/com/axon/core_service/service/CohortAnalysisService.java`
@@ -903,8 +903,8 @@ Use this section when turning the refactoring into a portfolio or interview stor
 3. Entity mutation boundary cleanup
 
 - Code evidence:
-  - `services/core-service/src/main/java/com/axon/core_service/domain/campaignactivity/CampaignActivity.java`
-  - `services/core-service/src/main/java/com/axon/core_service/service/CampaignActivityService.java`
+  - `services/core-service/src/main/java/com/axon/core_service/campaign/domain/CampaignActivity.java`
+  - `services/core-service/src/main/java/com/axon/core_service/campaign/CampaignActivityService.java`
 - Before:
   - Entity exposed `setFilters(...)`, which reads like arbitrary field assignment.
 - After:

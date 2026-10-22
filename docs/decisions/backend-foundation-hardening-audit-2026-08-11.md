@@ -102,7 +102,7 @@ The existing `PurchaseFlowIntegrationTest` already covers the FCFS Kafka-to-DB b
 ### Ownership and Safety
 
 - Parent owns this plan, the small regression runner, result review and any follow-up scope decisions.
-- Luna initially owns ONLY a new `services/core-service/src/test/java/com/axon/core_service/service/CampaignRunWorkflowIntegrationTest.java`.
+- Luna initially owns ONLY a new `services/core-service/src/test/java/com/axon/core_service/campaign/CampaignRunWorkflowIntegrationTest.java`.
 - Do not edit existing production code, existing tests, `AbstractIntegrationTest`, dependencies, CI, migrations, compose files, AI code or documentation without the parent's explicit approval. A discovered production bug is a failing-test finding, not permission to refactor.
 - Do not create branches/worktrees, switch branches, commit, stage, reset, stash, push or deploy. Other sessions share the working directory; preserve all existing changes.
 - Never print credentials, tokens or complete environment contents. Do not use local app DBs, SQL Lab data, shared app Kafka topics or external services.

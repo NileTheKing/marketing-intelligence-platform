@@ -2,12 +2,12 @@ package com.axon.core_service.service;
 
 import com.axon.core_service.coupon.CouponService;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
-import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.campaign.domain.CouponDeliveryMode;
 import com.axon.core_service.coupon.domain.CouponStatus;
 import com.axon.core_service.coupon.domain.UserCoupon;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
-import com.axon.core_service.domain.dto.campaignactivity.filter.FilterDetail;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
+import com.axon.core_service.campaign.dto.filter.FilterDetail;
 import com.axon.core_service.coupon.dto.ApplicableCouponDto;
 import com.axon.core_service.catalog.dto.ProductListItemDto;
 import com.axon.core_service.catalog.dto.ProductListResponse;
@@ -16,7 +16,7 @@ import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.exception.CampaignActivityNotFoundException;
 import com.axon.core_service.exception.InvalidRequestException;
-import com.axon.core_service.repository.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.catalog.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.coupon.UserCouponRepository;

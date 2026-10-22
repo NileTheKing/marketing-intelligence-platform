@@ -76,9 +76,9 @@ projection 실패 기록 작업의 현재 정본이다.
 5. `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseHandler.java`
 6. `services/core-service/src/main/java/com/axon/core_service/service/purchase/PurchaseService.java`
 7. `services/core-service/src/main/java/com/axon/core_service/service/UserSummaryService.java`
-8. `services/core-service/src/main/java/com/axon/core_service/domain/campaignactivityentry/CampaignActivityEntry.java`
+8. `services/core-service/src/main/java/com/axon/core_service/entry/domain/CampaignActivityEntry.java`
 9. `services/core-service/src/main/java/com/axon/core_service/domain/purchase/Purchase.java`
-10. `services/core-service/src/main/java/com/axon/core_service/repository/CampaignActivityEntryRepository.java`
+10. `services/core-service/src/main/java/com/axon/core_service/entry/CampaignActivityEntryRepository.java`
 11. `services/core-service/src/main/java/com/axon/core_service/repository/PurchaseRepository.java`
 12. `libs/common-messaging/src/main/java/com/axon/messaging/topic/KafkaTopics.java`
 

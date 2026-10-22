@@ -1,11 +1,15 @@
 package com.axon.core_service.repository;
 
+import com.axon.core_service.campaign.CampaignRepository;
+
+import com.axon.core_service.campaign.CampaignActivityRepository;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.domain.dashboard.LTVBatch;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
 import com.axon.messaging.CampaignActivityType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

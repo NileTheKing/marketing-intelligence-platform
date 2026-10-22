@@ -1,14 +1,14 @@
 package com.axon.core_service.performance;
 
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.coupon.domain.UserCoupon;
 import com.axon.core_service.domain.dashboard.LTVBatch;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
 import com.axon.core_service.catalog.domain.Product;
-import com.axon.core_service.repository.CampaignActivityRepository;
-import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.campaign.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignRepository;
 import com.axon.core_service.coupon.CouponRepository;
 import com.axon.core_service.repository.LTVBatchRepository;
 import com.axon.core_service.catalog.ProductRepository;

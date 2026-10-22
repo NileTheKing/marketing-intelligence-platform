@@ -12,7 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.axon.core_service.catalog.domain.Product;
 import com.axon.core_service.domain.purchase.Purchase;
-import com.axon.core_service.repository.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.catalog.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.coupon.UserCouponRepository;

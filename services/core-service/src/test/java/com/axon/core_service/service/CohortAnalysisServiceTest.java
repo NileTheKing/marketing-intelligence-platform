@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.domain.dashboard.LTVBatch;
 import com.axon.core_service.repository.LTVBatchRepository;
 import java.math.BigDecimal;

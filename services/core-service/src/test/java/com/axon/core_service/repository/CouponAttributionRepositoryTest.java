@@ -1,10 +1,10 @@
 package com.axon.core_service.repository;
 
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.campaign.domain.CampaignActivityRun;
+import com.axon.core_service.campaign.domain.CampaignActivityRunStatus;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
 import com.axon.core_service.coupon.domain.Coupon;
 import com.axon.core_service.coupon.domain.UserCoupon;
 import com.axon.core_service.domain.dto.dashboard.PurchaseAggregate;

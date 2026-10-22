@@ -1,14 +1,14 @@
 package com.axon.core_service.service;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRunStatus;
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRunTargetGroup;
+import com.axon.core_service.campaign.domain.CampaignActivityRun;
+import com.axon.core_service.campaign.domain.CampaignActivityRunStatus;
+import com.axon.core_service.campaign.domain.CampaignActivityRunTargetGroup;
 import com.axon.core_service.domain.dto.dashboard.CampaignRunGroupPerformance;
 import com.axon.core_service.domain.dto.dashboard.CampaignRunIncrementalityResponse;
 import com.axon.core_service.exception.BusinessConflictException;
 import com.axon.core_service.exception.ResourceNotFoundException;
-import com.axon.core_service.repository.CampaignActivityRunRepository;
-import com.axon.core_service.repository.CampaignActivityRunTargetRepository;
+import com.axon.core_service.campaign.CampaignActivityRunRepository;
+import com.axon.core_service.campaign.CampaignActivityRunTargetRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;

@@ -1,0 +1,245 @@
+package com.axon.core_service.campaign.domain;
+
+import com.axon.core_service.domain.common.BaseTimeEntity;
+import com.axon.core_service.coupon.domain.Coupon;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
+import com.axon.core_service.campaign.dto.filter.FilterDetail;
+import com.axon.core_service.campaign.dto.filter.converter.FilterDetailConverter;
+import com.axon.core_service.domain.marketing.MarketingAction;
+import com.axon.core_service.domain.marketing.AbandonedCartCouponCampaign;
+import com.axon.core_service.domain.marketing.DormantCustomerCampaign;
+import com.axon.core_service.catalog.domain.Product;
+import com.axon.messaging.CampaignActivityType;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Entity
+@Table(name = "campaign_activities")
+public class CampaignActivity extends BaseTimeEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "campaign_id")
+    private Campaign campaign;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id")
+    private Product product;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coupon_id")
+    private Coupon coupon;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "marketing_action_id", unique = true)
+    private MarketingAction marketingAction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "coupon_delivery_mode", nullable = false, length = 30)
+    private CouponDeliveryMode couponDeliveryMode = CouponDeliveryMode.DIRECT;
+
+    @OneToOne(mappedBy = "campaignActivity", fetch = FetchType.LAZY)
+    private AbandonedCartCouponCampaign abandonedCartCouponCampaign;
+
+    @OneToOne(mappedBy = "campaignActivity", fetch = FetchType.LAZY)
+    private DormantCustomerCampaign dormantCustomerCampaign;
+
+    @Column(name = "name", nullable = false)
+    private String name;
+
+    @Column(name = "limit_count")
+    private Integer limitCount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 50)
+    private CampaignActivityStatus status;
+
+    @Column(name = "start_date", nullable = false)
+    private LocalDateTime startDate;
+
+    @Column(name = "end_date", nullable = false)
+    private LocalDateTime endDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "activity_type", nullable = false)
+    private CampaignActivityType activityType;
+
+    @Convert(converter = FilterDetailConverter.class)
+    @Column(name = "filters", columnDefinition = "JSON")
+    private List<FilterDetail> filters;
+
+    @Column(name = "price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal price;
+
+    @Column(name = "quantity", nullable = false)
+    private Integer quantity;
+
+    @Column(name = "budget", precision = 12, scale = 2)
+    private BigDecimal budget;
+
+    @Column(name = "expected_recipient_count")
+    private Integer expectedRecipientCount;
+
+    @Column(name = "max_recipient_count")
+    private Integer maxRecipientCount;
+
+    @Column(name = "holdout_rate_percent")
+    private Integer holdoutRatePercent;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose", length = 50)
+    private CampaignActivityPurpose purpose;
+
+    @Column(name = "operator_memo", length = 2000)
+    private String operatorMemo;
+
+    @Column(name = "image_url")
+    private String imageUrl;
+
+    @Column(name = "synced_count", nullable = false)
+    private Integer syncedCount = 0;
+
+    @Builder
+    public CampaignActivity(Campaign campaign,
+            Product product,
+            String name,
+            Integer limitCount,
+            CampaignActivityStatus status,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            CampaignActivityType activityType,
+            List<FilterDetail> filters,
+            BigDecimal price,
+            Integer quantity,
+            BigDecimal budget,
+            String imageUrl,
+            Coupon coupon,
+            MarketingAction marketingAction,
+            Integer expectedRecipientCount,
+            Integer maxRecipientCount,
+            Integer holdoutRatePercent,
+            CampaignActivityPurpose purpose,
+            String operatorMemo,
+            CouponDeliveryMode couponDeliveryMode,
+            Integer syncedCount) {
+        this.campaign = campaign;
+        this.product = product;
+        this.coupon = coupon;
+        this.name = name;
+        this.limitCount = limitCount;
+        this.status = status;
+        this.startDate = startDate;
+        this.endDate = endDate;
+        this.activityType = activityType;
+        this.filters = filters;
+        this.price = price;
+        this.quantity = quantity;
+        this.imageUrl = imageUrl;
+        this.budget = budget;
+        this.marketingAction = marketingAction;
+        this.expectedRecipientCount = expectedRecipientCount;
+        this.maxRecipientCount = maxRecipientCount;
+        this.holdoutRatePercent = holdoutRatePercent;
+        this.purpose = purpose;
+        this.operatorMemo = operatorMemo;
+        this.couponDeliveryMode = couponDeliveryMode != null ? couponDeliveryMode : CouponDeliveryMode.DIRECT;
+        this.syncedCount = syncedCount != null ? syncedCount : 0;
+    }
+
+    public Long getCampaignId() {
+        return campaign != null ? campaign.getId() : null;
+    }
+
+    public Long getProductId() {
+        return product != null ? product.getId() : null;
+    }
+
+    public void updateInfo(String name, Integer limitCount) {
+        this.name = name;
+        this.limitCount = limitCount;
+    }
+
+    public void changeStatus(CampaignActivityStatus nextStatus) {
+        this.status = nextStatus;
+    }
+
+    public void changeDates(LocalDateTime startDate, LocalDateTime endDate) {
+        this.startDate = startDate;
+        this.endDate = endDate;
+    }
+
+    public void replaceFilters(List<FilterDetail> filters) {
+        this.filters = filters;
+    }
+
+    public void updateProductInfo(Product product, BigDecimal price, Integer quantity) {
+        this.product = product;
+        this.coupon = null;
+        this.price = price;
+        this.quantity = quantity;
+    }
+
+    public void updateCouponInfo(Coupon coupon) {
+        this.coupon = coupon;
+        this.product = null;
+        this.price = BigDecimal.ZERO;
+        this.quantity = 0;
+    }
+
+    public void assignMarketingAction(MarketingAction marketingAction) {
+        this.marketingAction = marketingAction;
+    }
+
+    public void assignAbandonedCartCouponCampaign(AbandonedCartCouponCampaign config) {
+        this.abandonedCartCouponCampaign = config;
+    }
+
+    public void assignDormantCustomerCampaign(DormantCustomerCampaign config) {
+        this.dormantCustomerCampaign = config;
+    }
+
+    public void updateRecipientPolicy(Integer expectedRecipientCount, Integer maxRecipientCount,
+                                      Integer holdoutRatePercent) {
+        this.expectedRecipientCount = expectedRecipientCount;
+        this.maxRecipientCount = maxRecipientCount;
+        this.holdoutRatePercent = holdoutRatePercent;
+    }
+
+    public void updateReviewIntent(CampaignActivityPurpose purpose, String operatorMemo) {
+        this.purpose = purpose;
+        this.operatorMemo = operatorMemo;
+    }
+
+    public void updateActivityType(CampaignActivityType activityType) {
+        this.activityType = activityType;
+    }
+
+    public void updateImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
+    public void updateBudget(BigDecimal budget) {
+        this.budget = budget;
+    }
+
+    public void updateStatus(CampaignActivityStatus status) {
+        this.status = status;
+    }
+
+    public void assignCampaign(Campaign campaign) {
+        this.campaign = campaign;
+    }
+
+    public void updateSyncedCount(Integer count) {
+        this.syncedCount = count;
+    }
+}

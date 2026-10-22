@@ -20,7 +20,7 @@ public interface AbandonedCartCouponCampaignRepository extends JpaRepository<Aba
             + "and (c.campaignActivity.campaign.startAt is null or c.campaignActivity.campaign.startAt <= :now) "
             + "and (c.campaignActivity.campaign.endAt is null or c.campaignActivity.campaign.endAt >= :now)")
     List<AbandonedCartCouponCampaign> findExecutableCampaigns(
-            @Param("active") com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus active,
-            @Param("mode") com.axon.core_service.domain.campaignactivity.CouponDeliveryMode mode,
+            @Param("active") com.axon.core_service.campaign.dto.CampaignActivityStatus active,
+            @Param("mode") com.axon.core_service.campaign.domain.CouponDeliveryMode mode,
             @Param("now") LocalDateTime now);
 }

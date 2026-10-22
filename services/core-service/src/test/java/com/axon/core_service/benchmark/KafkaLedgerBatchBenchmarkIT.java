@@ -3,11 +3,11 @@ package com.axon.core_service.benchmark;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.axon.core_service.commandprocessing.FcfsLedgerPersistenceService;
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
-import com.axon.core_service.repository.CampaignActivityRepository;
-import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
+import com.axon.core_service.campaign.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignRepository;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -107,10 +107,33 @@ review/
 `CampaignActivityRunReviewController`는 상품 후기와 무관하므로 이동하지 않는다.
 HTTP 계약, JPA 매핑, 쿼리와 트랜잭션 경계는 변경하지 않았다.
 
+2026-10-22: 캠페인 설정과 참여 기록을 기능별 패키지로 묶었다.
+
+```text
+campaign/
+  캠페인·활동 API, 설정 서비스와 Repository
+  발송 실행·승인 API, 실행 서비스와 Repository
+  domain/   Campaign, CampaignActivity, 발송 실행·대상 모델
+  dto/      설정·실행 요청과 응답, 참여 조건 설정
+entry/
+  참여 이력 조회 API, 조회 서비스와 Repository
+  ValidationController
+  domain/   CampaignActivityEntry와 상태
+  dto/      참여 건수·목록·이력 응답
+  validation/   참여 자격 검사와 조건별 전략
+```
+
+캠페인이 참여 조건을 정의하고 `entry.validation`이 이를 평가한다. 설정과 참여
+이력은 패키지를 구분했지만 기존 서비스·Repository 의존 관계는 유지한다.
+발송 실행은 캠페인 운영에 속하므로 `campaign`에 함께 두었다. 구매 저장을
+조율하는 `commandprocessing`, 구매 집계·대사와 재고 동기화는 이번 범위에서
+옮기지 않았다. 관련 테스트와 CI의 필수 통합 테스트 경로도 함께 변경했다.
+HTTP 경로, JPA 엔티티·테이블 이름, 스케줄과 트랜잭션 경계는 유지한다.
+
 | Style | Example | Reading impact |
 |---|---|---|
 | Layer package | `controller`, `service`, `repository`, `domain/dto` | Easy to find Spring stereotypes, but business boundary is not visible from the package tree. |
-| Feature package | `coupon`, `catalog`, `review`, `commandprocessing` | Related code can be followed within the feature or processing boundary. |
+| Feature package | `coupon`, `catalog`, `review`, `campaign`, `entry`, `commandprocessing` | Related code can be followed within the feature or processing boundary. |
 | Partial domain package | `domain/campaignactivity`, `service/purchase` | Some business concepts are grouped, but services still cross several concepts. |
 
 This is a layered Spring application with partial feature packaging, not a full DDD or hexagonal package layout. The coupon package is an incremental grouping of related code, not an enforced bounded context. The meaningful architecture is service/module ownership and dependency direction. Packages are useful when they make those boundaries easier to read.

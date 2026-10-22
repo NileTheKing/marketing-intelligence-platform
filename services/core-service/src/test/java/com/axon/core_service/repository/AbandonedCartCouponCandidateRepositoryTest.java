@@ -1,5 +1,9 @@
 package com.axon.core_service.repository;
 
+import com.axon.core_service.campaign.CampaignRepository;
+
+import com.axon.core_service.campaign.CampaignActivityRepository;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.axon.core_service.domain.marketing.AbandonedCartCouponCampaign;
@@ -7,10 +11,10 @@ import com.axon.core_service.domain.marketing.AbandonedCartCouponCandidate;
 import com.axon.core_service.domain.marketing.AbandonedCartCouponCandidateStatus;
 import com.axon.core_service.domain.marketing.MarketingAction;
 import com.axon.core_service.domain.marketing.RewardType;
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
-import com.axon.core_service.domain.campaignactivity.CouponDeliveryMode;
-import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.campaign.domain.CouponDeliveryMode;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
 import com.axon.messaging.CampaignActivityType;
 import java.time.LocalDateTime;
 import java.util.List;

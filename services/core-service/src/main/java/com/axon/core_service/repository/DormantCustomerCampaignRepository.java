@@ -20,8 +20,8 @@ public interface DormantCustomerCampaignRepository extends JpaRepository<Dormant
             + "and (c.campaignActivity.campaign.startAt is null or c.campaignActivity.campaign.startAt <= :now) "
             + "and (c.campaignActivity.campaign.endAt is null or c.campaignActivity.campaign.endAt >= :now)")
     List<DormantCustomerCampaign> findExecutableCampaigns(
-            @Param("active") com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus active,
-            @Param("mode") com.axon.core_service.domain.campaignactivity.CouponDeliveryMode mode,
+            @Param("active") com.axon.core_service.campaign.dto.CampaignActivityStatus active,
+            @Param("mode") com.axon.core_service.campaign.domain.CouponDeliveryMode mode,
             @Param("now") LocalDateTime now);
 
     @Query("select case when count(c) > 0 then true else false end from DormantCustomerCampaign c "
@@ -33,7 +33,7 @@ public interface DormantCustomerCampaignRepository extends JpaRepository<Dormant
             + "and (c.campaignActivity.campaign.startAt is null or c.campaignActivity.campaign.startAt <= :now) "
             + "and (c.campaignActivity.campaign.endAt is null or c.campaignActivity.campaign.endAt >= :now)")
     boolean existsExecutableById(@Param("id") Long id,
-            @Param("active") com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus active,
-            @Param("mode") com.axon.core_service.domain.campaignactivity.CouponDeliveryMode mode,
+            @Param("active") com.axon.core_service.campaign.dto.CampaignActivityStatus active,
+            @Param("mode") com.axon.core_service.campaign.domain.CouponDeliveryMode mode,
             @Param("now") LocalDateTime now);
 }

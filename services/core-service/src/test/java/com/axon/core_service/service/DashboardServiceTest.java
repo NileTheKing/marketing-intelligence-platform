@@ -1,13 +1,13 @@
 package com.axon.core_service.service;
 
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.domain.dashboard.DashboardPeriod;
 import com.axon.core_service.domain.dashboard.FunnelStep;
 import com.axon.core_service.domain.dto.dashboard.DashboardResponse;
 import com.axon.core_service.domain.dto.dashboard.GlobalDashboardResponse;
-import com.axon.core_service.repository.CampaignActivityRepository;
-import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.campaign.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignRepository;
 import com.axon.core_service.repository.CouponAttributionRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.domain.dto.dashboard.PurchaseAggregate;

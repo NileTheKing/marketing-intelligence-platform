@@ -4,12 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.axon.core_service.domain.campaign.Campaign;
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
-import com.axon.core_service.domain.campaignactivity.CampaignActivityRun;
-import com.axon.core_service.repository.CampaignActivityRepository;
-import com.axon.core_service.repository.CampaignActivityRunRepository;
-import com.axon.core_service.repository.CampaignRepository;
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.campaign.domain.CampaignActivityRun;
+import com.axon.core_service.campaign.CampaignActivityRepository;
+import com.axon.core_service.campaign.CampaignActivityRunRepository;
+import com.axon.core_service.campaign.CampaignRepository;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

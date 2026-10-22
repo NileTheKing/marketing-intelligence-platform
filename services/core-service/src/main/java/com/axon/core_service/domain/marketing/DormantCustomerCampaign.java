@@ -1,6 +1,6 @@
 package com.axon.core_service.domain.marketing;
 
-import com.axon.core_service.domain.campaignactivity.CampaignActivity;
+import com.axon.core_service.campaign.domain.CampaignActivity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;

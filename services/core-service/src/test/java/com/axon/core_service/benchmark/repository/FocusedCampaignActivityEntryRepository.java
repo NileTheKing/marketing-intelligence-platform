@@ -1,6 +1,6 @@
 package com.axon.core_service.benchmark.repository;
 
-import com.axon.core_service.repository.CampaignActivityEntryRepository;
+import com.axon.core_service.entry.CampaignActivityEntryRepository;
 import org.springframework.context.annotation.Profile;
 
 /** Restricts the focused HTTP benchmark context to the history repository. */

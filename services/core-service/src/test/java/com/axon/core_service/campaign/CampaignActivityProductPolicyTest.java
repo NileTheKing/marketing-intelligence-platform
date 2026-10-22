@@ -1,0 +1,84 @@
+package com.axon.core_service.campaign;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.axon.core_service.campaign.domain.Campaign;
+import com.axon.core_service.campaign.dto.CampaignActivityRequest;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
+import com.axon.core_service.catalog.domain.Product;
+import com.axon.core_service.entry.CampaignActivityEntryRepository;
+import com.axon.core_service.coupon.CouponRepository;
+import com.axon.core_service.repository.MarketingActionRepository;
+import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
+import com.axon.core_service.repository.DormantCustomerCampaignRepository;
+import com.axon.core_service.catalog.ProductRepository;
+import com.axon.messaging.CampaignActivityType;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
+
+class CampaignActivityProductPolicyTest {
+
+    @Test
+    void activeFcfsRejectsAProductThatIsAlsoSellableInTheNormalShop() {
+        CampaignRepository campaignRepository = mock(CampaignRepository.class);
+        ProductRepository productRepository = mock(ProductRepository.class);
+        CampaignActivityService service = service(campaignRepository, productRepository, mock(CampaignActivityRepository.class));
+        Product normalProduct = new Product("normal", 10L, BigDecimal.TEN, "TECH", null, null, false);
+        when(campaignRepository.findById(1L)).thenReturn(Optional.of(mock(Campaign.class)));
+        when(productRepository.findById(2L)).thenReturn(Optional.of(normalProduct));
+
+        assertThatThrownBy(() -> service.createCampaignActivity(1L, activeFcfsRequest(2L)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("campaign-only");
+    }
+
+    @Test
+    void activeFcfsRejectsASecondActivityUsingTheSameDedicatedProduct() {
+        CampaignRepository campaignRepository = mock(CampaignRepository.class);
+        ProductRepository productRepository = mock(ProductRepository.class);
+        CampaignActivityRepository activityRepository = mock(CampaignActivityRepository.class);
+        CampaignActivityService service = service(campaignRepository, productRepository, activityRepository);
+        Product campaignProduct = new Product("campaign", 10L, BigDecimal.TEN, "TECH", null, null, true);
+        ReflectionTestUtils.setField(campaignProduct, "id", 2L);
+        when(campaignRepository.findById(1L)).thenReturn(Optional.of(mock(Campaign.class)));
+        when(productRepository.findById(2L)).thenReturn(Optional.of(campaignProduct));
+        when(productRepository.findByIdWithPessimisticLock(2L)).thenReturn(Optional.of(campaignProduct));
+        when(activityRepository.existsByProduct_IdAndStatusAndActivityType(2L,
+                CampaignActivityStatus.ACTIVE, CampaignActivityType.FIRST_COME_FIRST_SERVE)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createCampaignActivity(1L, activeFcfsRequest(2L)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("only one ACTIVE");
+        verify(productRepository).findByIdWithPessimisticLock(2L);
+    }
+
+    private CampaignActivityService service(CampaignRepository campaignRepository, ProductRepository productRepository,
+            CampaignActivityRepository activityRepository) {
+        return new CampaignActivityService(campaignRepository, activityRepository,
+                mock(CampaignActivityEntryRepository.class), productRepository, mock(CouponRepository.class),
+                mock(MarketingActionRepository.class), mock(AbandonedCartCouponCampaignRepository.class),
+                mock(DormantCustomerCampaignRepository.class),
+                mock(StringRedisTemplate.class));
+    }
+
+    private CampaignActivityRequest activeFcfsRequest(Long productId) {
+        return CampaignActivityRequest.builder()
+                .name("FCFS")
+                .limitCount(10)
+                .status(CampaignActivityStatus.ACTIVE)
+                .startDate(LocalDateTime.now())
+                .endDate(LocalDateTime.now().plusDays(1))
+                .activityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .productId(productId)
+                .price(BigDecimal.TEN)
+                .quantity(1)
+                .build();
+    }
+}

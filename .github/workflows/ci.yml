@@ -34,8 +34,8 @@ jobs:
         run: |
           bash scripts/ci/assert-test-suite-ran.sh \
             services/core-service/build/test-results/test/TEST-com.axon.core_service.service.PurchaseFlowIntegrationTest.xml \
-            services/core-service/build/test-results/test/TEST-com.axon.core_service.service.CampaignRunWorkflowIntegrationTest.xml \
-            services/core-service/build/test-results/test/TEST-com.axon.core_service.controller.CampaignActivityHttpDbIntegrationTest.xml
+            services/core-service/build/test-results/test/TEST-com.axon.core_service.campaign.CampaignRunWorkflowIntegrationTest.xml \
+            services/core-service/build/test-results/test/TEST-com.axon.core_service.campaign.CampaignActivityHttpDbIntegrationTest.xml
 
       - name: Test entry-service
         working-directory: services/entry-service
