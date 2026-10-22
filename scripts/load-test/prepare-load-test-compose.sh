@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Oracle VM Docker Compose baseline wrapper.
-# Keeps the original k8s-era prepare-load-test.sh unchanged for portfolio
-# reproduction, while supplying the current Compose defaults.
+# Supplies Compose defaults and invokes prepare-load-test.sh, the shared
+# MySQL/Redis/JWT preparation implementation.
 
 set -euo pipefail
 

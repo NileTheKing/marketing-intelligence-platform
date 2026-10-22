@@ -70,6 +70,7 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 ### 운영과 재현 절차
 
 추가 Compose 설정은 [파일별 용도와 실행 예시](../infrastructure/compose/README.md)를 참고한다.
+개발·운영 도구는 [스크립트 안내](../scripts/README.md)에서 찾을 수 있다.
 과거 배포 설정은 [보관 자료](../archive/README.md)에서 찾을 수 있다.
 
 | 문서 | 상태 | 내용 |
@@ -100,6 +101,10 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
+| [2025년 개발 일지](archive/development-log-2025-11.md) | legacy | 초기 대시보드 개발과 당시 운영 준비 기록 |
+| [초기 성능 개선 계획](archive/performance-improvement-plan.md) | legacy | 2025년 추정·목표 수치와 설계 제안 |
+| [과거 코호트 배치 설명](archive/cohort-batch-flow-explained.md) | legacy | 당시 테스트 스케줄과 계산 설명. 현재 스케줄·성과와 구분 |
+| [과거 대시보드 스크립트 안내](archive/dashboard-scripts-readme.md) | legacy | 초기 도구 안내와 당시 성능 주장 보존 |
 | [대시보드 개발 기록 (2025-11-18)](archive/dev-log-2025-11-18-dashboard-architecture.md) | reference | 당시 구현과 의사결정. 현재 상태와 구분 |
 | [Fluentd 행동 로그 전환 검토](archive/behavior-event-fluentd-plan.md) | legacy | 현재는 Kafka Connect→ES 사용 |
 | [과거 행동 SDK 안내](archive/behavior-tracker.md) | superseded | 이전 API·토픽·초기화 예시. 현재 계약 아님 |

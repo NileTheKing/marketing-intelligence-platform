@@ -34,4 +34,7 @@ __pycache__/
 .factorypath
 # Private career documents
 docs/private/
+
+# Runtime uploads are local data, not source files
+/core-service/uploads/
 .codex/

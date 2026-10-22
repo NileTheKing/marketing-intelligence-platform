@@ -19,11 +19,13 @@ Use these scripts for the current Oracle VM Compose baseline:
 - `scripts/load-test/run-baseline-compose.sh`
 - `scripts/load-test/check-results-compose.sh`
 
-Keep these existing scripts as historical/k8s reproduction references:
+The following scripts are historical K8s references:
 
-- `scripts/load-test/prepare-load-test.sh`
-- `scripts/load-test/check-results.sh`
-- `scripts/load-test/monitor-load-test.sh`
+- `archive/k8s/scripts/check-results.sh`
+- `archive/k8s/scripts/monitor-load-test.sh`
+
+`scripts/load-test/prepare-load-test.sh` remains active: the Compose preparation
+wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only tools.
 
 ## CI/CD Execution Policy
 

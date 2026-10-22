@@ -51,7 +51,7 @@ services:
     networks:
       - axon-network
     volumes:
-      - ./kafka-init/create-topics.sh:/create-topics.sh:ro
+      - ./infrastructure/kafka/init/create-topics.sh:/create-topics.sh:ro
     entrypoint: ["/bin/bash", "/create-topics.sh"]
     restart: "no"
 

@@ -5,8 +5,8 @@ Elasticsearch and Redis of the local compose stack.
 Everything is generated relative to the moment the script runs, because the dashboards query
 windows such as "the last 30 days". The same --seed always produces the same data.
 
-    python3 scripts/demo-seed/seed.py --users 5000          # small trial
-    python3 scripts/demo-seed/seed.py --users 200000        # full demo (~6M behavior events)
+    python3 scripts/demo/seed.py --users 5000          # small trial
+    python3 scripts/demo/seed.py --users 200000        # full demo (~6M behavior events)
 
 The script truncates the demo-owned MySQL tables, deletes the behavior-event index and the FCFS
 Redis keys before loading. Stdlib only.

@@ -20,3 +20,6 @@ seeding_debug.log
 
 # Historical deployment material is not application build input
 archive
+
+# Runtime uploads do not belong in application images
+**/uploads

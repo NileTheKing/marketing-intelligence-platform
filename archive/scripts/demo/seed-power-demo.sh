@@ -133,8 +133,8 @@ echo "  ⏳ Waiting for Kafka processing (5s)..."
 sleep 5
 export DB_PASS=$DB_PASS
 # 400일 전으로 이동시켜 365일 LTV가 오늘 기준 과거 데이터가 되도록 함
-bash core-service/scripts/time-travel-activity.sh 11 400 > /dev/null
-bash core-service/scripts/generate-ltv-simulation.sh 11 > /dev/null
+bash scripts/demo/dashboard/time-travel-activity.sh 11 400 > /dev/null
+bash scripts/demo/dashboard/generate-ltv-simulation.sh 11 > /dev/null
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🚀 Step 4: Hybrid Performance Seeding (Heroes & Backgrounds)

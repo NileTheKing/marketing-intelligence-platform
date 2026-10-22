@@ -1,5 +1,9 @@
 # 📊 Dashboard & Performance Test Scripts
 
+> Status: legacy (archived 2026-10-22)
+> 이전 대시보드 스크립트 안내를 보존한다. 본문의 가용성·동시성·처리량 주장은 당시 원본을 확인하지 않았으며 현재 성능 근거가 아니다. 현재 도구 위치는 [스크립트 안내](../../scripts/README.md)를 참고한다.
+> 현재 구조는 [시스템 지도](../architecture-map.md), 최근 DB 변경은 [DB·JPA 기록](../decisions/db-jpa-integrity-audit-2026-08-11.md)을 참고한다.
+
 이 디렉토리는 Axon 플랫폼의 비즈니스 로직 검증 및 대규모 트래픽 안정성 테스트를 위한 스크립트를 포함하고 있습니다.
 
 ## 📈 부하 테스트 및 안정성 검증 (Performance & Stability)

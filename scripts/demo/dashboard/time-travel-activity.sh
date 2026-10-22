@@ -72,5 +72,5 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "✅ Time Travel Complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Now you can run the LTV simulation script to generate repurchases:"
-echo "   ./core-service/scripts/generate-ltv-simulation.sh $ACTIVITY_ID"
+echo "   ./scripts/demo/dashboard/generate-ltv-simulation.sh $ACTIVITY_ID"
 echo ""

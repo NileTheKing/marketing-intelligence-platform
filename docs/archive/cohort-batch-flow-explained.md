@@ -1,5 +1,9 @@
 # 코호트 LTV 배치 처리 흐름 설명
 
+> Status: legacy (archived 2026-10-22)
+> 과거 배치 설명이다. 본문의 매분 스케줄은 당시 테스트 설정이며, 현재 CohortLtvBatchScheduler는 매월 1일 03:00에 실행한다. 성능 수치는 원본 측정 근거를 확인하기 전 현재 성과로 인용하지 않는다.
+> 현재 구조는 [시스템 지도](../architecture-map.md), 최근 DB 변경은 [DB·JPA 기록](../decisions/db-jpa-integrity-audit-2026-08-11.md)을 참고한다.
+
 ## 1. 핵심 개념
 
 ### 코호트(Cohort)란?

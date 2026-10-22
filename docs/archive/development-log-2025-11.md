@@ -1,5 +1,9 @@
 # Axon CDP 개발 일지 (2025.11.14 ~ 11.26)
 
+> Status: legacy (archived 2026-10-22)
+> 2025년 개발·계획 기록이다. 본문의 현재형 설명, 추정 목표와 완료 표시는 당시 기준이며 현재 구현·측정 결과로 사용하지 않는다.
+> 현재 구조는 [시스템 지도](../architecture-map.md), 최근 DB 변경은 [DB·JPA 기록](../decisions/db-jpa-integrity-audit-2026-08-11.md)을 참고한다.
+
 **기간**: 2025년 11월 14일 ~ 26일
 **목표**: Activity-level 실시간 대시보드 백엔드 구축 및 성능 최적화
 **상태**: ✅ 주요 목표 달성, 관측 가능성(Observability) 스택 구성 중

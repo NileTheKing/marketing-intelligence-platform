@@ -344,7 +344,7 @@ CREATE TABLE user_coupons (
   - `getEngageTriggerTypes()`, `getQualifyTriggerTypes()`에 새 이벤트 추가
 - [ ] **7. Database Schema** (core-service)
   - `raffle_applications`, `user_coupons` 등 테이블 추가
-- [ ] **8. Test Scripts** (core-service/scripts)
+- [ ] **8. Test Scripts** (scripts/demo/dashboard)
   - `generate-raffle-funnel.sh` 생성
 
 ---

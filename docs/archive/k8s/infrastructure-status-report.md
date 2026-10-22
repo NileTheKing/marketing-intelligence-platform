@@ -468,8 +468,8 @@ kubectl rollout restart statefulset axon-kafka-controller
 - Fluent Bit: `/Users/dem/Project/Axon/archive/k8s/helm/fluentbit-values.yaml`
 
 ### 프로젝트 문서
-- 성능 개선 계획: `core-service/docs/performance-improvement-plan.md`
-- 개발 로그: `core-service/docs/development-log-2025-11.md`
+- 성능 개선 계획: `docs/archive/performance-improvement-plan.md`
+- 개발 로그: `docs/archive/development-log-2025-11.md`
 
 ---
 
