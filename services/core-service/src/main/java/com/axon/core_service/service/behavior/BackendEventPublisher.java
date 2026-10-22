@@ -47,6 +47,8 @@ public class BackendEventPublisher {
 
         kafkaTemplate.send(KafkaTopics.COMMERCE_EVENT, message).whenComplete((result, ex) -> {
             if (ex != null) {
+                // 마케팅 분석용 이벤트는 일부 누락을 허용하며, 발행 실패로 구매를 재시도하지 않는다.
+                // 전달 보장이 필요한 업무에 사용하게 되면 Outbox 도입을 검토한다.
                 log.error("Failed to publish backend purchase event for userId={} activityId={}",
                         event.userId(), event.campaignActivityId(), ex);
             } else {
