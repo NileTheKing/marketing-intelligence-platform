@@ -428,4 +428,3 @@ Cross-cutting code stays at the root: `config`, `config/auth`, `aop`, `observabi
 ### Migration Progress
 
 - 2026-07-14: `commandprocessing` moved without behavior changes. This includes the Kafka consumer, command buffer, dispatcher, batch/typed strategies, command DLT routing, pipeline-metrics buffer import, and their focused tests. `CohortLtvBatchService` intentionally remains under Purchase ownership despite its historical `batch` package name.
-

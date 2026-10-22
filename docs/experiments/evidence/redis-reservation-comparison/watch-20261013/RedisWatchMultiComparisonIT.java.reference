@@ -1,0 +1,388 @@
+package com.axon.entry_service.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.concurrent.locks.LockSupport;
+import io.lettuce.core.api.StatefulConnection;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.springframework.context.ApplicationEventPublisher;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.utility.DockerImageName;
+
+/** Minimal correctness comparison for plain MULTI/EXEC and WATCH + MULTI/EXEC. */
+@Tag("redis-experiment")
+class RedisWatchMultiComparisonIT {
+
+    private static final String USERS = "campaign:902:users";
+    private static final String COUNTER = "campaign:902:counter";
+    private static final int LIMIT = 100;
+    private static final int REQUESTS = 300;
+    private static final int APP_REDIS_POOL_MAX_ACTIVE = 8;
+    private static final int[] CONCURRENCIES = {1, 16, 64};
+    private static final int REPETITIONS = 3;
+
+    private static GenericContainer<?> redisContainer;
+    private static String redisHost;
+    private static int redisPort;
+
+    @BeforeAll
+    static void startRedis() {
+        String externalPort = System.getenv("AXON_REDIS_TEST_PORT");
+        if (externalPort != null) {
+            redisHost = "127.0.0.1";
+            redisPort = Integer.parseInt(externalPort);
+            return;
+        }
+        redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+                .withExposedPorts(6379);
+        redisContainer.start();
+        redisHost = redisContainer.getHost();
+        redisPort = redisContainer.getMappedPort(6379);
+    }
+
+    @AfterAll
+    static void stopRedis() {
+        if (redisContainer != null) redisContainer.stop();
+    }
+
+    private LettuceConnectionFactory connectionFactory;
+    private StringRedisTemplate redis;
+    private RedisScript<Long> reservationScript;
+
+    @BeforeEach
+    void connect() {
+        GenericObjectPoolConfig<StatefulConnection<?, ?>> pool = new GenericObjectPoolConfig<>();
+        pool.setMaxTotal(APP_REDIS_POOL_MAX_ACTIVE);
+        pool.setMaxIdle(APP_REDIS_POOL_MAX_ACTIVE);
+        connectionFactory = new LettuceConnectionFactory(
+                new RedisStandaloneConfiguration(redisHost, redisPort),
+                LettucePoolingClientConfiguration.builder().poolConfig(pool).build());
+        connectionFactory.afterPropertiesSet();
+        redis = new StringRedisTemplate();
+        redis.setConnectionFactory(connectionFactory);
+        redis.afterPropertiesSet();
+        EntryReservationService service = new EntryReservationService(redis,
+                org.mockito.Mockito.mock(ApplicationEventPublisher.class));
+        @SuppressWarnings("unchecked")
+        RedisScript<Long> script = (RedisScript<Long>) ReflectionTestUtils.getField(service, "reservationScript");
+        reservationScript = script;
+    }
+
+    @AfterEach
+    void disconnect() {
+        if (connectionFactory != null) {
+            try (RedisConnection connection = connectionFactory.getConnection()) {
+                connection.serverCommands().flushAll();
+            }
+            connectionFactory.destroy();
+        }
+    }
+
+    @Test
+    void plainMultiExecCannotConditionOnDuplicateOrCapacity() {
+        plainMultiExecReserve("100");
+        plainMultiExecReserve("100");
+
+        assertThat(redis.opsForSet().size(USERS)).isEqualTo(1L);
+        assertThat(redis.opsForValue().get(COUNTER)).isEqualTo("2");
+
+        resetRedis();
+        redis.opsForValue().set(COUNTER, String.valueOf(LIMIT));
+        plainMultiExecReserve("101");
+
+        assertThat(redis.opsForSet().size(USERS)).isEqualTo(1L);
+        assertThat(redis.opsForValue().get(COUNTER)).isEqualTo(String.valueOf(LIMIT + 1));
+    }
+
+    @Test
+    void watchMultiExecPreservesLimitDuplicatesAndIdempotentRollbackUnderContention() throws Exception {
+        List<Attempt> outcomes = runConcurrentUniqueReservations();
+
+        assertThat(outcomes).filteredOn(Attempt.SUCCESS::equals).hasSize(LIMIT);
+        assertThat(outcomes).filteredOn(Attempt.SOLD_OUT::equals).hasSize(REQUESTS - LIMIT);
+        assertStateMatches(LIMIT);
+
+        String acceptedUser = redis.opsForSet().members(USERS).stream().findFirst().orElseThrow();
+        assertThat(watchReserve(acceptedUser, LIMIT)).isEqualTo(Attempt.DUPLICATE);
+        assertStateMatches(LIMIT);
+
+        assertThat(watchCancel(acceptedUser)).isTrue();
+        assertThat(watchCancel(acceptedUser)).isFalse();
+        assertStateMatches(LIMIT - 1);
+        assertThat(watchReserve("new-user", LIMIT)).isEqualTo(Attempt.SUCCESS);
+        assertStateMatches(LIMIT);
+    }
+
+    @Test
+    void compareCurrentLuaAndWatchMultiExecUnderTheSameLoad() throws Exception {
+        for (int concurrency : CONCURRENCIES) {
+            runBenchmark(BenchmarkStrategy.LUA, concurrency); // warmup; not included in summary
+            resetRedis();
+            runBenchmark(BenchmarkStrategy.WATCH_MULTI, concurrency); // warmup; not included in summary
+            resetRedis();
+
+            List<BenchmarkResult> lua = new ArrayList<>();
+            List<BenchmarkResult> watch = new ArrayList<>();
+            for (int repetition = 0; repetition < REPETITIONS; repetition++) {
+                BenchmarkStrategy first = repetition % 2 == 0
+                        ? BenchmarkStrategy.LUA : BenchmarkStrategy.WATCH_MULTI;
+                BenchmarkStrategy second = first == BenchmarkStrategy.LUA
+                        ? BenchmarkStrategy.WATCH_MULTI : BenchmarkStrategy.LUA;
+                resetRedis();
+                BenchmarkResult firstResult = runBenchmark(first, concurrency);
+                (first == BenchmarkStrategy.LUA ? lua : watch).add(firstResult);
+                resetRedis();
+                BenchmarkResult secondResult = runBenchmark(second, concurrency);
+                (second == BenchmarkStrategy.LUA ? lua : watch).add(secondResult);
+                resetRedis();
+            }
+
+            printBenchmarkSummary(BenchmarkStrategy.LUA, concurrency, lua);
+            printBenchmarkSummary(BenchmarkStrategy.WATCH_MULTI, concurrency, watch);
+        }
+    }
+
+    private List<Attempt> runConcurrentUniqueReservations() throws Exception {
+        int workers = Math.min(64, REQUESTS);
+        CountDownLatch ready = new CountDownLatch(workers);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+        try {
+            List<Callable<Attempt>> tasks = java.util.stream.IntStream.range(0, REQUESTS)
+                    .mapToObj(index -> (Callable<Attempt>) () -> {
+                        if (index < workers) ready.countDown();
+                        start.await();
+                        return watchReserve("user-" + index, LIMIT);
+                    })
+                    .toList();
+            List<Future<Attempt>> futures = tasks.stream().map(executor::submit).toList();
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            List<Attempt> outcomes = new ArrayList<>(REQUESTS);
+            for (Future<Attempt> future : futures) outcomes.add(future.get());
+            return outcomes;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private Attempt watchReserve(String userId, int limit) {
+        return watchReserve(userId, limit, null, null);
+    }
+
+    private Attempt watchReserve(String userId, int limit, AtomicLong abortRetries, AtomicLong commandCalls) {
+        int retries = 0;
+        while (true) {
+            Attempt result = redis.execute(session(operations -> {
+                count(commandCalls); // WATCH
+                operations.watch(List.of(USERS, COUNTER));
+                count(commandCalls); // SISMEMBER
+                if (Boolean.TRUE.equals(operations.opsForSet().isMember(USERS, userId))) {
+                    count(commandCalls); // UNWATCH
+                    operations.unwatch();
+                    return Attempt.DUPLICATE;
+                }
+                count(commandCalls); // GET
+                String rawCount = operations.opsForValue().get(COUNTER);
+                long count = rawCount == null ? 0 : Long.parseLong(rawCount);
+                if (limit > 0 && count >= limit) {
+                    count(commandCalls); // UNWATCH
+                    operations.unwatch();
+                    return Attempt.SOLD_OUT;
+                }
+                count(commandCalls); // MULTI
+                operations.multi();
+                count(commandCalls); // SADD
+                operations.opsForSet().add(USERS, userId);
+                count(commandCalls); // INCR
+                operations.opsForValue().increment(COUNTER);
+                count(commandCalls); // EXEC
+                List<Object> executed = operations.exec();
+                return executed == null || executed.isEmpty() ? Attempt.RETRY : Attempt.SUCCESS;
+            }));
+            if (result != Attempt.RETRY) return result;
+            if (abortRetries != null) abortRetries.incrementAndGet();
+            if (++retries > 1_000) throw new IllegalStateException("WATCH retry limit exceeded");
+            LockSupport.parkNanos(ThreadLocalRandom.current().nextLong(1_000_000L, 3_000_001L));
+        }
+    }
+
+    private boolean watchCancel(String userId) {
+        while (true) {
+            Boolean removed = redis.execute(session(operations -> {
+                operations.watch(List.of(USERS, COUNTER));
+                if (!Boolean.TRUE.equals(operations.opsForSet().isMember(USERS, userId))) {
+                    operations.unwatch();
+                    return false;
+                }
+                operations.multi();
+                operations.opsForSet().remove(USERS, userId);
+                operations.opsForValue().decrement(COUNTER);
+                List<Object> executed = operations.exec();
+                return executed == null || executed.isEmpty() ? null : true;
+            }));
+            if (removed != null) return removed;
+        }
+    }
+
+    private void plainMultiExecReserve(String userId) {
+        redis.execute(session(operations -> {
+            operations.multi();
+            operations.opsForSet().add(USERS, userId);
+            operations.opsForValue().increment(COUNTER);
+            operations.exec();
+            return null;
+        }));
+    }
+
+    private static <T> SessionCallback<T> session(Function<RedisOperations<String, String>, T> action) {
+        return new SessionCallback<>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <K, V> T execute(RedisOperations<K, V> operations) {
+                return action.apply((RedisOperations<String, String>) operations);
+            }
+        };
+    }
+
+    private void assertStateMatches(long expected) {
+        assertThat(redis.opsForSet().size(USERS)).isEqualTo(expected);
+        assertThat(redis.opsForValue().get(COUNTER)).isEqualTo(String.valueOf(expected));
+    }
+
+    private void resetRedis() {
+        try (RedisConnection connection = connectionFactory.getConnection()) {
+            connection.serverCommands().flushAll();
+        }
+    }
+
+    private BenchmarkResult runBenchmark(BenchmarkStrategy strategy, int workers) throws Exception {
+        CountDownLatch ready = new CountDownLatch(workers);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicLong abortRetries = new AtomicLong();
+        AtomicLong commandCalls = new AtomicLong();
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+        try {
+            List<Callable<BenchmarkOutcome>> tasks = java.util.stream.IntStream.range(0, REQUESTS)
+                    .mapToObj(index -> (Callable<BenchmarkOutcome>) () -> {
+                        if (index < workers) ready.countDown();
+                        start.await();
+                        long began = System.nanoTime();
+                        String userId = "bench-user-" + index;
+                        Attempt outcome;
+                        if (strategy == BenchmarkStrategy.LUA) {
+                            commandCalls.incrementAndGet(); // one EVAL/EVALSHA request per reservation
+                            Long result = redis.execute(reservationScript, List.of(USERS, COUNTER),
+                                    userId, String.valueOf(LIMIT));
+                            outcome = result == null ? Attempt.RETRY
+                                    : result == -1L ? Attempt.DUPLICATE
+                                    : result == -2L ? Attempt.SOLD_OUT : Attempt.SUCCESS;
+                        } else {
+                            outcome = watchReserve(userId, LIMIT, abortRetries, commandCalls);
+                        }
+                        return new BenchmarkOutcome(outcome, System.nanoTime() - began);
+                    })
+                    .toList();
+            List<Future<BenchmarkOutcome>> futures = tasks.stream().map(executor::submit).toList();
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            long wallStart = System.nanoTime();
+            start.countDown();
+            List<BenchmarkOutcome> outcomes = new ArrayList<>(REQUESTS);
+            for (Future<BenchmarkOutcome> future : futures) outcomes.add(future.get());
+            long elapsed = System.nanoTime() - wallStart;
+            List<Long> latencies = outcomes.stream().map(BenchmarkOutcome::latencyNanos).sorted().toList();
+            List<Long> successLatencies = outcomes.stream()
+                    .filter(outcome -> outcome.result() == Attempt.SUCCESS)
+                    .map(BenchmarkOutcome::latencyNanos).sorted().toList();
+            long successes = successLatencies.size();
+            long soldOut = outcomes.stream().filter(outcome -> outcome.result() == Attempt.SOLD_OUT).count();
+            long participants = redis.opsForSet().size(USERS);
+            String rawCounter = redis.opsForValue().get(COUNTER);
+            long counter = rawCounter == null ? 0 : Long.parseLong(rawCounter);
+            assertThat(successes).isEqualTo(LIMIT);
+            assertThat(soldOut).isEqualTo(REQUESTS - LIMIT);
+            assertThat(participants).isEqualTo(LIMIT);
+            assertThat(counter).isEqualTo(LIMIT);
+            double throughput = REQUESTS / (elapsed / 1_000_000_000.0);
+            double averageLatencyMs = outcomes.stream().mapToLong(BenchmarkOutcome::latencyNanos).average()
+                    .orElseThrow() / 1_000_000.0;
+            double p95LatencyMs = latencies.get((int) Math.ceil(latencies.size() * .95) - 1) / 1_000_000.0;
+            double successP95LatencyMs = successLatencies
+                    .get((int) Math.ceil(successLatencies.size() * .95) - 1) / 1_000_000.0;
+            return new BenchmarkResult(throughput, averageLatencyMs, p95LatencyMs, successP95LatencyMs,
+                    abortRetries.get(), commandCalls.get());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private static void count(AtomicLong commandCalls) {
+        if (commandCalls != null) commandCalls.incrementAndGet();
+    }
+
+    private static void printBenchmarkSummary(BenchmarkStrategy strategy, int workers,
+                                              List<BenchmarkResult> results) {
+        double throughputAvg = results.stream().mapToDouble(BenchmarkResult::throughput).average().orElseThrow();
+        double averageLatencyAvg = results.stream().mapToDouble(BenchmarkResult::averageLatencyMs)
+                .average().orElseThrow();
+        double p95Avg = results.stream().mapToDouble(BenchmarkResult::p95LatencyMs).average().orElseThrow();
+        double successP95Avg = results.stream().mapToDouble(BenchmarkResult::successP95LatencyMs)
+                .average().orElseThrow();
+        double abortsAvg = results.stream().mapToLong(BenchmarkResult::abortRetries).average().orElseThrow();
+        double commandsAvg = results.stream().mapToLong(BenchmarkResult::commandCalls).average().orElseThrow();
+        System.out.printf("REDIS_TX_BENCH strategy=%s pool_max_active=%d warmups=1 repetitions=%d requests=%d limit=%d workers=%d"
+                        + " correctness=asserted_each_run"
+                        + " throughput_avg=%.1f throughput_range=%.1f..%.1f"
+                        + " avg_latency_ms=%.3f p95_latency_ms_avg=%.3f p95_latency_range=%.3f..%.3f"
+                        + " success_p95_latency_ms_avg=%.3f success_p95_latency_range=%.3f..%.3f"
+                        + " watch_abort_retries_avg=%.1f watch_abort_retries_range=%d..%d"
+                        + " redis_command_calls_per_request_avg=%.3f%n",
+                strategy, APP_REDIS_POOL_MAX_ACTIVE, results.size(), REQUESTS, LIMIT, workers,
+                throughputAvg,
+                results.stream().mapToDouble(BenchmarkResult::throughput).min().orElseThrow(),
+                results.stream().mapToDouble(BenchmarkResult::throughput).max().orElseThrow(),
+                averageLatencyAvg, p95Avg,
+                results.stream().mapToDouble(BenchmarkResult::p95LatencyMs).min().orElseThrow(),
+                results.stream().mapToDouble(BenchmarkResult::p95LatencyMs).max().orElseThrow(),
+                successP95Avg,
+                results.stream().mapToDouble(BenchmarkResult::successP95LatencyMs).min().orElseThrow(),
+                results.stream().mapToDouble(BenchmarkResult::successP95LatencyMs).max().orElseThrow(),
+                abortsAvg,
+                results.stream().mapToLong(BenchmarkResult::abortRetries).min().orElseThrow(),
+                results.stream().mapToLong(BenchmarkResult::abortRetries).max().orElseThrow(),
+                commandsAvg / REQUESTS);
+    }
+
+    private enum Attempt { SUCCESS, DUPLICATE, SOLD_OUT, RETRY }
+    private enum BenchmarkStrategy { LUA, WATCH_MULTI }
+    private record BenchmarkOutcome(Attempt result, long latencyNanos) { }
+    private record BenchmarkResult(double throughput, double averageLatencyMs, double p95LatencyMs,
+                                   double successP95LatencyMs,
+                                   long abortRetries, long commandCalls) { }
+}

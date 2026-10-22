@@ -17,6 +17,8 @@
 
 ## 실험과 개발 기록
 
+- [Redis 선착순 판정 비교](experiments/dev-log-2026-10-21-redis-reservation-comparison.md): 개별 호출, WATCH, Lua
+
 - [DB·JPA 개선과 JDBC 벌크 저장 적용](decisions/db-jpa-integrity-audit-2026-08-11.md)
 - [장바구니 이탈 후보 조회와 쿠폰 발급 측정](experiments/abandoned-cart-coupon-candidate-query-v1-plan.md)
 - [인프라·애플리케이션 병목 진단](experiments/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md): nginx 연결 제한, CPU 할당과 부하 측정 조건
