@@ -44,7 +44,7 @@ jobs:
       - name: Verify entry integration suite executed
         run: |
           bash scripts/ci/assert-test-suite-ran.sh \
-            services/entry-service/build/test-results/test/TEST-com.axon.entry_service.service.EntryReservationServiceRedisIntegrationTest.xml
+            services/entry-service/build/test-results/test/TEST-com.axon.entry_service.reservation.EntryReservationServiceRedisIntegrationTest.xml
 
       - name: Validate Docker Compose config
         run: docker compose -f compose.app.yml config --quiet

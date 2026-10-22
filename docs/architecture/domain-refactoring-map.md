@@ -62,6 +62,32 @@ coupon/
 담당하므로 `commandprocessing`에 유지하고, 구매 매출 귀속 조회인
 `CouponAttributionRepository`도 이번 이동에 포함하지 않는다.
 
+2026-10-22: Entry도 기능별로 묶었다. HTTP 경로, Redis 키·TTL, Kafka 메시지와
+처리 순서는 유지한다. 각 기능의 테스트도 같은 패키지로 옮겼다.
+
+```text
+entry_service/
+  reservation/        참여 요청, 검증, Redis 선착순 판정과 예약 만료 처리
+    domain/           예약 결과와 활동 메타데이터
+    dto/              참여 요청과 활동 조회 응답
+    event/            예약 승인 이벤트
+  payment/            결제 준비·확정과 CheckoutTokenService
+    dto/              결제 요청·응답
+  behavior/           행동 수집, 정규화와 Kafka 발행
+    domain/           행동 이벤트 모델
+    dto/              행동 수집 요청
+  messaging/          참여·결제가 함께 사용하는 Kafka 명령 발행
+  config/             인증, 클라이언트 설정과 진단용 AOP
+  observability/      요청 상관관계 필터
+  dto/payment/        기존 Redis 직렬화 계약인 PaymentApprovalPayload
+```
+
+`CheckoutTokenService`는 기존 `ReservationTokenService`의 이름만 바꿨으며,
+예약 토큰·승인 토큰·확정 중복 실행 방지 책임은 나누지 않았다. 기존 Spring bean
+이름도 유지한다. `PaymentApprovalPayload`는 Redis JSON에 클래스명이 포함되므로
+패키지 이동에서 제외했고, 공통 모듈의 `ReservationTokenPayload`도 변경하지 않았다.
+진단 AOP와 CI의 필수 Redis 통합 테스트 경로는 새 패키지를 따르도록 수정했다.
+
 | Style | Example | Reading impact |
 |---|---|---|
 | Layer package | `controller`, `service`, `repository`, `domain/dto` | Easy to find Spring stereotypes, but business boundary is not visible from the package tree. |
@@ -131,7 +157,7 @@ These are candidates, not mandatory package moves.
 
 | Context | Owns | Should not own | Current files touching it |
 |---|---|---|---|
-| Entry / Reservation | Redis slot claim, duplicate/sold-out/closed result, reservation token issuing. | Durable purchase persistence, dashboard aggregation. | `EntryController`, `EntryReservationService`, `ReservationTokenService`, `FastValidationService` |
+| Entry / Reservation | Redis slot claim, duplicate/sold-out/closed result, reservation token issuing. | Durable purchase persistence, dashboard aggregation. | `EntryController`, `EntryReservationService`, `CheckoutTokenService`, `FastValidationService` |
 | Payment Command | Payment prepare/confirm, approval token, Kafka command send. | Purchase history calculation, campaign dashboard. | `PaymentController`, `PaymentService`, `CampaignActivityProducerService` |
 | Campaign Operations | Campaign and campaign activity creation/update/status/filter/budget. | Kafka buffer management, Redis reservation internals. | `CampaignService`, `CampaignActivityService`, `CampaignActivity`, `Campaign` |
 | Activity Command Processing | Kafka batch intake, durable completion boundary, strategy execution, DLT on command failure. | HTTP controller validation, dashboard response formatting. | `CampaignActivityConsumerService`, `CampaignStrategy`, `BatchStrategy`, `FirstComeFirstServeStrategy`, `CouponStrategy`, `WebhookStrategy` |
@@ -148,7 +174,7 @@ These are candidates, not mandatory package moves.
 | File | Evidence | Risk | Small refactoring direction |
 |---|---|---|---|
 | `services/core-service/src/main/java/com/axon/core_service/service/DashboardService.java` | One service assembles activity, campaign, global dashboard, heatmap, GMV, ROAS, ranking, and ES error fallback. | Hard to test dashboard calculations independently; future metric changes can touch a large class. | Extract calculation helpers such as `DashboardMetricCalculator`; later extract query assemblers by dashboard level. |
-| `services/entry-service/src/main/java/com/axon/entry_service/service/entry/EntryApplicationService.java` | FCFS and coupon-entry use cases are intentionally orchestrated here after the controller extraction. | It is a central application-flow class, so unrelated activity flows must not accumulate here. | Keep controllers HTTP-only; split only if coupon and FCFS validation rules diverge materially. |
+| `services/entry-service/src/main/java/com/axon/entry_service/reservation/EntryApplicationService.java` | FCFS and coupon-entry use cases are intentionally orchestrated here after the controller extraction. | It is a central application-flow class, so unrelated activity flows must not accumulate here. | Keep controllers HTTP-only; split only if coupon and FCFS validation rules diverge materially. |
 | `services/core-service/src/main/java/com/axon/core_service/commandprocessing/CampaignActivityConsumerService.java` | Owns the Kafka batch listener and delegates dispatch/metrics. | A slow strategy holds the poll open, which is visible as Kafka lag. | Keep the listener thin; split a slow strategy by topic/group only when metrics justify it. |
 
 ### 4.2 Long Method

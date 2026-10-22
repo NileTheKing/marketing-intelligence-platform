@@ -8,7 +8,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
-import com.axon.entry_service.service.redisListener.ReservationExpirationListener;
+import com.axon.entry_service.reservation.ReservationExpirationListener;
 
 @org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest(properties = {

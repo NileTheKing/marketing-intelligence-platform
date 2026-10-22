@@ -1,6 +1,6 @@
 package com.axon.entry_service.config.diagnostic;
 
-import com.axon.entry_service.service.entry.EntryUseCaseResult;
+import com.axon.entry_service.reservation.EntryUseCaseResult;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.util.concurrent.TimeUnit;
@@ -21,15 +21,15 @@ public class EntryDiagnosticTimingAspect {
     private final MeterRegistry meterRegistry;
 
     @Around("""
-            execution(* com.axon.entry_service.service.entry.EntryApplicationService.createEntry(..)) ||
-            execution(* com.axon.entry_service.service.CampaignActivityMetaService.getMeta(..)) ||
-            execution(* com.axon.entry_service.service.payment.ReservationTokenService.generateDeterministicToken(..)) ||
-            execution(* com.axon.entry_service.service.payment.ReservationTokenService.getPayloadFromToken(..)) ||
-            execution(* com.axon.entry_service.service.payment.ReservationTokenService.issueToken(..)) ||
-            execution(* com.axon.entry_service.service.FastValidationService.fastValidation(..)) ||
-            execution(* com.axon.entry_service.service.CoreValidationService.isEligible(..)) ||
-            execution(* com.axon.entry_service.service.EntryReservationService.reserve(..)) ||
-            execution(* com.axon.entry_service.service.BackendEventPublisher.handleReservationApproved(..))
+            execution(* com.axon.entry_service.reservation.EntryApplicationService.createEntry(..)) ||
+            execution(* com.axon.entry_service.reservation.CampaignActivityMetaService.getMeta(..)) ||
+            execution(* com.axon.entry_service.payment.CheckoutTokenService.generateDeterministicToken(..)) ||
+            execution(* com.axon.entry_service.payment.CheckoutTokenService.getPayloadFromToken(..)) ||
+            execution(* com.axon.entry_service.payment.CheckoutTokenService.issueToken(..)) ||
+            execution(* com.axon.entry_service.reservation.FastValidationService.fastValidation(..)) ||
+            execution(* com.axon.entry_service.reservation.CoreValidationService.isEligible(..)) ||
+            execution(* com.axon.entry_service.reservation.EntryReservationService.reserve(..)) ||
+            execution(* com.axon.entry_service.behavior.BackendEventPublisher.handleReservationApproved(..))
             """)
     public Object timeEntryStage(ProceedingJoinPoint joinPoint) throws Throwable {
         String stage = resolveStage(joinPoint);
@@ -64,9 +64,9 @@ public class EntryDiagnosticTimingAspect {
         return switch (className + "." + methodName) {
             case "EntryApplicationService.createEntry" -> "entry_total";
             case "CampaignActivityMetaService.getMeta" -> "meta_lookup";
-            case "ReservationTokenService.generateDeterministicToken" -> "token_generate";
-            case "ReservationTokenService.getPayloadFromToken" -> "token_lookup";
-            case "ReservationTokenService.issueToken" -> "token_issue";
+            case "CheckoutTokenService.generateDeterministicToken" -> "token_generate";
+            case "CheckoutTokenService.getPayloadFromToken" -> "token_lookup";
+            case "CheckoutTokenService.issueToken" -> "token_issue";
             case "FastValidationService.fastValidation" -> "fast_validation";
             case "CoreValidationService.isEligible" -> "heavy_validation";
             case "EntryReservationService.reserve" -> "redis_reserve";

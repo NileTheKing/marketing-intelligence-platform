@@ -917,7 +917,7 @@ Use this section when turning the refactoring into a portfolio or interview stor
 4. Payment confirm success boundary clarification
 
 - Code evidence:
-  - `services/entry-service/src/main/java/com/axon/entry_service/service/payment/PaymentService.java`
+  - `services/entry-service/src/main/java/com/axon/entry_service/payment/PaymentService.java`
 - Current behavior:
   - Payment confirm waits for Kafka broker ack with bounded timeout.
   - It does not wait for core-service consumption or DB persistence.
@@ -1350,7 +1350,7 @@ Evidence:
 
 - `services/core-service/src/main/java/com/axon/core_service/config/auth/SecurityConfig.java:64-67` permits `/test/**`.
 - `services/entry-service/src/main/java/com/axon/entry_service/config/auth/SecurityConfig.java` also permits `/actuator/health`; test endpoint exposure should be checked similarly.
-- `services/entry-service/src/main/java/com/axon/entry_service/controller/TestReservationController.java` is explicitly test-only and uses mock metadata.
+- `services/entry-service/src/main/java/com/axon/entry_service/reservation/TestReservationController.java` is explicitly test-only and uses mock metadata.
 - `services/core-service/src/main/java/com/axon/core_service/scheduler/UserPurchaseScheduler.java:32-40` contains test-oriented batch parameters and comments.
 
 Why it matters:
