@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.review;
+package com.axon.core_service.review.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

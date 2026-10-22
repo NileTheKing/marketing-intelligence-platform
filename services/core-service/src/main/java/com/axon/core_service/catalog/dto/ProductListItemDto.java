@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.dto.product;
+package com.axon.core_service.catalog.dto;
 
 import java.math.BigDecimal;
 

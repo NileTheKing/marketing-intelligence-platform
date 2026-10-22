@@ -1,6 +1,6 @@
-package com.axon.core_service.repository;
+package com.axon.core_service.catalog;
 
-import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.catalog.domain.Product;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;

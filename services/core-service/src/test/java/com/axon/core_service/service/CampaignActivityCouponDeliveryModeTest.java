@@ -25,7 +25,7 @@ import com.axon.core_service.repository.CampaignRepository;
 import com.axon.core_service.coupon.CouponRepository;
 import com.axon.core_service.repository.DormantCustomerCampaignRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
-import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.catalog.ProductRepository;
 import com.axon.messaging.CampaignActivityType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

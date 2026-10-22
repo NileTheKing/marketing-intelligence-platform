@@ -5,7 +5,7 @@ import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.service.ProductService;
+import com.axon.core_service.catalog.ProductService;
 import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

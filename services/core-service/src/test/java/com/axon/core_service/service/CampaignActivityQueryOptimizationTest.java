@@ -16,7 +16,7 @@ import com.axon.core_service.coupon.CouponRepository;
 import com.axon.core_service.repository.MarketingActionRepository;
 import com.axon.core_service.repository.AbandonedCartCouponCampaignRepository;
 import com.axon.core_service.repository.DormantCustomerCampaignRepository;
-import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.catalog.ProductRepository;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,6 @@
-package com.axon.core_service.repository;
+package com.axon.core_service.review;
 
-import com.axon.core_service.domain.review.ProductReview;
+import com.axon.core_service.review.domain.ProductReview;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;

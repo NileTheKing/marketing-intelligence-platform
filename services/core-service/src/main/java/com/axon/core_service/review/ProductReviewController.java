@@ -1,10 +1,9 @@
-package com.axon.core_service.controller;
+package com.axon.core_service.review;
 
 import com.axon.core_service.domain.user.CustomOAuth2User;
-import com.axon.core_service.domain.dto.review.ProductReviewCreateRequest;
-import com.axon.core_service.domain.dto.review.ProductReviewResponse;
-import com.axon.core_service.domain.dto.review.ProductReviewSliceResponse;
-import com.axon.core_service.service.ProductReviewService;
+import com.axon.core_service.review.dto.ProductReviewCreateRequest;
+import com.axon.core_service.review.dto.ProductReviewResponse;
+import com.axon.core_service.review.dto.ProductReviewSliceResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import lombok.RequiredArgsConstructor;

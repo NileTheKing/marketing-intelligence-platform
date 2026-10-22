@@ -1,6 +1,6 @@
-package com.axon.core_service.repository;
+package com.axon.core_service.review;
 
-import com.axon.core_service.domain.review.ProductReview;
+import com.axon.core_service.review.domain.ProductReview;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

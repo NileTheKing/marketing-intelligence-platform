@@ -9,7 +9,7 @@ import com.axon.core_service.domain.dto.campaignactivity.filter.converter.Filter
 import com.axon.core_service.domain.marketing.MarketingAction;
 import com.axon.core_service.domain.marketing.AbandonedCartCouponCampaign;
 import com.axon.core_service.domain.marketing.DormantCustomerCampaign;
-import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.catalog.domain.Product;
 import com.axon.messaging.CampaignActivityType;
 import jakarta.persistence.*;
 import lombok.*;

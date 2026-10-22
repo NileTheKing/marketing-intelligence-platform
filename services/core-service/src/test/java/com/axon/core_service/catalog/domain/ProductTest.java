@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.product;
+package com.axon.core_service.catalog.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

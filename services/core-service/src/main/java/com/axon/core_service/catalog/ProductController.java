@@ -1,8 +1,7 @@
-package com.axon.core_service.controller;
+package com.axon.core_service.catalog;
 
-import com.axon.core_service.domain.product.Product;
-import com.axon.core_service.domain.dto.product.ProductListResponse;
-import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.catalog.domain.Product;
+import com.axon.core_service.catalog.dto.ProductListResponse;
 import com.axon.core_service.service.StoreViewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

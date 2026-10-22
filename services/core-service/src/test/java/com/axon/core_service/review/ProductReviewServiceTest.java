@@ -1,16 +1,14 @@
-package com.axon.core_service.service.review;
+package com.axon.core_service.review;
 
-import com.axon.core_service.domain.dto.review.ProductReviewCreateRequest;
+import com.axon.core_service.review.dto.ProductReviewCreateRequest;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
-import com.axon.core_service.domain.review.ProductReview;
+import com.axon.core_service.review.domain.ProductReview;
 import com.axon.core_service.exception.BusinessConflictException;
 import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.exception.ResourceNotFoundException;
-import com.axon.core_service.repository.ProductRepository;
-import com.axon.core_service.repository.ProductReviewRepository;
+import com.axon.core_service.catalog.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.service.ProductReviewService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;

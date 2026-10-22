@@ -88,10 +88,29 @@ entry_service/
 패키지 이동에서 제외했고, 공통 모듈의 `ReservationTokenPayload`도 변경하지 않았다.
 진단 AOP와 CI의 필수 Redis 통합 테스트 경로는 새 패키지를 따르도록 수정했다.
 
+2026-10-22: 상품과 상품 후기도 기능별로 묶었다.
+
+```text
+catalog/
+  ProductController, ProductService, ProductRepository
+  domain/   Product
+  dto/      상품 목록 응답
+review/
+  ProductReviewController, ProductReviewService, ProductReviewRepository
+  domain/   ProductReview
+  dto/      후기 작성 요청과 조회 응답
+```
+
+관련 테스트도 같은 기능 패키지로 옮겼다. 상품 재고 동기화는 `ProductService`에,
+구매 여부 확인과 후기 중복 방지는 `ProductReviewService`에 그대로 유지한다.
+쇼핑 화면 조합은 `StoreViewService`에 남기며, 캠페인 실행 승인인
+`CampaignActivityRunReviewController`는 상품 후기와 무관하므로 이동하지 않는다.
+HTTP 계약, JPA 매핑, 쿼리와 트랜잭션 경계는 변경하지 않았다.
+
 | Style | Example | Reading impact |
 |---|---|---|
 | Layer package | `controller`, `service`, `repository`, `domain/dto` | Easy to find Spring stereotypes, but business boundary is not visible from the package tree. |
-| Feature package | `coupon`, `commandprocessing` | Related code can be followed within the feature or processing boundary. |
+| Feature package | `coupon`, `catalog`, `review`, `commandprocessing` | Related code can be followed within the feature or processing boundary. |
 | Partial domain package | `domain/campaignactivity`, `service/purchase` | Some business concepts are grouped, but services still cross several concepts. |
 
 This is a layered Spring application with partial feature packaging, not a full DDD or hexagonal package layout. The coupon package is an incremental grouping of related code, not an enforced bounded context. The meaningful architecture is service/module ownership and dependency direction. Packages are useful when they make those boundaries easier to read.

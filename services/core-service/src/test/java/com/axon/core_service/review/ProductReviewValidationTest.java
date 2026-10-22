@@ -1,14 +1,13 @@
-package com.axon.core_service.controller;
+package com.axon.core_service.review;
 
-import com.axon.core_service.domain.dto.review.ProductReviewCreateRequest;
-import com.axon.core_service.domain.dto.review.ProductReviewResponse;
+import com.axon.core_service.review.dto.ProductReviewCreateRequest;
+import com.axon.core_service.review.dto.ProductReviewResponse;
 import com.axon.core_service.domain.user.CustomOAuth2User;
 import com.axon.core_service.config.TestSecurityConfig;
 import com.axon.core_service.config.auth.CustomLogoutHandler;
 import com.axon.core_service.config.auth.CustomOAuth2UserService;
 import com.axon.core_service.config.auth.OAuth2AuthenticationSuccessHandler;
 import com.axon.core_service.config.auth.SecurityConfig;
-import com.axon.core_service.service.ProductReviewService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;

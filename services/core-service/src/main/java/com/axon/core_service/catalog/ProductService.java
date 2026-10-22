@@ -1,7 +1,6 @@
-package com.axon.core_service.service;
+package com.axon.core_service.catalog;
 
-import com.axon.core_service.domain.product.Product;
-import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.catalog.domain.Product;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

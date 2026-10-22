@@ -10,10 +10,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.catalog.domain.Product;
 import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.repository.CampaignActivityRepository;
-import com.axon.core_service.repository.ProductRepository;
+import com.axon.core_service.catalog.ProductRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.coupon.UserCouponRepository;
 import java.math.BigDecimal;

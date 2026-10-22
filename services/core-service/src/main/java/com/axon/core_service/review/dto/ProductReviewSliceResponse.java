@@ -1,4 +1,4 @@
-package com.axon.core_service.domain.dto.review;
+package com.axon.core_service.review.dto;
 
 import java.util.List;
 

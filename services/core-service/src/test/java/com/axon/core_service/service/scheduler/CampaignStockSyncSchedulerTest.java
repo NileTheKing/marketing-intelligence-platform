@@ -4,7 +4,7 @@ import com.axon.core_service.domain.campaignactivity.CampaignActivity;
 import com.axon.core_service.domain.dto.campaignactivity.CampaignActivityStatus;
 import com.axon.core_service.repository.CampaignActivityRepository;
 import com.axon.core_service.repository.PurchaseRepository;
-import com.axon.core_service.service.ProductService;
+import com.axon.core_service.catalog.ProductService;
 import com.axon.core_service.service.reconciliation.ReconciliationIssueService;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import org.junit.jupiter.api.DisplayName;

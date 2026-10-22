@@ -1,6 +1,6 @@
-package com.axon.core_service.domain.dto.review;
+package com.axon.core_service.review.dto;
 
-import com.axon.core_service.domain.review.ProductReview;
+import com.axon.core_service.review.domain.ProductReview;
 import java.time.LocalDateTime;
 
 public record ProductReviewResponse(Long id, Integer rating, String content, LocalDateTime createdAt) {

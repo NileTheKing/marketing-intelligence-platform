@@ -1,6 +1,6 @@
-package com.axon.core_service.repository;
+package com.axon.core_service.catalog;
 
-import com.axon.core_service.domain.product.Product;
+import com.axon.core_service.catalog.domain.Product;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
