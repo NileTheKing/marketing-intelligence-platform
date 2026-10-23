@@ -41,6 +41,10 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   링크와 `/demo/admin` 진입, 캠페인 목록 데이터 표시를 확인했다.
 - 데모 권한으로 주요 관리 화면 및 조회 API는 200, Core 변경 요청과 Entry 결제 요청은
   403으로 거부됐다. 네이버 실제 Client ID와 등록된 HTTPS 콜백 주소도 유지됐다.
+- 남은 운영 제한: 현재 VM에 Elasticsearch 컨테이너가 없어 `DashboardService`의
+  ES 조회에서 연결 오류가 발생한다. 조회 API의 200 응답은 ES 기반 지표까지 정상이라는
+  뜻이 아니며 일부 행동 분석 값은 기본값으로 표시된다. 이번 배포에서 ES·Connect는
+  추가 기동하지 않았다.
 - 배포 전 백업 위치는 VM 저장소의 `.git/axon-last-deploy-backup`에 기록했다.
   비밀값과 발급된 데모 토큰은 실행 출력이나 이 문서에 기록하지 않는다.
 
