@@ -1,3 +1,7 @@
+let currentPeriod = "7d";
+let campaignStream = null;
+let reconnectTimer = null;
+
 document.addEventListener('DOMContentLoaded', function () {
     const campaignId = document.getElementById('campaignId').value;
     if (!campaignId) {
@@ -14,24 +18,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
 async function fetchCampaignData(campaignId) {
     try {
-        const response = await fetch(`/api/v1/dashboard/campaign/${campaignId}`);
+        const response = await fetch(`/api/v1/dashboard/campaign/${campaignId}?period=${currentPeriod}`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        updateDashboard(data);
+        if (data.period === currentPeriod) updateDashboard(data);
     } catch (error) {
         console.error("Error fetching campaign data:", error);
     }
 }
 
 function connectToSse(campaignId) {
-    const eventSource = new EventSource(`/api/v1/dashboard/stream/campaign/${campaignId}`);
+    clearTimeout(reconnectTimer);
+    if (campaignStream) campaignStream.close();
+    const eventSource = new EventSource(`/api/v1/dashboard/stream/campaign/${campaignId}?period=${currentPeriod}`);
+
+    campaignStream = eventSource;
 
     eventSource.addEventListener('dashboard-update', function (event) {
         try {
             const data = JSON.parse(event.data);
-            updateDashboard(data);
+            if (data.period === currentPeriod) updateDashboard(data);
         } catch (error) {
             console.error("Error parsing SSE data:", error);
         }
@@ -41,11 +49,15 @@ function connectToSse(campaignId) {
         console.error("SSE error:", error);
         eventSource.close();
         // Optional: Reconnect logic with backoff
-        setTimeout(() => connectToSse(campaignId), 5000);
+        if (campaignStream === eventSource) {
+            reconnectTimer = setTimeout(() => connectToSse(campaignId), 5000);
+        }
     };
 }
 
 function updateDashboard(data) {
+    const unavailable = data.overview.totalVisits == null || data.heatmap == null;
+    document.getElementById("behaviorStatus").hidden = !unavailable;
     // 1. Update Header
     const headerEl = document.getElementById('campaignName');
     if (headerEl.textContent !== `Campaign Dashboard: ${data.campaignName}`) {
@@ -54,7 +66,7 @@ function updateDashboard(data) {
     document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
     // 2. Update KPI Cards
-    updateKpi('totalVisits', data.overview.totalVisits);
+    updateKpi('totalVisits', formatNumber(data.overview.totalVisits));
     updateKpi('totalPurchases', data.overview.purchaseCount);
     updateKpi('totalGMV', formatCurrency(data.overview.gmv));
     updateKpi('totalROAS', formatNumber(data.overview.roas) + '%');
@@ -187,7 +199,7 @@ function renderHeatmapChart(heatmapData) {
     const ctx = document.getElementById('heatmapChart').getContext('2d');
 
     const hours = Array.from({ length: 24 }, (_, i) => i);
-    const data = hours.map(h => heatmapData.hourlyTraffic[h] || 0);
+    const data = hours.map(h => heatmapData ? (heatmapData.hourlyTraffic[h] || 0) : null);
 
     if (heatmapChart) {
         // Update existing chart
@@ -254,9 +266,9 @@ function updateActivityTable(activities) {
             </td>
             <td class="px-6 py-4 text-center">${formatNumber(activity.totalVisits)}</td>
             <td class="px-6 py-4 text-center">${formatNumber(activity.totalEngages)}</td>
-            <td class="px-6 py-4 text-center font-semibold text-blue-600">${formatNumber(activity.engagementRate)}%</td>
+            <td class="px-6 py-4 text-center font-semibold text-blue-600">${formatPercent(activity.engagementRate)}</td>
             <td class="px-6 py-4 text-center">${formatNumber(activity.totalPurchases)}</td>
-            <td class="px-6 py-4 text-center font-semibold text-green-600">${formatNumber(activity.conversionRate)}%</td>
+            <td class="px-6 py-4 text-center font-semibold text-green-600">${formatPercent(activity.conversionRate)}</td>
             <td class="px-6 py-4 text-center">${formatCurrency(activity.gmv)}</td>
         `;
         tbody.appendChild(row);
@@ -272,4 +284,20 @@ function formatNumber(num) {
 function formatCurrency(amount) {
     if (amount === undefined || amount === null) return '-';
     return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
+}
+function formatPercent(value) {
+    return value == null ? '-' : `${formatNumber(value)}%`;
+}
+
+function togglePeriodDropdown() {
+    document.getElementById('periodDropdown').classList.toggle('hidden');
+}
+
+function changePeriod(period, label) {
+    currentPeriod = period;
+    document.getElementById('currentPeriodLabel').textContent = label;
+    document.getElementById('periodDropdown').classList.add('hidden');
+    const campaignId = document.getElementById('campaignId').value;
+    fetchCampaignData(campaignId);
+    connectToSse(campaignId);
 }

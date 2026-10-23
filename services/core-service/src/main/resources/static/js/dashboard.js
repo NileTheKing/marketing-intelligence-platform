@@ -23,7 +23,9 @@ document.addEventListener('DOMContentLoaded', function () {
     async function fetchDashboardData() {
         try {
             const response = await fetch(`/api/v1/dashboard/activity/${activityId}?period=${currentPeriod}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
+            document.getElementById("behaviorStatus").hidden = data.overview.totalVisits != null && data.trafficTrend != null;
             updateOverview(data.overview, data.previousOverview);
             updateStock(data.realtime);
             renderFunnel(data.funnel || []);
@@ -40,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function () {
         setHtml('gmvSub', `구매 ${formatNumber(overview.purchaseCount)}건${change(overview.gmv, previous?.gmv)}`);
         setText('aov', formatWon(overview.averageOrderValue));
         setText('aovSub', '거래액 ÷ 구매');
-        setText('conversionRate', `${(overview.conversionRate || 0).toFixed(1)}%`);
+        setText('conversionRate', overview.conversionRate == null ? '-' : `${overview.conversionRate.toFixed(1)}%`);
         setText('conversionSub', `방문 ${formatNumber(overview.totalVisits)}명 중 ${formatNumber(overview.purchaseCount)}명`);
         const roas = document.getElementById('roas');
         roas.textContent = `${Math.round(overview.roas || 0)}%`;
@@ -81,8 +83,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const top = steps[0]?.count || 0;
         document.getElementById('funnel').innerHTML = steps.map((step, i) => {
             const prev = i === 0 ? null : steps[i - 1].count;
-            const rate = prev ? `${(step.count / prev * 100).toFixed(1)}%` : '';
-            const width = top ? Math.max(1, step.count / top * 100) : 0;
+            const rate = step.count != null && prev ? `${(step.count / prev * 100).toFixed(1)}%` : '';
+            const width = step.count != null && top ? Math.max(1, step.count / top * 100) : 0;
             return `<div class="funnel-row">
                 <div class="funnel-label">${FUNNEL_LABELS[step.step] || step.step}</div>
                 <div class="funnel-bar"><i style="width:${width}%"></i></div>

@@ -34,7 +34,7 @@ class AdminDemoIntegrationTest extends AbstractIntegrationTest {
         assertThat(jwtTokenProvider.getAuthentication(cookie.getValue()).getAuthorities())
                 .extracting(authority -> authority.getAuthority()).containsExactly(AdminDemoAccess.AUTHORITY);
         for (String path : List.of("/admin", "/admin/campaigns", "/admin/coupons", "/admin/events",
-                "/admin/dashboard/overview")) {
+                "/admin/dashboard/overview", "/admin/incrementality")) {
             mockMvc.perform(get(path).cookie(cookie))
                     .andExpect(status().isOk()).andExpect(content().string(containsString("읽기 전용 데모")));
         }

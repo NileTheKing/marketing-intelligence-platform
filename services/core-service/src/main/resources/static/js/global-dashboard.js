@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
     async function fetchGlobalDashboardData() {
         try {
             const response = await fetch(`/api/v1/dashboard/overview`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
             updateDashboard(data);
         } catch (error) {
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateDashboard(data) {
+        document.getElementById("behaviorStatus").hidden = data.overview.totalVisits != null && data.hourlyTraffic != null;
         updateOverviewCards(data.overview);
         renderGlobalTrafficChart(data.hourlyTraffic);
         updateAutoCoupon(data.unattributedCouponPurchases);
@@ -33,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function () {
         setText('kpiBudget', `예산 ${formatWon(overview.budget)}`);
         setText('kpiPurchases', `${formatNumber(purchases)}건`);
         setText('kpiAov', purchases ? `객단가 ${formatWon(gmv / purchases)}` : '객단가 -');
-        setText('kpiVisits', formatNumber(visits));
+        setText('kpiVisits', formatNumber(overview.totalVisits));
         setText('kpiConversion', visits ? `구매 전환 ${formatNumber(purchases / visits * 100)}%` : '구매 전환 -');
         setText('kpiRoas', `${formatNumber(overview.roas)}%`);
     }
@@ -41,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderGlobalTrafficChart(hourlyTraffic) {
         const hours = Array.from({ length: 24 }, (_, i) => i);
         const source = (hourlyTraffic && hourlyTraffic.hourlyTraffic) || {};
-        const data = hours.map(h => source[h] || 0);
+        const data = hours.map(h => hourlyTraffic ? (source[h] || 0) : null);
         const peak = Math.max(...data);
         const peakHour = data.indexOf(peak);
         const colors = data.map((v, h) => (peak > 0 && h === peakHour ? ACCENT : MUTED));

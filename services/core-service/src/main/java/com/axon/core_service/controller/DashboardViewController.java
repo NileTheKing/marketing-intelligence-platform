@@ -51,7 +51,7 @@ public class DashboardViewController {
     public String latestIncrementalityView() {
         return dashboardPageService.getLatestRunId()
                 .map(runId -> "redirect:/admin/campaign-runs/" + runId + "/incrementality")
-                .orElse("redirect:/admin/campaigns");
+                .orElse("incrementality");
     }
 
     @GetMapping("/admin/campaign-runs/{runId}/incrementality")

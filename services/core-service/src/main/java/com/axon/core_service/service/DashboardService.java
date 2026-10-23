@@ -101,10 +101,10 @@ public class DashboardService {
         java.math.BigDecimal gmv = confirmedPurchases.gmv();
         java.math.BigDecimal aov = metricCalculator.averageOrderValue(gmv, purchases);
 
-        double conversionRate = metricCalculator.percentage(purchases, visits);
-        double engagementRate = metricCalculator.percentage(engages, visits);
-        double qualificationRate = metricCalculator.percentage(qualifies, engages);
-        double purchaseRate = metricCalculator.percentage(purchases, qualifies);
+        Double conversionRate = visits == null ? null : metricCalculator.percentage(purchases, visits);
+        Double engagementRate = visits == null || engages == null ? null : metricCalculator.percentage(engages, visits);
+        Double qualificationRate = qualifies == null || engages == null ? null : metricCalculator.percentage(qualifies, engages);
+        Double purchaseRate = qualifies == null ? null : metricCalculator.percentage(purchases, qualifies);
 
         double roas = metricCalculator.roas(gmv, budget);
 
@@ -133,7 +133,7 @@ public class DashboardService {
         return funnelSteps.stream()
                 .map(step -> new FunnelStepData(step,
                         step == FunnelStep.PURCHASE
-                                ? confirmedPurchases.purchaseCount()
+                                ? Long.valueOf(confirmedPurchases.purchaseCount())
                                 : getStepCount(activityId, activityType, step, start, end)))
                 .toList();
     }
@@ -150,7 +150,7 @@ public class DashboardService {
             return trend;
         } catch (IOException e) {
             log.error("Failed to get traffic trend for activity: {}", activityId, e);
-            return Collections.emptyList();
+            return null;
         }
     }
 
@@ -173,7 +173,7 @@ public class DashboardService {
             return behaviorEventService.getFunnelStepCount(activityId, activityType, step, start, end);
         } catch (IOException e) {
             log.error("Failed to get count for step: {} in activity: {}", step, activityId, e);
-            return 0L;
+            return null;
         }
     }
 
@@ -228,12 +228,14 @@ public class DashboardService {
                 .getCampaignActivities();
 
         // Optimized: Fetch all stats in ONE query
+        boolean behaviorAvailable = true;
         Map<Long, Map<String, Long>> stats;
         try {
             stats = behaviorEventService.getCampaignStats(campaignId, start, end);
         } catch (IOException e) {
             log.error("Failed to fetch campaign stats for id={}", campaignId, e);
             stats = Collections.emptyMap();
+            behaviorAvailable = false;
         }
 
         long totalVisits = 0;
@@ -282,12 +284,12 @@ public class DashboardService {
                     activity.getName(),
                     activity.getActivityType().name(),
                     category,
-                    visits,
-                    engages,
+                    behaviorAvailable ? visits : null,
+                    behaviorAvailable ? engages : null,
                     purchases,
                     gmv,
-                    engagementRate,
-                    conversionRate));
+                    behaviorAvailable ? engagementRate : null,
+                    behaviorAvailable ? conversionRate : null));
         }
 
         double totalConversionRate = metricCalculator.percentage(totalPurchases, totalVisits);
@@ -317,7 +319,8 @@ public class DashboardService {
                 totalBudget,
                 totalROAS);
 
-        return new CampaignOverviewResult(campaign.getName(), overview, comparisonTable);
+        return new CampaignOverviewResult(campaign.getName(),
+                behaviorAvailable ? overview : withoutBehaviorMetrics(overview), comparisonTable);
     }
 
     private HeatmapData getHourlyHeatmap(Long campaignId, LocalDateTime start, LocalDateTime end) {
@@ -331,7 +334,7 @@ public class DashboardService {
             return new HeatmapData(hourlyTraffic);
         } catch (IOException e) {
             log.error("Failed to get hourly traffic for campaign: {}", campaignId, e);
-            return new HeatmapData(Collections.emptyMap());
+            return null;
         }
     }
 
@@ -377,12 +380,14 @@ public class DashboardService {
         LocalDateTime start = LocalDateTime.now().minusDays(30);
         LocalDateTime end = LocalDateTime.now();
 
+        boolean behaviorAvailable = true;
         Map<Long, Map<String, Long>> allStats;
         try {
             allStats = behaviorEventService.getAllCampaignStats(start, end);
         } catch (IOException e) {
             log.error("Failed to fetch global stats", e);
             allStats = Collections.emptyMap();
+            behaviorAvailable = false;
         }
 
         long totalVisits = 0;
@@ -466,17 +471,23 @@ public class DashboardService {
             Map<Integer, Long> hourlyTraffic = behaviorEventService.getHourlyTraffic(allActivityIds, start, end);
             globalHeatmap = new HeatmapData(hourlyTraffic);
         } catch (IOException e) {
-            globalHeatmap = new HeatmapData(Collections.emptyMap());
+            globalHeatmap = null;
         }
 
         return new GlobalDashboardResponse(
-                globalOverview,
+                behaviorAvailable ? globalOverview : withoutBehaviorMetrics(globalOverview),
                 gmvRanking,
-                visitRanking,
+                behaviorAvailable ? visitRanking : List.of(),
                 efficiencyData,
                 globalHeatmap,
                 couponAttributionRepository.findUnattributedCouponPurchases(start, end),
                 LocalDateTime.now());
+    }
+
+    // A missing analytics source is unknown, not a measured zero. DB purchase metrics remain usable.
+    private OverviewData withoutBehaviorMetrics(OverviewData data) {
+        return new OverviewData(null, null, null, data.purchaseCount(), data.gmv(),
+                null, null, null, null, data.averageOrderValue(), data.budget(), data.roas());
     }
 
     private String formatCurrency(java.math.BigDecimal amount) {

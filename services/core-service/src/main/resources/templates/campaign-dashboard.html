@@ -17,6 +17,7 @@
         <div th:replace="fragments/dashboard_sidebar :: sidebar('campaign', ${campaignId}, null)"></div>
 
         <main class="dashboard-main pt-6">
+<p id="behaviorStatus" role="status" hidden style="padding:12px 16px;background:#fff7ed;color:#9a3412">행동 통계 일부를 조회할 수 없습니다. 조회하지 못한 지표는 표시하지 않으며, 구매 건수와 매출은 DB 조회 결과입니다.</p>
             <!-- Header -->
             <div class="dashboard-header">
                 <div class="mb-2 flex items-center gap-2 text-sm text-gray-500">

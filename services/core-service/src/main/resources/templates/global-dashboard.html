@@ -23,6 +23,7 @@
     <aside th:replace="~{fragments/console_sidebar :: sidebar('overview')}"></aside>
 
     <main>
+<p id="behaviorStatus" role="status" hidden style="padding:12px 16px;background:#fff7ed;color:#9a3412">행동 통계 일부를 조회할 수 없습니다. 조회하지 못한 지표는 표시하지 않으며, 구매 건수와 매출은 DB 조회 결과입니다.</p>
         <div class="topbar">
             <div><div class="crumb">대시보드 / 개요</div><h1>전체 캠페인 개요</h1></div>
             <span class="updated"><i></i><span id="lastUpdated">최근 30일</span></span>

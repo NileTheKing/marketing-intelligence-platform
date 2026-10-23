@@ -40,6 +40,50 @@ import org.springframework.test.util.ReflectionTestUtils;
 class DashboardServiceTest {
 
     @Test
+    void analyticsFailurePreservesPurchasesWithoutReportingZeroVisits() throws Exception {
+        BehaviorEventService behavior = mock(BehaviorEventService.class);
+        CampaignRepository campaigns = mock(CampaignRepository.class);
+        CampaignActivityRepository activities = mock(CampaignActivityRepository.class);
+        PurchaseRepository purchases = mock(PurchaseRepository.class);
+        DashboardService service = new DashboardService(mock(RealtimeMetricsService.class), behavior,
+                campaigns, activities, purchases, new DashboardMetricCalculator(),
+                mock(CouponAttributionRepository.class));
+        Campaign campaign = campaign(1L, "demo", BigDecimal.TEN);
+        CampaignActivity activity = activity(11L, campaign);
+        campaign.getCampaignActivities().add(activity);
+        when(campaigns.findAllWithActivities()).thenReturn(List.of(campaign));
+        when(campaigns.findById(1L)).thenReturn(Optional.of(campaign));
+        when(purchases.findConfirmedAggregatesByActivityIdsAndPeriod(any(), any(), any()))
+                .thenReturn(List.of(new PurchaseAggregateByActivity(11L, 2L, BigDecimal.valueOf(200))));
+        when(behavior.getAllCampaignStats(any(), any())).thenThrow(new java.io.IOException("offline"));
+        when(behavior.getCampaignStats(eq(1L), any(), any())).thenThrow(new java.io.IOException("offline"));
+        when(behavior.getHourlyTraffic(any(), any(), any())).thenThrow(new java.io.IOException("offline"));
+
+        when(behavior.getFunnelStepCount(eq(11L), any(), any(), any(), any()))
+                .thenThrow(new java.io.IOException("offline"));
+        when(purchases.findConfirmedAggregateByActivityIdAndPeriod(eq(11L), any(), any()))
+                .thenReturn(new PurchaseAggregate(2L, BigDecimal.valueOf(200)));
+        var activityDetail = service.getDashboardByActivity(11L, DashboardPeriod.SEVEN_DAYS, null, null);
+        assertThat(activityDetail.overview().totalVisits()).isNull();
+        assertThat(activityDetail.overview().purchaseCount()).isEqualTo(2L);
+        assertThat(activityDetail.trafficTrend()).isNull();
+        assertThat(activityDetail.funnel().getFirst().count()).isNull();
+        var global = service.getGlobalDashboard();
+        var detail = service.getDashboardByCampaign(1L, DashboardPeriod.SEVEN_DAYS, null, null);
+        for (var overview : List.of(global.overview(), detail.overview())) {
+            assertThat(overview.purchaseCount()).isEqualTo(2L);
+            assertThat(overview.gmv()).isEqualByComparingTo("200");
+            assertThat(overview.totalVisits()).isNull();
+            assertThat(overview.conversionRate()).isNull();
+            assertThat(overview.getConversionRate()).isNull();
+        }
+        assertThat(global.hourlyTraffic()).isNull();
+        assertThat(detail.heatmap()).isNull();
+        assertThat(detail.activities().getFirst().totalVisits()).isNull();
+        assertThat(detail.activities().getFirst().conversionRate()).isNull();
+    }
+
+    @Test
     @DisplayName("Global Dashboard는 캠페인이 여러 개여도 Purchase 집계를 한 번만 조회한다")
     void getGlobalDashboardAggregatesPurchasesOnce() throws Exception {
         RealtimeMetricsService realtimeMetricsService = mock(RealtimeMetricsService.class);

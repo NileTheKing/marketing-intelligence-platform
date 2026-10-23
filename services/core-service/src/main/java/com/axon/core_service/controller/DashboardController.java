@@ -126,7 +126,9 @@ public class DashboardController {
      * Stream real-time dashboard updates for a specific campaign.
      */
     @GetMapping(value = "/stream/campaign/{campaignId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamCampaignDashboard(@PathVariable Long campaignId) {
+    public SseEmitter streamCampaignDashboard(@PathVariable Long campaignId,
+            @RequestParam(defaultValue = "7d") String period) {
+        DashboardPeriod dashboardPeriod = DashboardPeriod.fromCode(period);
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
         AtomicReference<ScheduledFuture<?>> scheduledTask = new AtomicReference<>();
 
@@ -135,7 +137,7 @@ public class DashboardController {
         scheduledTask.set(scheduler.scheduleAtFixedRate(() -> {
             try {
                 CampaignDashboardResponse data = dashboardService.getDashboardByCampaign(
-                        campaignId, DashboardPeriod.SEVEN_DAYS, null, null);
+                        campaignId, dashboardPeriod, null, null);
                 emitter.send(SseEmitter.event().name("dashboard-update").data(data));
             } catch (IOException e) {
                 log.debug("SSE client disconnected for campaign: {}", campaignId);

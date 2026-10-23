@@ -29,7 +29,8 @@ public record OverviewData (
      */
     public Double getConversionRate() {
         if (conversionRate != null) return conversionRate;
-        if (totalVisits == null || totalVisits == 0) return 0.0;
+        if (totalVisits == null) return null;
+        if (totalVisits == 0) return 0.0;
         return (purchaseCount * 100.0) / totalVisits;
     }
 }
