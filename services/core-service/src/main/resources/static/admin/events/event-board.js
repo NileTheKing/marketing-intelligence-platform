@@ -98,7 +98,7 @@
       elements.tableBody.innerHTML = `
         <tr>
           <td colspan="8" class="px-4 py-6 text-center text-sm text-neutral-500">
-            아직 등록된 이벤트가 없습니다. 오른쪽 상단의 "새 이벤트" 버튼으로 추가해 보세요.
+            아직 등록된 이벤트가 없습니다.
           </td>
         </tr>
       `;
