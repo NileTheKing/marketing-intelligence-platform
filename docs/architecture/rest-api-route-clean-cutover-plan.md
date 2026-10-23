@@ -33,7 +33,8 @@ The target routes below are the current contract. The `Current` column is retain
   헤더나 기존 accessToken 쿠키로 옮겨도 구매·참여 API를 호출할 수 없다.
 - `AdminDemoIntegrationTest`는 실제 JWT·보안 필터·SSR 화면과 조회 API, 변경 요청
   거부 및 쿠키 보존을 확인한다. Entry 차단은 `EntryApiContractTest`에서 확인한다.
-- 구현·테스트와 VM 배포는 별개다. 이 절은 현재 코드 계약이며 VM 배포 완료 기록은 아니다.
+- 2026-10-23 VM 배포 후 공개 브라우저와 실제 API의 읽기·쓰기 경계를 확인했다.
+  배포 커밋·migration·확인 범위는 [운영 기록](../operations/oracle-compose-baseline-runbook.md#2026-10-23-관리자-데모-배포)을 따른다.
 
 ## Goal
 

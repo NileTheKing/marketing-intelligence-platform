@@ -27,6 +27,23 @@ The following scripts are historical K8s references:
 `scripts/load-test/prepare-load-test.sh` remains active: the Compose preparation
 wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only tools.
 
+## 2026-10-23 관리자 데모 배포
+
+- 배포 코드: `3db045b` (`main`). VM의 기존 이미지·Compose·환경 파일과 DB를 백업한 뒤
+  Core·Entry 이미지를 다시 빌드했다. DB·Redis·Kafka·관측 컨테이너는 재생성하지 않았다.
+- 실행 구성: `compose.app.yml`, `infrastructure/compose/compose.resources.yml` 및 기존 VM의
+  Entry 진단 override. Core 1.2 CPU, Entry 1.5 CPU 설정을 유지했다.
+- 기존 DB와 대조한 뒤 미적용 migration 6개만 실행했다: `2026-09-27` 휴면 캠페인,
+  `2026-10-14` 장바구니 후보, `2026-10-16` 상품 후기, `2026-10-14` 쿠폰 증분 분석,
+  `2026-10-19` 자동 쿠폰과 활동 연결, `2026-10-19` 참여자 조회 인덱스.
+  구형 후보 인덱스 교체 스크립트는 최신 생성 스크립트에 이미 반영돼 있어 실행하지 않았다.
+- Core·Entry health `UP`, nginx 설정 검사 통과. 공개 브라우저에서 `/shop`의 관리자 데모
+  링크와 `/demo/admin` 진입, 캠페인 목록 데이터 표시를 확인했다.
+- 데모 권한으로 주요 관리 화면 및 조회 API는 200, Core 변경 요청과 Entry 결제 요청은
+  403으로 거부됐다. 네이버 실제 Client ID와 등록된 HTTPS 콜백 주소도 유지됐다.
+- 배포 전 백업 위치는 VM 저장소의 `.git/axon-last-deploy-backup`에 기록했다.
+  비밀값과 발급된 데모 토큰은 실행 출력이나 이 문서에 기록하지 않는다.
+
 ## 네이버 로그인 환경변수
 
 운영 VM의 `/home/ubuntu/apps/axon/.env`에는 실제 발급받은 `NAVER_CLIENT_ID`와
