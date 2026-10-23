@@ -16,6 +16,7 @@
 </head>
 
 <body th:class="${bodyClass}">
+    <th:block th:replace="~{fragments/admin_demo :: banner}"></th:block>
     <!-- Common Admin Navigation -->
     <div th:replace="fragments/admin_nav :: adminNav(${activeMenu})"></div>
 

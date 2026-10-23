@@ -1,6 +1,9 @@
 package com.axon.core_service.config.auth;
 
 import com.axon.core_service.domain.user.Role;
+import com.axon.core_service.demo.AdminDemoAccess;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.core.context.SecurityContextHolder;
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -60,6 +63,11 @@ public class SecurityConfig {
                                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
                                 .authorizeHttpRequests(authz -> authz
                                                 .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
+                                                .requestMatchers(request -> AdminDemoAccess.isDemo(
+                                                        SecurityContextHolder.getContext().getAuthentication()))
+                                                .access((authentication, context) -> new AuthorizationDecision(
+                                                        AdminDemoAccess.canRead(context.getRequest())))
+                                                .requestMatchers(HttpMethod.GET, "/demo/admin", "/demo/exit").permitAll()
                                                 .requestMatchers("/", "/shop", "/css/**", "/image/**", "/images/**", "/js/**", "/uploads/**",
                                                                 "/favicon.ico", "/welcomepage", "/welcomepage.html",
                                                                 "/oauth2/**", "/login/**", "/test/**")

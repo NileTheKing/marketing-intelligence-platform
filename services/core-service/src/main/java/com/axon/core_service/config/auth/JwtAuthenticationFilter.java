@@ -1,6 +1,7 @@
 package com.axon.core_service.config.auth;
 
 import com.axon.util.CookieUtils;
+import com.axon.core_service.demo.AdminDemoAccess;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
@@ -54,6 +55,12 @@ public class JwtAuthenticationFilter extends GenericFilterBean {
         String bearerToken = request.getHeader(AUTHORIZATION_HEADER);
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
             return bearerToken.substring(7);
+        }
+        // 데모를 끝내면 기존 로그인으로 돌아갈 수 있도록 원래 accessToken은 보존한다.
+        String demoToken = CookieUtils.getCookie(request, AdminDemoAccess.COOKIE_NAME)
+                .map(Cookie::getValue).orElse(null);
+        if (StringUtils.hasText(demoToken)) {
+            return demoToken;
         }
         return CookieUtils.getCookie(request, ACCESS_TOKEN_COOKIE_NAME)
             .map(Cookie::getValue)

@@ -16,6 +16,25 @@ Completed on 2026-07-14 as a clean cutover.
 
 The target routes below are the current contract. The `Current` column is retained only as migration history.
 
+## 관리자 읽기 전용 데모 (2026-10-23)
+
+- 쇼핑 화면의 **관리자 데모** 링크 또는 `GET /demo/admin`으로 OAuth 없이 진입한다.
+- 30분짜리 `ROLE_DEMO` JWT를 별도 HttpOnly·SameSite=Lax 쿠키 `adminDemoToken`에
+  저장한다. HTTPS에서는 Secure를 설정하며 기존 로그인·리프레시 쿠키는 덮어쓰지 않는다.
+- 데모 쿠키가 있는 동안 Core는 데모 권한을 우선 사용한다. 명시적인 Authorization
+  헤더는 기존과 같이 우선한다. `GET /demo/exit`는 데모 쿠키만 삭제하고 `/shop`으로 이동한다.
+- 캠페인, 쿠폰, 행동 이벤트 정의와 성과 대시보드의 지정된 GET/HEAD 경로만 허용한다.
+  데이터는 기존 조회 API를 사용하며 별도의 데모 DB나 데이터 생성은 하지 않는다.
+- 고객별 정보, 참여자 목록, 대사, 운영 모니터링과 내부 API는 데모에서 공개하지 않는다.
+  쓰기 메서드뿐 아니라 구매 완료처럼 부작용이 있는 GET 경로도 허용 목록 밖이다.
+- 화면에는 읽기 전용 안내를 표시하고 생성·수정·발송과 AI 질의 UI를 숨긴다.
+  실제 접근 제어는 Core의 `AdminDemoAccess` 허용 목록이 담당한다.
+- 두 서비스가 JWT 인증을 공유하므로 Entry도 `ROLE_DEMO`를 거부한다. 데모 토큰을
+  헤더나 기존 accessToken 쿠키로 옮겨도 구매·참여 API를 호출할 수 없다.
+- `AdminDemoIntegrationTest`는 실제 JWT·보안 필터·SSR 화면과 조회 API, 변경 요청
+  거부 및 쿠키 보존을 확인한다. Entry 차단은 `EntryApiContractTest`에서 확인한다.
+- 구현·테스트와 VM 배포는 별개다. 이 절은 현재 코드 계약이며 VM 배포 완료 기록은 아니다.
+
 ## Goal
 
 - 화면을 렌더링하는 SSR route와 JSON을 반환하는 API route를 구분한다.

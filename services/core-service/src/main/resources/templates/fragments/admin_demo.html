@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<th:block th:fragment="banner" sec:authorize="hasRole('DEMO')">
+    <style>
+        .admin-demo-banner { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:12px 24px; background:#eef3fd; border-bottom:1px solid #cbd8f5; color:#244d9a; font:14px/1.5 system-ui,sans-serif; }
+        .admin-demo-banner a { color:inherit; white-space:nowrap; text-decoration:underline; }
+        [data-demo-write], #create-campaign-btn, #create-activity-btn, #create-coupon-btn,
+        .icon-btn, .menu-btn, [data-event-create-button], [data-event-edit]:has(i), [data-event-delete], #event-form button[type="submit"],
+        [title^="일괄"], [onclick^="handleEdit("], [onclick^="handleDelete("], #chat-widget,
+        a[href="/admin/monitoring"], a[href^="/admin/customers/"], a[href="/admin/campaign-activities/new"] { display:none !important; }
+    </style>
+    <div class="admin-demo-banner" role="status">
+        <span><strong>읽기 전용 데모</strong> 캠페인과 성과를 둘러볼 수 있습니다. 생성, 수정과 발송은 제한됩니다.</span>
+        <a href="/demo/exit">데모 나가기</a>
+    </div>
+</th:block>
+</html>

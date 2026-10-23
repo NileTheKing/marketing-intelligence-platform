@@ -42,6 +42,7 @@
     </style>
 </head>
 <body class="console">
+<th:block th:replace="~{fragments/admin_demo :: banner}"></th:block>
 <input type="hidden" id="activityId" th:value="${activityId}">
 <div class="shell">
     <aside th:replace="~{fragments/console_sidebar :: sidebar('campaigns')}"></aside>

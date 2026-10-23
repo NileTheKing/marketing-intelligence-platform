@@ -27,6 +27,20 @@ The following scripts are historical K8s references:
 `scripts/load-test/prepare-load-test.sh` remains active: the Compose preparation
 wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only tools.
 
+## 네이버 로그인 환경변수
+
+운영 VM의 `/home/ubuntu/apps/axon/.env`에는 실제 발급받은 `NAVER_CLIENT_ID`와
+`NAVER_CLIENT_SECRET`가 필요하다. `compose.app.yml`의 `local-client-id`,
+`local-client-secret`는 로컬 기동용 기본값이며 네이버 로그인에는 사용할 수 없다.
+`.env`를 수정한 뒤에는 기존 컨테이너의 단순 restart가 아니라, 기존 배포와 같은
+Compose 파일·환경을 사용한 Core 컨테이너 재생성이 필요하다.
+
+인증 진입점 `/oauth2/authorization/naver`가 보내는 `redirect_uri`와 네이버 개발자센터
+Callback URL이 일치하는지도 확인한다. 현재 공개 도메인의 예상값은
+`https://axon.opicnic.xyz/login/oauth2/code/naver`다. Secret이나 인증 토큰은 로그·문서에
+기록하지 않는다. `client info invalid`라면 콜백 실패로 단정하지 말고 먼저 실제
+인증 요청이 개발용 client ID를 쓰는지 확인한다.
+
 ## CI/CD Execution Policy
 
 Status: active
