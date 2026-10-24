@@ -50,7 +50,8 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
 
 ## 2026-10-23 관리자 대시보드 오류 수정
 
-- 배포 코드: `b1b0c2a`. Core 이미지만 재빌드·재생성하고 nginx를 재시작했다.
+- 최초 수정 배포: `b1b0c2a`. 이벤트 목록 JavaScript의 동적 빈 상태 문구까지 반영한
+  최종 배포 코드는 `3267ceb`다. Core 이미지만 재빌드·재생성하고 nginx를 재시작했다.
   DB migration과 시연 데이터 생성은 실행하지 않았으며 기존 실험 기록을 보존했다.
 - 초기 데모 배포의 행동 통계 0 기본값을 수정했다. ES 조회 실패 시 관련 수치와 그래프는
   `null`을 반환하고 화면에 조회 불가 안내와 `-`를 표시한다. MySQL 구매·매출 조회는 유지한다.
