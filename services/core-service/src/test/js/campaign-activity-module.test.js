@@ -11,6 +11,18 @@ vm.runInNewContext(source, context);
 const activityModule = context.CampaignActivityModule;
 const serialize = (...args) => JSON.parse(JSON.stringify(activityModule.serializeCouponDelivery(...args)));
 
+test('activity editor calls existing shared helper exports', () => {
+    const editor = fs.readFileSync(path.join(__dirname,
+        '../../main/resources/static/js/admin_create_campaignActivitys.js'), 'utf8');
+    for (const [, name] of editor.matchAll(/Helpers\.(\w+)\s*\(/g)) {
+        assert.equal(typeof activityModule.Helpers[name], 'function', `Helpers.${name} is not exported`);
+    }
+    const [, bindings] = editor.match(/const\s*\{([^}]+)\}\s*=\s*CampaignActivityModule/);
+    for (const name of bindings.split(',').map(value => value.trim())) {
+        assert.notEqual(activityModule[name], undefined, `${name} is not exported`);
+    }
+});
+
 test('serializes only the selected coupon delivery condition', () => {
     assert.deepEqual(serialize('COUPON', 'DIRECT', '', '', 'REENGAGEMENT', ' note ', '10'), {
         couponDeliveryMode: 'DIRECT', delayMinutes: null, dormantDays: null,

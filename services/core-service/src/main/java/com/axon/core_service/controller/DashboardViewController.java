@@ -61,6 +61,7 @@ public class DashboardViewController {
         model.addAttribute("activityName", pageData.activityName());
         model.addAttribute("campaignName", pageData.campaignName());
         model.addAttribute("runs", pageData.runs());
+        model.addAttribute("analysisAvailable", pageData.analysisAvailable());
         return "incrementality";
     }
 

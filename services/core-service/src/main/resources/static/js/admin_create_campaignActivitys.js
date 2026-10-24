@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const activityTypeInput = document.getElementById("activityTypeInput");
 
     // --- Shared Module Initialization ---
-    const { FilterRegistry, Helpers } = CampaignActivityModule;
+    const { FilterRegistry, Helpers, applyCouponEdit, serializeCouponDelivery } = CampaignActivityModule;
 
     // 1. Image Upload
     let uploadedImageUrl = "";
@@ -459,7 +459,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("selectedProductName").value = activity.productName || "";
             document.getElementById("salePrice").value = activity.price ?? "";
             document.getElementById("saleQuantity").value = activity.quantity ?? "";
-            Helpers.applyCouponEdit(activity, {
+            applyCouponEdit(activity, {
                 deliveryMode: deliveryModeSelect,
                 delayMinutes: delayInput,
                 dormantDays: dormantDaysInput,
@@ -582,7 +582,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 imageUrl: (type === 'COUPON') ? null : uploadedImageUrl, // No image for coupon
                 productId: finalProductId,
                 couponId: finalCouponId,
-                ...Helpers.serializeCouponDelivery(
+                ...serializeCouponDelivery(
                     type,
                     deliveryModeSelect.value,
                     delayInput.value,

@@ -2,6 +2,7 @@ package com.axon.core_service.service;
 
 import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.campaign.domain.CampaignActivityRun;
+import com.axon.core_service.campaign.domain.CampaignActivityRunStatus;
 import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.campaign.CampaignActivityRunRepository;
 import com.axon.core_service.campaign.CampaignRepository;
@@ -49,24 +50,31 @@ public class DashboardPageService {
     @Transactional(readOnly = true)
     public Optional<Long> getLatestRunId() {
         return campaignActivityRunRepository.findAll().stream()
+                .filter(this::isAnalyzableRun)
                 .map(CampaignActivityRun::getId)
                 .max(Comparator.naturalOrder());
     }
 
-    /** The selected run's names plus every run, newest first, for the run picker. */
+    /** The selected run's names plus analyzable runs, newest first, for the run picker. */
     @Transactional(readOnly = true)
     public IncrementalityPageData getIncrementalityPageData(Long runId) {
         List<RunOption> runs = campaignActivityRunRepository.findAll().stream()
+                .filter(this::isAnalyzableRun)
                 .sorted(Comparator.comparing(CampaignActivityRun::getId).reversed())
                 .map(run -> new RunOption(run.getId(), activityLabel(run.getCampaignActivity())))
                 .toList();
         return campaignActivityRunRepository.findById(runId)
-                .map(CampaignActivityRun::getCampaignActivity)
-                .map(activity -> new IncrementalityPageData(
-                        activity.getName(),
-                        activity.getCampaign() != null ? activity.getCampaign().getName() : null,
-                        runs))
-                .orElseGet(() -> new IncrementalityPageData("Run #" + runId, null, runs));
+                .map(run -> new IncrementalityPageData(
+                        run.getCampaignActivity().getName(),
+                        run.getCampaignActivity().getCampaign() != null
+                                ? run.getCampaignActivity().getCampaign().getName() : null,
+                        runs, isAnalyzableRun(run)))
+                .orElseGet(() -> new IncrementalityPageData("Run #" + runId, null, runs, false));
+    }
+
+    private boolean isAnalyzableRun(CampaignActivityRun run) {
+        return run.getStatus() == CampaignActivityRunStatus.DISPATCHED
+                && run.getDispatchedAt() != null && run.getHoldoutCount() > 0;
     }
 
     private static String activityLabel(CampaignActivity activity) {
@@ -81,7 +89,8 @@ public class DashboardPageService {
     public record CohortDashboardPageData(String activityName, Long campaignId) {
     }
 
-    public record IncrementalityPageData(String activityName, String campaignName, List<RunOption> runs) {
+    public record IncrementalityPageData(String activityName, String campaignName, List<RunOption> runs,
+                                         boolean analysisAvailable) {
     }
 
     public record RunOption(Long runId, String label) {
