@@ -114,6 +114,18 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   MySQL 데이터 전환만으로 행동 분석까지 복구된 것은 아니다. 시연 데이터의 날짜도
   재생성하거나 현재 시점으로 이동하지 않았다.
 
+## 2026-10-24 증분 분석 진입과 쿠폰 활동 편집 오류 수정
+
+- 배포 코드: `1019097` (`main`). Core만 재빌드·재생성하고 nginx를 재시작했다.
+  이전 Core 이미지는 `axon-core-admin-fixes-rollback:20261024`로 보관했다.
+- 기본 증분 분석 진입은 분석 가능한 최신 실행 4를 선택한다. 승인 대기 실행 7은
+  선택 목록에서 제외되며, 직접 링크로 열면 조건 안내를 표시하고 분석 요청을 보내지 않는다.
+  쿠폰 활동 편집은 기존 값 로딩과 저장 데이터 구성에서 공유 모듈 함수를 올바르게 참조한다.
+- Java 테스트 6개, JS 테스트 3개, 구문 검사와 JAR 빌드가 통과했다.
+  VM에서 실제 SSR 응답과 배포 JS, 정상 실행 분석 API 200, 데모 변경 요청 403을 확인했다.
+- Core health는 `UP`이며 환경변수와 CPU 제한은 교체 전후 동일하다.
+  시연 DB, Entry, Redis, Kafka 및 ES 미기동 상태는 변경하지 않았다.
+
 ## 네이버 로그인 환경변수
 
 운영 VM의 `/home/ubuntu/apps/axon/.env`에는 실제 발급받은 `NAVER_CLIENT_ID`와
