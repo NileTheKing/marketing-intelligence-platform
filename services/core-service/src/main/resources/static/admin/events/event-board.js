@@ -97,7 +97,7 @@
     if (!state.events.length) {
       elements.tableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="px-4 py-6 text-center text-sm text-neutral-500">
+          <td colspan="8" class="empty">
             아직 등록된 이벤트가 없습니다.
           </td>
         </tr>
@@ -107,36 +107,25 @@
 
     state.events.forEach((event) => {
       const row = document.createElement('tr');
-      row.className = 'hover:bg-neutral-50';
+      row.className = '';
       row.innerHTML = `
-        <td class="px-4 py-4">
+        <td class="">
           <input type="checkbox" class="w-4 h-4 rounded border-neutral-300" data-event-checkbox value="${event.id}">
         </td>
-        <td class="px-4 py-4">
+        <td class="">
           <button class="text-neutral-900 hover:text-primary-600" data-event-edit="${event.id}">${event.name}</button>
         </td>
-        <td class="px-4 py-4" style="min-width: 120px; width: 120px;">
-          <div class="flex items-center flex-nowrap space-x-2">
-            <span class="relative flex h-2 w-2 flex-shrink-0">
-              ${event.status === 'ACTIVE' 
-                ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>' 
-                : '<span class="relative inline-flex rounded-full h-2 w-2 bg-neutral-300"></span>'}
-            </span>
-            <span class="text-sm font-bold whitespace-nowrap leading-none ${event.status === 'ACTIVE' ? 'text-green-700' : 'text-neutral-500'}" style="white-space: nowrap !important;">
-              ${translateStatus(event.status)}
-            </span>
-          </div>
+        <td><span class="pill ${event.status === 'ACTIVE' ? 'live' : ''}"><i></i>${translateStatus(event.status)}</span></td>
+        <td class="">${({PAGE_VIEW:'페이지 뷰',CLICK:'클릭',FORM_SUBMISSION:'폼 제출',SCROLL_DEPTH:'스크롤 도달'})[event.triggerType] ?? event.triggerType ?? '-'}</td>
+        <td class="">
+          <code class="event-payload">${formatPayload(event.triggerPayload)}</code>
         </td>
-        <td class="px-4 py-4 text-sm text-neutral-700">${event.triggerType ?? '-'}</td>
-        <td class="px-4 py-4 text-sm text-neutral-700">
-          <code class="inline-block px-2 py-1 text-xs bg-neutral-100 rounded">${formatPayload(event.triggerPayload)}</code>
-        </td>
-        <td class="px-4 py-4 text-sm text-neutral-600">${event.description ?? '-'}</td>
-        <td class="px-4 py-4 text-sm text-neutral-600">${formatDate(event.updatedAt)}</td>
-        <td class="px-4 py-4 text-right">
+        <td class="">${event.description ?? '-'}</td>
+        <td class="">${formatDate(event.updatedAt)}</td>
+        <td class="r">
           <div class="flex items-center justify-end space-x-2">
-            <button class="text-sm text-neutral-500 hover:text-primary-600" data-event-edit="${event.id}"><i class="fa-regular fa-pen-to-square"></i></button>
-            <button class="text-sm text-neutral-500 hover:text-red-500" data-event-delete="${event.id}"><i class="fa-regular fa-trash-can"></i></button>
+            <button class="menu-btn" data-event-edit="${event.id}"><i class="fa-regular fa-pen-to-square"></i></button>
+            <button class="menu-btn low" data-event-delete="${event.id}"><i class="fa-regular fa-trash-can"></i></button>
           </div>
         </td>
       `;
@@ -157,7 +146,7 @@
   function renderErrorRow(message) {
     elements.tableBody.innerHTML = `
       <tr>
-        <td colspan="8" class="px-4 py-6 text-center text-sm text-red-600">${message}</td>
+        <td colspan="8" class="empty low">${message}</td>
       </tr>
     `;
   }
