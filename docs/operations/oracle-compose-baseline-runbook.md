@@ -68,6 +68,22 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   테이블 초기화가 포함되므로 현재 VM에 그대로 실행하지 않는다.
 - 이전 Core 이미지는 VM의 `axon-core-dashboard-rollback:20261023` 태그로 보관했다.
 
+## 2026-10-24 관리자 콘솔 디자인 배포
+
+- 배포 코드: `56931f8` (`main`). 화면별 로컬 확인과 관리자 데모 통합 테스트 4개 통과 후
+  push하고 VM에서 Core만 재빌드·재생성했다. nginx는 새 Core 연결을 위해 재시작했다.
+- 기존 Core 이미지는 `axon-core-console-rollback:20261024`로 보관했다.
+  환경 파일과 교체 전 Core 설정은 VM의 보호된 배포 백업 디렉터리에 보관하며 공개하지 않는다.
+- DB migration과 데이터 생성은 실행하지 않았다. Entry, MySQL, Redis, Kafka는 재생성하지 않았다.
+- 교체 전후 Core 환경변수와 CPU 제한이 동일함을 확인했다. Core와 Entry health는 `UP`이다.
+- 데모 권한으로 전체 개요, 캠페인 관리, 쿠폰, 행동 이벤트, 캠페인 대시보드와 증분 효과
+  6개 화면의 200 응답, 공통 콘솔 레이아웃과 읽기 전용 배너를 확인했다.
+  `/admin`은 전체 개요로 연결되고, 활동 생성·모니터링 접근과 변경 요청은 403으로 차단됐다.
+- 캠페인 조회 API의 선택 기간과 조회 불가 행동 통계의 `null` 처리를 확인했다.
+  공개 HTTPS 주소에서도 새 캠페인 대시보드와 공통 사이드바가 표시됐다.
+- 데이터는 기존 VM 실험 데이터다. ES 미가동과 시연 데이터 전환은 이번 배포 범위 밖이다.
+  로컬 확인 중 발견한 기존 기능 이슈는 [콘솔 디자인 기록](../architecture/admin-console-design.md)에 남겼다.
+
 ## 네이버 로그인 환경변수
 
 운영 VM의 `/home/ubuntu/apps/axon/.env`에는 실제 발급받은 `NAVER_CLIENT_ID`와
