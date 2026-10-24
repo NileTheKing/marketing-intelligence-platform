@@ -103,8 +103,7 @@ function renderComparisonChart(activities) {
             },
             onClick:(event, elements, chart) => {
                 if (elements.length) {
-                    const activity = activities.find(a => a.activityName === chart.data.labels[elements[0].index]);
-                    window.location.href = `/admin/dashboard/${activity.activityId}`;
+                    window.location.href = `/admin/dashboard/${activities[elements[0].index].activityId}`;
                 }
             },
             onHover:(event, elements) => { event.native.target.style.cursor = elements.length ? 'pointer' : 'default'; }
