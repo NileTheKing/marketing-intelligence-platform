@@ -75,3 +75,50 @@
 .console .bar i { display: block; height: 100%; background: var(--accent); }
 .console .low { color: var(--low); }
 .console .empty { padding: 24px 16px; color: var(--text-3); text-align: center; }
+
+/* Shared controls used by console pages. */
+.console .icon-btn { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 0 2px; font-size: 11px; }
+.console .icon-btn:hover { color: var(--text); }
+.console .btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 7px; font: 600 12px Pretendard, sans-serif; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; }
+.console .btn:hover { background: #f4f3ef; }
+.console .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.console .btn.primary:hover { background: #244fbd; }
+.console .btn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+.console .pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--track); color: var(--text-2); white-space: nowrap; }
+.console .pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.console .pill.live { background: #e8f5ee; color: var(--ok); }
+.console .pill.soon { background: var(--accent-soft); color: var(--accent); }
+.console .pill.paused { background: #fdf4e3; color: #9a6400; }
+.console .tag { font-size: 11px; color: var(--text-2); }
+.console .actions { display: flex; gap: 6px; }
+.console .toolbar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.console .toolbar input, .console .toolbar select { height: 28px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font: 12px Pretendard, sans-serif; background: var(--surface); color: var(--text); }
+.console .toolbar input { width: 200px; }
+.console .toolbar input:focus, .console .toolbar select:focus { outline: 1px solid var(--accent); }
+.console .menu-btn { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 2px 6px; }
+.console .menu-btn:hover { color: var(--text); }
+.console .dropdown { position: fixed; z-index: 9999; width: 128px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(20,20,20,.08); padding: 4px; font: 12px Pretendard, sans-serif; }
+.console .dropdown button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--text); }
+.console .dropdown button:hover { background: #f4f3ef; }
+.console .dropdown button.danger { color: var(--low); }
+.console .dropdown hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.console .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 2px; }
+.console .seg button { border: 0; background: none; font: 600 12px Pretendard, sans-serif; color: var(--text-3); padding: 3px 10px; border-radius: 5px; cursor: pointer; }
+.console .seg button.on { background: #f1f0ec; color: var(--text); }
+
+.console .head-actions { display:flex; align-items:center; gap:10px; }
+.console .table-wrap { overflow-x:auto; }
+.console .notice { margin:0 0 16px; padding:10px 14px; border:1px solid var(--border); border-radius:7px; color:var(--text-2); background:var(--surface); }
+.console .field { display:flex; flex-direction:column; gap:5px; }
+.console .field label, .console .form-label { display:block; font-size:12px; font-weight:600; color:var(--text-2); margin-bottom:5px; }
+.console .form-input, .console .form-select, .console .form-textarea { width:100%; border:1px solid var(--border); border-radius:6px; padding:7px 9px; background:var(--surface); color:var(--text); font:13px Pretendard,sans-serif; box-shadow:none; }
+.console .form-input:focus, .console .form-select:focus, .console .form-textarea:focus { outline:1px solid var(--accent); border-color:var(--accent); box-shadow:none; }
+.console .btn:disabled { opacity:.45; cursor:not-allowed; }
+.console .btn.danger { color:var(--low); border-color:var(--border); }
+.console .pill.paused, .console .pill.soon { background:var(--track); color:var(--text-2); }
+@media(max-width:900px) {
+ .console .shell { grid-template-columns:160px minmax(0,1fr); }
+ .console main { padding:18px; }
+ .console .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .console .topbar { align-items:flex-start; flex-wrap:wrap; }
+}

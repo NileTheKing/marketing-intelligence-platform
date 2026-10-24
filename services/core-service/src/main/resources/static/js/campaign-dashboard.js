@@ -56,237 +56,122 @@ function connectToSse(campaignId) {
 }
 
 function updateDashboard(data) {
-    const unavailable = data.overview.totalVisits == null || data.heatmap == null;
-    document.getElementById("behaviorStatus").hidden = !unavailable;
-    // 1. Update Header
-    const headerEl = document.getElementById('campaignName');
-    if (headerEl.textContent !== `Campaign Dashboard: ${data.campaignName}`) {
-        headerEl.textContent = `Campaign Dashboard: ${data.campaignName}`;
-    }
-    document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-
-    // 2. Update KPI Cards
+    document.getElementById('behaviorStatus').hidden = data.overview.totalVisits != null && data.heatmap != null;
+    document.getElementById('campaignName').textContent = data.campaignName;
+    document.getElementById('lastUpdated').textContent = `${new Date().toLocaleTimeString('ko-KR', {hour12:false})} 갱신`;
     updateKpi('totalVisits', formatNumber(data.overview.totalVisits));
-    updateKpi('totalPurchases', data.overview.purchaseCount);
-    updateKpi('totalGMV', formatCurrency(data.overview.gmv));
-    updateKpi('totalROAS', formatNumber(data.overview.roas) + '%');
-
-    // 3. Render Comparison Chart (Smooth Update)
+    updateKpi('totalPurchases', `${formatNumber(data.overview.purchaseCount)}건`);
+    updateKpi('totalGMV', formatWon(data.overview.gmv));
+    updateKpi('totalROAS', Number(data.overview.gmv) > 0 ? formatPercent(data.overview.roas) : '매출 없음');
+    document.getElementById('totalROAS').classList.toggle('low', Number(data.overview.gmv) > 0 && data.overview.roas < 100);
     renderComparisonChart(data.activities);
-
-    // 4. Render Heatmap Chart (Smooth Update)
     renderHeatmapChart(data.heatmap);
-
-    // 5. Update Activity Table
     updateActivityTable(data.activities);
 }
 
-function updateKpi(elementId, value) {
-    const el = document.getElementById(elementId);
-    if (el) {
-        // Only update if value changed to avoid minor DOM thrashing (though browser handles this well)
-        if (el.textContent !== String(value)) {
-            el.textContent = value;
-        }
-    }
+function updateKpi(id, value) {
+    document.getElementById(id).textContent = value;
 }
 
 let comparisonChart = null;
 function renderComparisonChart(activities) {
-    const ctx = document.getElementById('comparisonChart').getContext('2d');
-
     const labels = activities.map(a => a.activityName);
     const visits = activities.map(a => a.totalVisits);
     const purchases = activities.map(a => a.totalPurchases);
-
+    const peak = Math.max(0, ...purchases);
+    const colors = purchases.map(n => peak > 0 && n === peak ? '#2b5cd6' : '#dcdad4');
     if (comparisonChart) {
-        // Update existing chart data without destroying
         comparisonChart.data.labels = labels;
         comparisonChart.data.datasets[0].data = visits;
         comparisonChart.data.datasets[1].data = purchases;
-        comparisonChart.update(); // Smooth transition
-    } else {
-        // Create new chart
-        comparisonChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Visits',
-                        data: visits,
-                        backgroundColor: '#3b82f6', // Blue-500
-                        borderRadius: 3,
-                        barPercentage: 0.7,
-                        categoryPercentage: 0.8
-                    },
-                    {
-                        label: 'Purchases',
-                        data: purchases,
-                        backgroundColor: '#93c5fd', // Blue-300 (Lighter blue for contrast)
-                        borderRadius: 3,
-                        barPercentage: 0.7,
-                        categoryPercentage: 0.8
-                    }
-                ]
-            },
-            options: {
-                indexAxis: 'y', // Horizontal Layout (List style)
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    axis: 'y',
-                    intersect: false
-                },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: { size: 12, family: "'Inter', sans-serif" }
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: '#1e293b',
-                        padding: 12,
-                        cornerRadius: 8,
-                        titleFont: { size: 13, weight: 600 },
-                        bodyFont: { size: 12 },
-                        callbacks: {
-                            label: function (context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.x !== null) {
-                                    label += context.parsed.x.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        grid: { color: '#f1f5f9', drawBorder: false },
-                        ticks: { font: { size: 11 }, color: '#64748b' }
-                    },
-                    y: {
-                        grid: { display: false },
-                        ticks: { font: { size: 12, weight: 500 }, color: '#334155' } // Activity Names
-                    }
-                },
-                onClick: (evt, activeElements) => {
-                    if (activeElements.length > 0) {
-                        const index = activeElements[0].index;
-                        const activityId = activities[index].activityId;
-                        window.location.href = `/admin/dashboard/${activityId}`;
-                    }
-                },
-                onHover: (event, chartElement) => {
-                    event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
-                }
-            }
-        });
+        comparisonChart.data.datasets[1].backgroundColor = colors;
+        comparisonChart.update();
+        return;
     }
+    comparisonChart = new Chart(document.getElementById('comparisonChart'), {
+        type:'bar',
+        data:{labels, datasets:[
+            {label:'방문', data:visits, backgroundColor:'#dcdad4', borderRadius:2},
+            {label:'구매', data:purchases, backgroundColor:colors, borderRadius:2}
+        ]},
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx => `${ctx.dataset.label} ${formatNumber(ctx.raw)}건`}}},
+            scales:{
+                x:{grid:{display:false}, border:{color:'#e7e6e2'}, ticks:{color:'#93918b', font:{size:10}, maxRotation:0}},
+                y:{display:false, beginAtZero:true}
+            },
+            onClick:(event, elements, chart) => {
+                if (elements.length) {
+                    const activity = activities.find(a => a.activityName === chart.data.labels[elements[0].index]);
+                    window.location.href = `/admin/dashboard/${activity.activityId}`;
+                }
+            },
+            onHover:(event, elements) => { event.native.target.style.cursor = elements.length ? 'pointer' : 'default'; }
+        }
+    });
 }
 
 let heatmapChart = null;
-function renderHeatmapChart(heatmapData) {
-    const ctx = document.getElementById('heatmapChart').getContext('2d');
-
-    const hours = Array.from({ length: 24 }, (_, i) => i);
-    const data = hours.map(h => heatmapData ? (heatmapData.hourlyTraffic[h] || 0) : null);
-
+function renderHeatmapChart(heatmap) {
+    const hours = Array.from({length:24}, (_,i) => i);
+    const data = hours.map(h => heatmap ? (heatmap.hourlyTraffic[h] || 0) : null);
+    const peak = Math.max(0, ...data);
+    const colors = data.map(n => peak > 0 && n === peak ? '#2b5cd6' : '#dcdad4');
     if (heatmapChart) {
-        // Update existing chart
         heatmapChart.data.datasets[0].data = data;
+        heatmapChart.data.datasets[0].backgroundColor = colors;
         heatmapChart.update();
-    } else {
-        // Create new chart
-        heatmapChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: hours.map(h => `${h}:00`),
-                datasets: [{
-                    label: 'Hourly Traffic',
-                    data: data,
-                    fill: {
-                        target: 'origin',
-                        above: 'rgba(59, 130, 246, 0.1)' // Blue-500 low opacity
-                    },
-                    borderColor: '#3b82f6', // Blue-500
-                    borderWidth: 2,
-                    tension: 0.4,
-                    pointRadius: 0,
-                    pointHoverRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: {
-                    duration: 500
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Visitors'
-                        }
-                    }
-                }
-            }
-        });
+        return;
     }
+    heatmapChart = new Chart(document.getElementById('heatmapChart'), {
+        type:'bar',
+        data:{labels:hours.map(h => `${h}시`), datasets:[{label:'방문', data, backgroundColor:colors, borderRadius:2, barPercentage:.8, categoryPercentage:.9}]},
+        options:{responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx => `${formatNumber(ctx.raw)}명`}}},
+            scales:{x:{grid:{display:false}, border:{color:'#e7e6e2'}, ticks:{color:'#93918b',font:{size:10},autoSkip:false,maxRotation:0,callback:(v,i) => i%6 === 0 ? `${i}시` : ''}}, y:{display:false,beginAtZero:true}}
+        }
+    });
 }
 
 function updateActivityTable(activities) {
     const tbody = document.getElementById('activityTableBody');
-
-    // Simple Strategy: Clear and Rebuild (Good enough for small N)
-    // Optimization: If performance is an issue with 50+ rows, we can update individual cells
-    // But for < 50 rows, innerHTML replacement is instant.
-
-    tbody.innerHTML = '';
-
-    activities.forEach(activity => {
-        console.log('Activity Data:', activity);
-        const row = document.createElement('tr');
-        row.className = "bg-white border-b hover:bg-gray-50 transition-colors duration-150";
-        row.innerHTML = `
-            <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap text-left">
-                <a href="/admin/dashboard/${activity.activityId}" class="text-blue-600 hover:underline hover:text-blue-800 transition-colors">
-                    ${activity.activityName}
-                </a>
-            </td>
-            <td class="px-6 py-4 text-center">${formatNumber(activity.totalVisits)}</td>
-            <td class="px-6 py-4 text-center">${formatNumber(activity.totalEngages)}</td>
-            <td class="px-6 py-4 text-center font-semibold text-blue-600">${formatPercent(activity.engagementRate)}</td>
-            <td class="px-6 py-4 text-center">${formatNumber(activity.totalPurchases)}</td>
-            <td class="px-6 py-4 text-center font-semibold text-green-600">${formatPercent(activity.conversionRate)}</td>
-            <td class="px-6 py-4 text-center">${formatCurrency(activity.gmv)}</td>
-        `;
-        tbody.appendChild(row);
-    });
+    if (!activities.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">등록된 활동이 없습니다.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = activities.map(activity => `
+        <tr>
+            <td><a href="/admin/dashboard/${activity.activityId}">${escapeHtml(activity.activityName)}</a></td>
+            <td class="r num">${formatNumber(activity.totalVisits)}</td>
+            <td class="r num">${formatNumber(activity.totalEngages)}</td>
+            <td class="r num">${formatPercent(activity.engagementRate)}</td>
+            <td class="r num">${formatNumber(activity.totalPurchases)}</td>
+            <td class="r num">${formatPercent(activity.conversionRate)}</td>
+            <td class="r num">${formatWon(activity.gmv)}</td>
+        </tr>`).join('');
 }
 
-// Utility functions
-function formatNumber(num) {
-    if (num === undefined || num === null) return '-';
-    return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 }).format(num);
+function formatNumber(value) {
+    if (value === undefined || value === null) return '-';
+    return new Intl.NumberFormat('ko-KR', {maximumFractionDigits:1}).format(value);
 }
 
-function formatCurrency(amount) {
-    if (amount === undefined || amount === null) return '-';
-    return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
-}
 function formatPercent(value) {
     return value == null ? '-' : `${formatNumber(value)}%`;
+}
+
+function formatWon(amount) {
+    if (amount === undefined || amount === null) return '-';
+    const v = Math.round(Number(amount) || 0);
+    if (v < 1e8) return `${v.toLocaleString('ko-KR')}원`;
+    const man = Math.round((v % 1e8) / 1e4);
+    return `${Math.floor(v / 1e8)}억${man ? ` ${man.toLocaleString('ko-KR')}만` : ''}원`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => (
+        {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch]));
 }
 
 function togglePeriodDropdown() {

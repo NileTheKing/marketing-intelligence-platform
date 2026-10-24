@@ -1,135 +1,66 @@
 <!DOCTYPE html>
-<html lang="ko" xmlns:th="http://www.thymeleaf.org"
-    th:replace="fragments/layout :: layout('Axon - Campaign Dashboard', 'bg-gray-50 text-neutral-900', ~{::head}, ~{::section}, 'dashboard')">
-
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axon - 캠페인 대시보드</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
-        crossorigin="anonymous"></script>
-    <link rel="stylesheet" th:href="@{/css/dashboard.css}" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <style>
+        .campaign-charts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
+        .chart-wrap { position:relative; height:180px; }
+        .period-picker { position:relative; }
+        #periodDropdown { position:absolute; right:0; top:34px; width:150px; z-index:20; }
+        #periodDropdown a { display:block; padding:7px 9px; color:var(--text); border-radius:5px; text-decoration:none; }
+        #periodDropdown a:hover { background:var(--track); }
+        @media(max-width:1000px) { .campaign-charts { grid-template-columns:1fr; } }
+    </style>
 </head>
-<section>
-    <input type="hidden" id="campaignId" th:value="${campaignId}" />
-
-    <div class="dashboard-layout">
-        <!-- Sidebar -->
-        <div th:replace="fragments/dashboard_sidebar :: sidebar('campaign', ${campaignId}, null)"></div>
-
-        <main class="dashboard-main pt-6">
-<p id="behaviorStatus" role="status" hidden style="padding:12px 16px;background:#fff7ed;color:#9a3412">행동 통계 일부를 조회할 수 없습니다. 조회하지 못한 지표는 표시하지 않으며, 구매 건수와 매출은 DB 조회 결과입니다.</p>
-            <!-- Header -->
-            <div class="dashboard-header">
-                <div class="mb-2 flex items-center gap-2 text-sm text-gray-500">
-                    <a href="/admin" class="hover:text-blue-600 transition-colors"><i class="fa-solid fa-house"></i></a>
-                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                    <a href="/admin/dashboard/overview" class="hover:text-blue-600 transition-colors">Global</a>
-                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                    <span class="font-medium text-gray-900" th:text="${campaignName}">Campaign</span>
-                </div>
-
-                <div class="dashboard-title-row">
-                    <h1 class="page-title" id="campaignName">Campaign Dashboard</h1>
-                    
-                    <div class="flex items-center gap-4">
-                        <span id="lastUpdated" class="text-xs text-gray-400 hidden sm:inline-block">Last updated: --:--:--</span>
-
-                        <!-- Date Period Selector (Match Activity Dashboard) -->
-                        <div class="relative">
-                        <button onclick="togglePeriodDropdown()" class="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-shadow shadow-sm">
-                            <i class="fa-regular fa-calendar text-gray-400"></i>
-                            <span id="currentPeriodLabel">Last 7 Days</span>
-                            <i class="fa-solid fa-chevron-down text-xs text-gray-400 ml-2"></i>
-                        </button>
-
-                        <!-- Dropdown Menu -->
-                        <div id="periodDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
-                            <a href="#" onclick="changePeriod('1d', 'Last 24 Hours')" class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600">
-                                Last 24 Hours
-                            </a>
-                            <a href="#" onclick="changePeriod('7d', 'Last 7 Days')" class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600">
-                                Last 7 Days
-                            </a>
-                            <a href="#" onclick="changePeriod('30d', 'Last 30 Days')" class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600">
-                                Last 30 Days
-                            </a>
-                        </div>
+<body class="console">
+<th:block th:replace="~{fragments/admin_demo :: banner}"></th:block>
+<input type="hidden" id="campaignId" th:value="${campaignId}">
+<div class="shell">
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('campaigns')}"></aside>
+    <main>
+        <p id="behaviorStatus" role="status" hidden class="notice">행동 통계 일부를 조회할 수 없습니다. 조회하지 못한 지표는 표시하지 않으며, 구매 건수와 매출은 DB 조회 결과입니다.</p>
+        <div class="topbar">
+            <div><div class="crumb">분석 / 캠페인</div><h1 id="campaignName" th:text="${campaignName}">캠페인 대시보드</h1></div>
+            <div class="head-actions">
+                <span class="updated"><i></i><span id="lastUpdated">실시간</span></span>
+                <div class="period-picker">
+                    <button type="button" class="btn" onclick="togglePeriodDropdown()"><span id="currentPeriodLabel">최근 7일</span><span aria-hidden="true">⌄</span></button>
+                    <div id="periodDropdown" class="dropdown hidden">
+                        <a href="#" onclick="changePeriod('1d', '최근 24시간'); return false;">최근 24시간</a>
+                        <a href="#" onclick="changePeriod('7d', '최근 7일'); return false;">최근 7일</a>
+                        <a href="#" onclick="changePeriod('30d', '최근 30일'); return false;">최근 30일</a>
                     </div>
                 </div>
             </div>
-
-            <!-- Section 1: Campaign KPI Cards -->
-            <div class="kpi-grid mb-8">
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalVisits', 'Total Visits', 'fa-solid fa-eye', 'blue', '0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalPurchases', 'Total Purchases', 'fa-solid fa-cart-shopping', 'green', '0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalGMV', 'Total GMV', 'fa-solid fa-sack-dollar', 'emerald', '₩0', '-', 'neutral')">
-                </div>
-                <div
-                    th:replace="fragments/dashboard_widgets :: kpiCard('totalROAS', 'ROAS', 'fa-solid fa-chart-line', 'rose', '0%', '-', 'neutral')">
-                </div>
-            </div>
-
-            <!-- Section 2: Comparison Chart -->
-            <div class="charts-grid mb-8">
-                <div class="chart-card full">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Activity Performance Comparison</h3>
-                    </div>
-                    <div class="h-80 relative">
-                        <canvas id="comparisonChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 3: Heatmap & Table -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
-                <!-- Hourly Heatmap -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Hourly Traffic Heatmap</h3>
-                    </div>
-                    <div class="h-64 relative">
-                        <canvas id="heatmapChart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Activity List Table -->
-                <div class="chart-card overflow-hidden">
-                    <div class="chart-header border-b border-gray-100 pb-4 mb-0">
-                        <h3 class="chart-title">Activity Details</h3>
-                    </div>
-                    <div class="overflow-x-auto mt-4">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-left">Activity</th>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-center whitespace-nowrap">Visits</th>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-center whitespace-nowrap">Engagem.</th>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-center whitespace-nowrap">CTR</th>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-center whitespace-nowrap">Purchases</th>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-center whitespace-nowrap">CVR</th>
-                                    <th scope="col" class="px-6 py-3 font-semibold text-center whitespace-nowrap">GMV</th>
-                                </tr>
-                            </thead>
-                            <tbody id="activityTableBody" class="divide-y divide-gray-100">
-                                <!-- Rows will be populated by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <script th:src="@{/js/campaign-dashboard.js}"></script>
-        <!-- Chatbot -->
-        <div th:replace="fragments/chatbot :: chatbot"></div>
-        <script th:src="@{/js/chatbot.js}"></script>
-    </div>
-</section>
-
+        </div>
+        <div class="cat"><b>성과 요약</b><span>선택 기간, 결제 확정 기준</span></div>
+        <section class="card kpis" style="--kpi-count:4">
+            <div class="kpi"><div class="kpi-label">방문</div><div class="kpi-val num" id="totalVisits">-</div><div class="kpi-sub">활동 방문 합계</div></div>
+            <div class="kpi"><div class="kpi-label">구매</div><div class="kpi-val num" id="totalPurchases">-</div><div class="kpi-sub">결제 확정 건수</div></div>
+            <div class="kpi"><div class="kpi-label">거래액</div><div class="kpi-val num" id="totalGMV">-</div><div class="kpi-sub">활동 거래액 합계</div></div>
+            <div class="kpi"><div class="kpi-label">ROAS</div><div class="kpi-val num" id="totalROAS">-</div><div class="kpi-sub">거래액 ÷ 예산</div></div>
+        </section>
+        <div class="cat"><b>활동과 트래픽</b><span>활동별 구매 비교, 시간대별 방문</span></div>
+        <div class="campaign-charts">
+            <section class="card panel"><div class="p-head"><div class="p-title">활동별 방문과 구매</div><div class="p-sub">막대에 마우스를 올려 지표 확인</div></div><div class="chart-wrap"><canvas id="comparisonChart"></canvas></div></section>
+            <section class="card panel"><div class="p-head"><div class="p-title">시간대별 방문</div><div class="p-sub">선택 기간 합계</div></div><div class="chart-wrap"><canvas id="heatmapChart"></canvas></div></section>
+        </div>
+        <div class="cat"><b>활동 상세</b><span>활동 이름을 누르면 상세 대시보드로 이동합니다</span></div>
+        <section class="card table-wrap"><table>
+            <thead><tr><th>활동</th><th class="r">방문</th><th class="r">참여 클릭</th><th class="r">클릭률</th><th class="r">구매</th><th class="r">구매 전환율</th><th class="r">거래액</th></tr></thead>
+            <tbody id="activityTableBody"></tbody>
+        </table></section>
+    </main>
+</div>
+<script th:src="@{/js/campaign-dashboard.js}"></script>
+<div th:replace="~{fragments/chatbot :: chatbot}"></div>
+<script th:src="@{/js/chatbot.js}"></script>
+</body>
 </html>

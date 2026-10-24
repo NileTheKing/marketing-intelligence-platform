@@ -21,31 +21,13 @@
         .c-name { display: flex; justify-content: space-between; gap: 6px; font-weight: 600; font-size: 12.5px; }
         .c-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .c-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; font-size: 11px; color: var(--text-3); }
-        .icon-btn { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 0 2px; font-size: 11px; }
-        .icon-btn:hover { color: var(--text); }
 
-        .btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 7px; font: 600 12px Pretendard, sans-serif; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; }
-        .btn:hover { background: #f4f3ef; }
-        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-        .btn.primary:hover { background: #244fbd; }
-        .btn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
 
-        .pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--track); color: var(--text-2); white-space: nowrap; }
-        .pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-        .pill.live { background: #e8f5ee; color: var(--ok); }
-        .pill.soon { background: var(--accent-soft); color: var(--accent); }
-        .pill.paused { background: #fdf4e3; color: #9a6400; }
-        .tag { font-size: 11px; color: var(--text-2); }
 
         .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
         .detail-head h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
         .detail-head .sub { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; color: var(--text-3); }
-        .actions { display: flex; gap: 6px; }
 
-        .toolbar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
-        .toolbar input, .toolbar select { height: 28px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font: 12px Pretendard, sans-serif; background: var(--surface); color: var(--text); }
-        .toolbar input { width: 200px; }
-        .toolbar input:focus, .toolbar select:focus { outline: 1px solid var(--accent); }
         #activity-table-body td { white-space: nowrap; }
         #activity-table-body td:first-child > a, #activity-table-body td:first-child > .act-name,
         #activity-table-body .act-sub { display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
@@ -54,13 +36,6 @@
         #activity-table-body .bar { width: 56px; }
         .act-name { font-weight: 600; }
         .act-sub { font-size: 11px; color: var(--text-3); margin-top: 1px; }
-        .menu-btn { border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 2px 6px; }
-        .menu-btn:hover { color: var(--text); }
-        .dropdown { position: fixed; z-index: 9999; width: 128px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(20,20,20,.08); padding: 4px; font: 12px Pretendard, sans-serif; }
-        .dropdown button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--text); }
-        .dropdown button:hover { background: #f4f3ef; }
-        .dropdown button.danger { color: var(--low); }
-        .dropdown hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
         .placeholder { padding: 60px 16px; text-align: center; color: var(--text-3); }
     </style>
 </head>
