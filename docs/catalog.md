@@ -27,6 +27,7 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
+| [관리자 콘솔 디자인](architecture/admin-console-design.md) | active | 공통 디자인, 화면 구성과 로컬 확인 기준 |
 | [실패 분석 AI 에이전트](architecture/dlq-failure-triage-agent-v1-plan.md) | active | Core·AI·Slack의 구현된 분석·재시도 승인 흐름 |
 | [행동 이벤트 스키마](architecture/behavior-event-schema-v1.md) | active | 속성 타입과 인증 사용자 식별. ES 전환은 문서상 대기 상태 |
 | [선착순 설계 변천](architecture/campaign-activity-limit-flow.md) | reference | 초기 대안과 예약 설계 참고 |
