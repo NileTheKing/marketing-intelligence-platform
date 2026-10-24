@@ -108,7 +108,7 @@ window.adminModalHandler = {
                             <!-- 1. Basic Info -->
                             <div class="section-card">
                                 <h2 class="section-title">
-                                    <span class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">1</span>
+
                                     기본 정보
                                 </h2>
                                 <div class="space-y-5">
@@ -132,10 +132,10 @@ window.adminModalHandler = {
                                             <div class="w-full aspect-video bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200 relative group max-w-md">
                                                 <img id="edit-imagePreview" src="${activityDetails.imageUrl || ''}" alt="Preview" class="w-full h-full object-cover ${activityDetails.imageUrl ? '' : 'hidden'}">
                                                 <div id="edit-imagePlaceholder" class="flex items-center justify-center w-full h-full ${activityDetails.imageUrl ? 'hidden' : ''}">
-                                                    <i class="fa-regular fa-image text-gray-400 text-4xl"></i>
+                                                    <i class="fa-regular fa-image text-gray-400 text-base"></i>
                                                 </div>
                                                 <div id="edit-imageOverlay" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                                    <i class="fa-solid fa-pen text-white text-2xl"></i>
+                                                    <i class="fa-solid fa-pen text-white text-base"></i>
                                                 </div>
                                             </div>
                                             <div>
@@ -175,7 +175,7 @@ window.adminModalHandler = {
                             <!-- 2. Schedule & Limits -->
                             <div class="section-card">
                                 <h2 class="section-title">
-                                    <span class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">2</span>
+
                                     일정 및 제한
                                 </h2>
                                 <div class="space-y-5">
@@ -215,7 +215,7 @@ window.adminModalHandler = {
                             <!-- 3. Targeting Filters -->
                             <div class="section-card">
                                 <h2 class="section-title">
-                                    <span class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">3</span>
+
                                     타겟팅 필터
                                 </h2>
                                 <div class="space-y-4" id="edit-filter-container">
@@ -304,7 +304,7 @@ window.adminModalHandler = {
                             <!-- 4. Product/Coupon Info -->
                             <div class="section-card">
                                 <h2 class="section-title">
-                                    <span class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">4</span>
+
                                     <span id="edit-section-4-title">${isCouponType ? '쿠폰 정보' : '상품 정보'}</span>
                                 </h2>
                                 
@@ -315,7 +315,7 @@ window.adminModalHandler = {
                                         <div class="flex gap-2 mb-2">
                                             <input type="text" id="edit-selectedProductName" class="form-input bg-gray-50 cursor-not-allowed flex-1" placeholder="상품을 선택해주세요" readonly value="${(!isCouponType && activityDetails.productName) ? activityDetails.productName : ''}">
                                             <input type="hidden" id="edit-selectedProductId" value="${(!isCouponType && activityDetails.productId) ? activityDetails.productId : ''}">
-                                            <button type="button" id="edit-openProductSearchBtn" class="open-product-search-btn px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shrink-0">
+                                            <button type="button" id="edit-openProductSearchBtn" class="open-product-search-btn px-4 py-2 btn primary shrink-0">
                                                 상품 검색
                                             </button>
                                         </div>
@@ -360,7 +360,7 @@ window.adminModalHandler = {
                                         <div class="flex gap-2 mb-2">
                                             <input type="text" id="edit-selectedCouponName" class="form-input bg-gray-50 cursor-not-allowed flex-1" placeholder="쿠폰을 선택해주세요" readonly value="${(isCouponType && activityDetails.productName) ? activityDetails.productName : ''}">
                                             <input type="hidden" id="edit-selectedCouponId" value="${(isCouponType && activityDetails.productId) ? activityDetails.productId : ''}">
-                                            <button type="button" id="edit-openCouponSearchBtn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shrink-0">
+                                            <button type="button" id="edit-openCouponSearchBtn" class="px-4 py-2 btn primary shrink-0">
                                                 쿠폰 검색
                                             </button>
                                         </div>
@@ -382,7 +382,7 @@ window.adminModalHandler = {
 
                 <!-- Product Search Modal -->
                 <div id="edit-productSearchModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[2050]">
-                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+                    <div class="modal-content">
                         <div class="p-4 border-b border-gray-100 flex justify-between items-center">
                             <h3 class="font-bold text-lg">상품 검색</h3>
                             <button type="button" id="edit-closeProductSearchBtn" class="close-product-search-btn text-gray-400 hover:text-gray-600">
@@ -407,9 +407,9 @@ window.adminModalHandler = {
 
                 <!-- Coupon Search Modal -->
                 <div id="edit-couponSearchModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-[2050]">
-                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-                        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-purple-50">
-                            <h3 class="font-bold text-lg text-purple-900">쿠폰 검색</h3>
+                    <div class="modal-content">
+                        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 class="font-bold text-lg text-gray-900">쿠폰 검색</h3>
                             <button type="button" id="edit-closeCouponSearchBtn" class="text-gray-400 hover:text-gray-600">
                                 <i class="fa-solid fa-xmark text-xl"></i>
                             </button>
@@ -417,7 +417,7 @@ window.adminModalHandler = {
                         <div class="p-4">
                             <div class="flex gap-2 mb-4">
                                 <input type="text" id="edit-couponSearchInput" class="form-input" placeholder="쿠폰 이름을 검색하세요">
-                                <button type="button" id="edit-couponSearchActionBtn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                                <button type="button" id="edit-couponSearchActionBtn" class="px-4 py-2 btn primary">
                                     검색
                                 </button>
                             </div>
@@ -515,7 +515,7 @@ window.adminModalHandler = {
                         <div class="font-medium text-gray-900">${coupon.couponName}</div>
                         <div class="text-xs text-gray-500">${benefit} | ${new Date(coupon.startDate).toLocaleDateString()} ~ ${new Date(coupon.endDate).toLocaleDateString()}</div>
                     </div>
-                    <button type="button" class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-bold">선택</button>
+                    <button type="button" class="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full font-bold">선택</button>
                 `;
 
                 li.addEventListener('click', () => {
@@ -729,7 +729,7 @@ window.adminModalHandler = {
                     </div>
                     <div class="modal-body">
                         <p><strong>'${campaignActivityName}'</strong> 캠페인 활동의 상태를</p>
-                        <p><strong>${currentStatus}</strong> 에서 <strong style="color: tomato">${newStatus}</strong> (으)로 변경하시겠습니까?</p>
+                        <p><strong>${currentStatus}</strong> 에서 <strong style="color: var(--low)">${newStatus}</strong> (으)로 변경하시겠습니까?</p>
                         <br>
                         <div id="ENDED-message"></div>
                     </div>
@@ -742,7 +742,7 @@ window.adminModalHandler = {
         `;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         if (currentStatus === "ACTIVE" && newStatus === "ENDED") {
-            document.getElementById("ENDED-message").innerHTML = "<strong style='color: tomato'>ENDED</strong>상태로 변경시 캠페인 활동이 종료되며,<br> 더이상 상태변경이 불가능해집니다.";
+            document.getElementById("ENDED-message").innerHTML = "<strong style='color: var(--low)'>ENDED</strong>상태로 변경시 캠페인 활동이 종료되며,<br> 더이상 상태변경이 불가능해집니다.";
         }
 
         const modalBackdrop = document.getElementById('status-modal-backdrop');
@@ -980,12 +980,12 @@ window.adminModalHandler = {
 
                 if (isTaken) {
                     duplicateCheckResult.textContent = '이미 사용 중인 이름입니다.';
-                    duplicateCheckResult.style.color = 'red';
+                    duplicateCheckResult.style.color = 'var(--low)';
                     isNameAvailable = false;
                     confirmBtn.disabled = true;
                 } else {
                     duplicateCheckResult.textContent = '사용 가능한 이름입니다.';
-                    duplicateCheckResult.style.color = 'green';
+                    duplicateCheckResult.style.color = 'var(--ok)';
                     isNameAvailable = true;
                     confirmBtn.disabled = false;
                 }

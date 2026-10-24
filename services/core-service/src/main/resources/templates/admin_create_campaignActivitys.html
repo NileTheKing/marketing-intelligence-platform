@@ -1,91 +1,58 @@
 <!DOCTYPE html>
-<html lang="ko" xmlns:th="http://www.thymeleaf.org"
-    th:replace="fragments/layout :: layout('새 캠페인 활동 만들기', 'bg-gray-50', ~{::head/content()}, ~{::section}, 'campaigns')">
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
         crossorigin="anonymous"></script>
-    <style type="text/tailwindcss">
-        /* Custom Styles for Selectable Cards */
-        .campaign-type-card {
-            @apply border border-gray-200 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-black hover:shadow-md flex flex-col items-center text-center bg-white;
-        }
-
-        .campaign-type-card.selected {
-            @apply border-black bg-gray-900 text-white ring-2 ring-offset-2 ring-black;
-        }
-
-        .campaign-type-card.selected .type-desc {
-            @apply text-gray-300;
-        }
-
-        .campaign-type-card .type-icon {
-            @apply text-2xl mb-2;
-        }
-
-        .campaign-type-card .type-desc {
-            @apply text-xs text-gray-500 mt-1;
-        }
-
-        /* Form Input Styles */
-        .form-label {
-            @apply block text-sm font-medium text-gray-700 mb-1.5;
-        }
-
-        .form-input,
-        .form-select,
-        .form-textarea {
-            @apply w-full rounded-lg border border-black shadow-sm focus:border-black focus:ring-black sm:text-sm py-2.5 px-4;
-        }
-
-        .section-card {
-            @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6;
-        }
-
-        .section-title {
-            @apply text-lg font-bold text-gray-900 mb-4 flex items-center;
-        }
+    <meta charset="UTF-8"><title>Axon - 캠페인 활동 만들기</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <style>
+        .editor-grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr); gap:18px; align-items:start; }
+        .editor-grid > div { grid-column:auto; }
+        .editor-grid .cat { margin-top:18px; }
+        .editor-grid .cat:first-child { margin-top:0; }
+        .editor-fields > .cat:not(:first-child) { margin-top:18px; }
+        #image-upload-section .aspect-video { max-width:260px; }
+        #imagePlaceholder svg { width:16px; height:16px; }
+        #preview-section .aspect-video { height:110px; aspect-ratio:auto; border:1px solid var(--border); }
+        #preview-section .w-24 { width:48px; height:48px; border-radius:6px; background:var(--track); }
+        #preview-section .space-y-8 > :not([hidden]) ~ :not([hidden]) { margin-top:14px; }
+        #preview-section { position:sticky; top:22px; }
+        #preview-section .sticky { position:static; }
+        #preview-section h2 { font-size:13px; }
+        #preview-section h3, #preview-section h4 { font-size:13px; }
+        #preview-section .bg-black { background:var(--track); color:var(--text-2); }
+        #preview-section [class*="shadow"] { box-shadow:none; }
+        #preview-section i, .campaign-type-card .type-icon, #imagePlaceholder i { font-size:16px; color:var(--text-3); }
+        .campaign-type-card { padding:12px; border:1px solid var(--border); border-radius:7px; cursor:pointer; text-align:left; background:var(--surface); }
+        .campaign-type-card.selected { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+        .campaign-type-card .type-desc { margin-top:4px; font-size:11px; color:var(--text-3); }
+        .activity-editor .form-input, .activity-editor .form-select { font-size:13px; }
+        .activity-editor #preview-section .text-red-600 { color:var(--text); }
+        @media(max-width:1100px) { .editor-grid { grid-template-columns:1fr; } #preview-section { position:static; } }
     </style>
+    <script th:src="@{/js/common.js}"></script>
 </head>
 
-<section class="flex flex-col min-h-screen">
-    <!-- Header -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center">
-                <a href="/admin/campaigns" class="mr-4 text-gray-500 hover:text-black transition-colors">
-                    <i class="fa-solid fa-arrow-left text-lg"></i>
-                </a>
-                <h1 class="text-xl font-bold text-gray-900">새 캠페인 활동 만들기</h1>
-            </div>
-            <div class="flex items-center gap-3">
-                <button type="button" onclick="history.back()"
-                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                    취소
-                </button>
-                <button id="submit"
-                    class="px-4 py-2 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 shadow-sm">
-                    등록 완료
-                </button>
-            </div>
-        </div>
-    </header>
-
-    <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<body class="console activity-editor">
+<th:block th:replace="~{fragments/admin_demo :: banner}"></th:block>
+<div class="shell">
+    <aside th:replace="~{fragments/console_sidebar :: sidebar('campaigns')}"></aside>
+    <main>
+        <header class="topbar">
+            <div><div class="crumb">운영 / 캠페인 / 활동 설정</div><h1>새 캠페인 활동 만들기</h1></div>
+            <div class="head-actions"><button type="button" onclick="history.back()" class="btn">취소</button><button id="submit" class="btn primary">등록 완료</button></div>
+        </header>
+        <div class="editor-grid">
 
             <!-- Left Column: Form (8 cols) -->
-            <div class="lg:col-span-8 space-y-6">
+            <div class="editor-fields lg:col-span-8">
 
                 <!-- 1. Basic Info -->
-                <div class="section-card">
-                    <h2 class="section-title">
-                        <span
-                            class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">1</span>
-                        기본 정보
-                    </h2>
+                <div class="cat"><b>기본 정보</b></div><div class="card panel section-card">
                     <div class="space-y-5">
                         <div>
                             <label for="campaignId" class="form-label">캠페인 선택 <span
@@ -120,8 +87,7 @@
                                 </div>
                                 <div>
                                     <input type="file" id="activityImage" class="hidden" accept="image/png,image/jpeg">
-                                    <button type="button" id="uploadBtn"
-                                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                                    <button type="button" id="uploadBtn" class="btn">
                                         이미지 업로드
                                     </button>
                                     <p class="mt-1 text-xs text-gray-500">권장 사이즈: 1200x630px (JPG, PNG)</p>
@@ -154,12 +120,7 @@
                 </div>
 
                 <!-- 2. Schedule & Limits -->
-                <div class="section-card">
-                    <h2 class="section-title">
-                        <span
-                            class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">2</span>
-                        일정 및 제한
-                    </h2>
+                <div class="cat"><b>일정 및 제한</b></div><div class="card panel section-card">
                     <div class="space-y-5">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
@@ -198,12 +159,7 @@
                 </div>
 
                 <!-- 3. Targeting Filters -->
-                <div class="section-card">
-                    <h2 class="section-title">
-                        <span
-                            class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">3</span>
-                        타겟팅 필터
-                    </h2>
+                <div class="cat"><b>타겟팅 필터</b></div><div class="card panel section-card">
                     <div class="space-y-4" id="filter-container">
                         <!-- Age Filter -->
                         <div class="border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition-colors">
@@ -342,7 +298,7 @@
                             </button>
                             <!-- Filter Menu (Hidden by default) -->
                             <div id="add-filter-menu"
-                                class="hidden absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-10 py-1">
+                                class="hidden absolute top-full left-0 mt-2 w-48 bg-white rounded-lg  border border-gray-100 z-10 py-1">
                                 <button type="button"
                                     class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
                                     data-add-filter="RECENT_PURCHASE">
@@ -356,12 +312,7 @@
 
 
                 <!-- 4. Product/Coupon Selection -->
-                <div class="section-card">
-                    <h2 class="section-title">
-                        <span
-                            class="bg-black text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">4</span>
-                        <span id="section-4-title">상품 정보</span>
-                    </h2>
+                <div class="cat"><b id="section-4-title">상품 정보</b></div><div class="card panel section-card">
 
                     <!-- Product Info Section -->
                     <div id="product-info-container" class="space-y-5">
@@ -373,7 +324,7 @@
                                     readonly>
                                 <input type="hidden" id="selectedProductId">
                                 <button type="button" id="openProductSearchBtn"
-                                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shrink-0 open-product-search-btn">
+                                    class="px-4 py-2 btn primary shrink-0 open-product-search-btn">
                                     상품 검색
                                 </button>
                             </div>
@@ -446,7 +397,7 @@
                                 <input type="hidden" id="selectedCouponId">
                                 <!-- Will be mapped to productId on submit -->
                                 <button type="button" id="openCouponSearchBtn"
-                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shrink-0">
+                                    class="px-4 py-2 btn primary shrink-0">
                                     쿠폰 검색
                                 </button>
                             </div>
@@ -481,17 +432,17 @@
 
                     <!-- Preview Header -->
                     <div class="flex items-center gap-2 mb-4">
-                        <div class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center">
+                        <div class="hidden">
                             <i class="ph-fill ph-eye"></i>
                         </div>
-                        <h2 class="text-xl font-bold">실시간 미리보기</h2>
+                        <h2 class="text-xl font-bold">미리보기</h2>
                     </div>
 
                     <!-- 1. Card Preview (campaign-activities.html style) -->
                     <div>
-                        <h3 class="text-sm font-bold text-gray-500 mb-3">이벤트 목록 카드 (List View)</h3>
+                        <h3 class="text-sm font-bold text-gray-500 mb-3">목록 카드</h3>
                         <div
-                            class="bg-[#f8f8f8] p-6 rounded-sm flex items-center justify-between group border border-transparent hover:border-black transition-all">
+                            class="card panel flex items-center justify-between">
                             <div>
                                 <span id="preview-card-badge"
                                     class="bg-black text-white text-xs font-bold px-2 py-1 mb-3 inline-block">선착순
@@ -499,7 +450,7 @@
                                 <h4 id="preview-card-title" class="text-xl font-black mb-2 leading-tight">활동 이름</h4>
                             </div>
                             <div
-                                class="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-md shrink-0 ml-4">
+                                class="w-24 h-24 bg-white rounded-full flex items-center justify-center  shrink-0 ml-4">
                                 <i id="preview-card-icon" class="ph ph-gift text-3xl text-dark-gray"></i>
                             </div>
                         </div>
@@ -507,12 +458,12 @@
 
                     <!-- 2. Detail Preview (entry.html style) -->
                     <div>
-                        <h3 class="text-sm font-bold text-gray-500 mb-3">이벤트 상세 정보 (Detail View)</h3>
-                        <div class="bg-[#f8f8f8] rounded-sm p-6 border border-gray-100">
+                        <h3 class="text-sm font-bold text-gray-500 mb-3">상세 정보</h3>
+                        <div class="card panel section-card">
                             <div class="flex flex-col gap-6">
                                 <!-- Image Area -->
                                 <div
-                                    class="w-full aspect-video bg-white rounded-sm flex items-center justify-center shadow-sm">
+                                    class="w-full aspect-video bg-white rounded-sm flex items-center justify-center ">
                                     <i id="preview-detail-icon" class="ph ph-gift text-5xl text-dark-gray"></i>
                                 </div>
 
@@ -540,7 +491,7 @@
 
                     <!-- 3. Filter Preview -->
                     <div id="preview-filter-container" class="hidden">
-                        <h3 class="text-sm font-bold text-gray-500 mb-3">참여 조건 (Filters)</h3>
+                        <h3 class="text-sm font-bold text-gray-500 mb-3">참여 조건</h3>
                         <div class="bg-white border border-black rounded-sm p-5 relative">
                             <div
                                 class="absolute -top-3 left-4 bg-white px-2 text-sm font-bold text-black flex items-center gap-1">
@@ -557,13 +508,12 @@
             </div>
         </div>
 
-
-        </div>
     </main>
+</div>
 
     <!-- Product Search Modal -->
     <div id="productSearchModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+        <div class="modal-content">
             <div class="p-4 border-b border-gray-100 flex justify-between items-center">
                 <h3 class="font-bold text-lg">상품 검색</h3>
                 <button type="button" id="closeProductSearchBtn"
@@ -575,7 +525,7 @@
                 <div class="flex gap-2 mb-4">
                     <input type="text" id="productSearchInput" class="form-input" placeholder="상품명을 입력하세요">
                     <button type="button" id="productSearchActionBtn"
-                        class="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">
+                        class="btn primary">
                         검색
                     </button>
                 </div>
@@ -592,9 +542,9 @@
     <!-- Coupon Search Modal -->
     <div id="couponSearchModal"
         class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-            <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-purple-50">
-                <h3 class="font-bold text-lg text-purple-900">쿠폰 검색</h3>
+        <div class="modal-content">
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 class="font-bold text-lg text-gray-900">쿠폰 검색</h3>
                 <button type="button" id="closeCouponSearchBtn" class="text-gray-400 hover:text-gray-600">
                     <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
@@ -604,7 +554,7 @@
                 <div class="flex gap-2 mb-4">
                     <input type="text" id="couponSearchInput" class="form-input" placeholder="쿠폰 이름을 검색하세요">
                     <button type="button" id="couponSearchActionBtn"
-                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        class="px-4 py-2 btn primary">
                         검색
                     </button>
                 </div>
@@ -624,6 +574,6 @@
     <!-- Scripts -->
     <script src="/js/campaign-activity-module.js"></script>
     <script th:src="@{/js/admin_create_campaignActivitys.js}"></script>
-</section>
-
+<script th:src="@{/js/axon-tracker-config.js}"></script>
+</body>
 </html>

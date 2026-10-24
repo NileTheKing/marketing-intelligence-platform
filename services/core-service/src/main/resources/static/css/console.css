@@ -145,3 +145,4 @@
 .console .modal-content .section-title { margin:0 0 12px; font-size:13px; font-weight:700; color:var(--text); }
 .console .modal-content .campaign-type-card { padding:10px; border:1px solid var(--border); border-radius:7px; }
 .console .modal-content .campaign-type-card.selected { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.console .modal-content #edit-image-upload-section .aspect-video { max-width:260px; }
