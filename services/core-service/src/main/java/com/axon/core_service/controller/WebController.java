@@ -42,14 +42,13 @@ public class WebController {
     }
 
     /**
-     * Serve the admin portal home.
+     * Open the shared console overview from the admin entry point.
      *
-     * @return the view name "admin_home"
+     * @return the console overview redirect
      */
     @GetMapping("/admin")
     public String adminHome() {
-        log.info("Serving admin_home.html");
-        return "admin_home";
+        return "redirect:/admin/dashboard/overview";
     }
 
     /**

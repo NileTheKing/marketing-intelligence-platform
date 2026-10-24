@@ -33,7 +33,9 @@ class AdminDemoIntegrationTest extends AbstractIntegrationTest {
         Cookie cookie = enterDemo();
         assertThat(jwtTokenProvider.getAuthentication(cookie.getValue()).getAuthorities())
                 .extracting(authority -> authority.getAuthority()).containsExactly(AdminDemoAccess.AUTHORITY);
-        for (String path : List.of("/admin", "/admin/campaigns", "/admin/coupons", "/admin/events",
+        mockMvc.perform(get("/admin").cookie(cookie))
+                .andExpect(status().isFound()).andExpect(redirectedUrl("/admin/dashboard/overview"));
+        for (String path : List.of("/admin/campaigns", "/admin/coupons", "/admin/events",
                 "/admin/dashboard/overview", "/admin/incrementality")) {
             mockMvc.perform(get(path).cookie(cookie))
                     .andExpect(status().isOk()).andExpect(content().string(containsString("읽기 전용 데모")));
@@ -75,7 +77,7 @@ class AdminDemoIntegrationTest extends AbstractIntegrationTest {
                 List.of(new SimpleGrantedAuthority("ROLE_USER"))));
         Cookie demo = enterDemo();
         mockMvc.perform(get("/admin").cookie(new Cookie("accessToken", original), demo))
-                .andExpect(status().isOk());
+                .andExpect(status().isFound()).andExpect(redirectedUrl("/admin/dashboard/overview"));
         String clear = mockMvc.perform(get("/demo/exit").cookie(demo))
                 .andExpect(status().isFound()).andExpect(redirectedUrl("/shop"))
                 .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
