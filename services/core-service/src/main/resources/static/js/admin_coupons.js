@@ -171,7 +171,7 @@ function createGlobalDropdown() {
     if (!dropdown) {
         dropdown = document.createElement('div');
         dropdown.id = 'global-dropdown-menu';
-        dropdown.className = 'fixed bg-white rounded-md shadow-lg z-50 border border-gray-100 hidden';
+        dropdown.className = 'dropdown hidden';
         dropdown.style.width = '120px';
         document.body.appendChild(dropdown);
 
@@ -208,10 +208,10 @@ window.toggleDropdown = function (id, btnElement) {
 
     // Populate Content
     dropdown.innerHTML = `
-        <button onclick="handleEdit(${index})" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-t-md">
+        <button onclick="handleEdit(${index})" class="">
             <i class="fa-solid fa-pen-to-square mr-2"></i> 수정
         </button>
-        <button onclick="handleDelete(${id})" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-b-md">
+        <button onclick="handleDelete(${id})" class="danger">
             <i class="fa-solid fa-trash mr-2"></i> 삭제
         </button>
     `;
@@ -299,7 +299,7 @@ function renderCouponList(coupons) {
     if (coupons.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="py-10 text-center text-gray-400">
+                <td colspan="6" class="empty">
                     등록된 쿠폰이 없습니다.
                 </td>
             </tr>`;
@@ -308,19 +308,19 @@ function renderCouponList(coupons) {
 
     coupons.forEach((coupon) => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50 relative';
+        tr.className = '';
 
         let typeIcon = '';
         let typeClass = '';
         let benefit = '';
 
         if (coupon.discountAmount) {
-            typeIcon = '<i class="fa-solid fa-won-sign"></i>';
-            typeClass = 'bg-blue-100 text-blue-700'; // Blue for Amount
+            typeIcon = '정액';
+            typeClass = 'pill'; // Blue for Amount
             benefit = `${Number(coupon.discountAmount).toLocaleString()}원`;
         } else if (coupon.discountRate) {
-            typeIcon = '<i class="fa-solid fa-percent"></i>';
-            typeClass = 'bg-purple-100 text-purple-700'; // Purple for Rate
+            typeIcon = '정률';
+            typeClass = 'pill'; // Purple for Rate
             benefit = `${coupon.discountRate}%`;
         }
 
@@ -329,17 +329,17 @@ function renderCouponList(coupons) {
         const end = new Date(coupon.endDate).toLocaleString();
 
         tr.innerHTML = `
-            <td class="py-3 px-4 font-medium text-gray-900">${coupon.couponName}</td>
-            <td class="py-3 px-4">
-                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full ${typeClass}">
+            <td class="">${coupon.couponName}</td>
+            <td class="">
+                <span class="${typeClass}">
                     ${typeIcon}
                 </span>
             </td>
-            <td class="py-3 px-4 text-gray-600 font-medium">${benefit}</td>
-            <td class="py-3 px-4 text-gray-500 text-xs">${start} ~ <br>${end}</td>
-            <td class="py-3 px-4 text-gray-400 text-xs">${start}</td>
-            <td class="py-3 px-4">
-                <button onclick="toggleDropdown(${coupon.id}, this)" class="dropdown-btn text-gray-400 hover:text-gray-600 p-1">
+            <td class="r num">${benefit}</td>
+            <td class="num">${start} ~ <br>${end}</td>
+            <td class="num">${start}</td>
+            <td class="">
+                <button onclick="toggleDropdown(${coupon.id}, this)" class="dropdown-btn menu-btn">
                     <i class="fa-solid fa-ellipsis-vertical"></i>
                 </button>
             </td>

@@ -122,3 +122,26 @@
  .console .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .console .topbar { align-items:flex-start; flex-wrap:wrap; }
 }
+
+/* Forms and dialogs share the same surface and controls as console pages. */
+.console .modal-backdrop { position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(20,20,20,.28); }
+.console .modal-backdrop.hidden { display:none; }
+.console .modal-content { width:100%; max-width:540px; max-height:calc(100vh - 48px); overflow:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:none; }
+.console .modal-header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border); }
+.console .modal-title { font-size:15px; font-weight:700; margin:0; }
+.console .modal-close-button { border:0; background:none; color:var(--text-3); cursor:pointer; font-size:22px; line-height:1; }
+.console .modal-body { padding:16px 18px; font-size:13px; }
+.console .modal-footer { display:flex; justify-content:flex-end; gap:6px; padding:12px 18px; border-top:1px solid var(--border); }
+.console .form-stack { display:grid; gap:14px; }
+.console .form-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.console .form-note { font-size:11px; color:var(--text-3); margin:4px 0 0; }
+.console .btn-primary, .console .btn-secondary, .console .btn-danger { display:inline-flex; align-items:center; justify-content:center; height:30px; padding:0 12px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); cursor:pointer; font:600 12px Pretendard,sans-serif; box-shadow:none; }
+.console .btn-primary { background:var(--accent); border-color:var(--accent); color:white; }
+.console .btn-danger { color:var(--low); }
+.console .btn-primary:disabled, .console .form-input:disabled { opacity:.45; cursor:not-allowed; }
+
+.console .modal-content.large-modal { max-width:900px; }
+.console .modal-content .section-card { padding:0 0 16px; margin:0 0 16px; border:0; border-bottom:1px solid var(--border); border-radius:0; box-shadow:none; }
+.console .modal-content .section-title { margin:0 0 12px; font-size:13px; font-weight:700; color:var(--text); }
+.console .modal-content .campaign-type-card { padding:10px; border:1px solid var(--border); border-radius:7px; }
+.console .modal-content .campaign-type-card.selected { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
