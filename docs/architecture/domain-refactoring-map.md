@@ -134,8 +134,7 @@ HTTP 경로, JPA 엔티티·테이블 이름, 스케줄과 트랜잭션 경계�
 분리했다. `StoreController`는 조회를 `StoreViewService`에, 구매 기록 저장을
 `ShopPurchaseService`에 맡긴다. 쿠폰 사용과 구매 저장은 같은 트랜잭션을 유지한다.
 이번 변경은 책임 분리이며 기존 결제 시뮬레이션, 가격 입력과 HTTP 계약을 바꾸지 않는다.
-캠페인 메타 캐시의 커밋 후 무효화·버전 비교·single-flight 경계는
-[시스템 지도](../architecture-map.md#캠페인-메타-캐시)를 따른다.
+캠페인 메타 캐시의 상세 경계는 아래 절을 따른다.
 
 | Style | Example | Reading impact |
 |---|---|---|
@@ -144,6 +143,22 @@ HTTP 경로, JPA 엔티티·테이블 이름, 스케줄과 트랜잭션 경계�
 | Partial domain package | `domain/campaignactivity`, `service/purchase` | Some business concepts are grouped, but services still cross several concepts. |
 
 This is a layered Spring application with partial feature packaging, not a full DDD or hexagonal package layout. The coupon package is an incremental grouping of related code, not an enforced bounded context. The meaningful architecture is service/module ownership and dependency direction. Packages are useful when they make those boundaries easier to read.
+
+### 캠페인 메타 캐시
+
+Entry는 활동 메타데이터를 Redis `campaign:{id}:meta`에 1시간 저장한다.
+같은 활동의 캐시 미스는 Entry 인스턴스 내부 single-flight로 합쳐 Core 조회를
+공유한다. 여러 Entry 인스턴스 사이의 조회까지 합치는 분산 락은 사용하지 않는다.
+조회 실패 또는 404 응답은 캐싱하지 않으며 진행 중 요청도 정리한다.
+
+Core의 활동 변경·삭제는 DB 커밋 후 Redis 버전 증가와 캐시 삭제를 한 번에 수행한다.
+Entry는 조회 전 버전을 읽고 저장 시 Lua로 비교해, 무효화 도중 진행되던 조회가
+이전 값을 캐시에 다시 저장하지 못하게 한다. 버전 키 `campaign:{id}:meta:version`은
+진행 중인 조회와 충돌하지 않도록 만료시키지 않는다.
+이미 진행 중인 요청의 응답까지 최신으로 보장하지는 않는다. DB와 Redis의 원자적
+커밋은 아니므로 커밋 직후 프로세스 종료·Redis 장애 시 무효화가 누락될 가능성은
+남는다. 이 경우 기존 캐시는 TTL까지 유지될 수 있으며, 영속 재시도는 현재 범위 밖이다.
+두 키를 사용하는 Lua는 현재 단일 Redis 구성 기준이다.
 
 ### High-Traffic Flow
 

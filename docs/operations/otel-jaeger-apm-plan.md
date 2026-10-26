@@ -4,6 +4,16 @@
 
 Status: active
 
+## 읽기 경로
+
+- 지금 관측 구성을 확인하려면 [운영 관측 정본](observability-correlation-v1-plan.md)을 읽는다.
+- 진단의 측정 범위는 [Diagnosis Boundary](#diagnosis-boundary)를 확인한다.
+- 6~7월 원인 분석은 날짜가 붙은 실험 절에서 당시 코드와 측정 조건을 함께 확인한다.
+- `Next Session Handoff`, `Remaining Work`, `Current Conclusion`은 당시 세션의 기록이다.
+  현재 실행 지시나 미완료 목록으로 적용하지 않는다.
+
+설정과 과거 실행 예시는 현행 Compose 구성과 대조한 뒤 사용한다.
+
 ## Purpose
 
 Use OpenTelemetry Java Agent and Jaeger to diagnose the Axon FCFS spike path.

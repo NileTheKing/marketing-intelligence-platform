@@ -12,6 +12,10 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 `reference`는 대조가 필요한 참고 자료, `legacy`는 과거 구조,
 `superseded`는 후속 문서로 대체된 기록, `draft`는 미확정 내용이다.
 
+현재 구현은 코드와 테스트, 배포 상태는 날짜가 있는 배포 기록과 실제 환경,
+과거 성능은 당시 커밋과 실험 증거로 확인한다. 세션 메모리는 보조 자료이며,
+개발에 필요한 결정은 해당 주제의 문서에서 찾을 수 있어야 한다.
+
 문서와 코드가 충돌하면 코드를 확인하고 충돌을 정정한다. 과거 실험의 환경·수치는
 현재 결과로 바꾸지 않는다. 내부 파일명과 세션 지시는 해당 시점의 작업 맥락이다.
 
@@ -27,7 +31,7 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
-| [관리자 콘솔 디자인](architecture/admin-console-design.md) | active | 공통 디자인, 화면 구성과 로컬 확인 기준 |
+| [관리자 콘솔 디자인](architecture/admin-console-design.md) | active | 공통 디자인, 외부 데모의 목적과 재구성 검토, 화면 확인 기록 |
 | [실패 분석 AI 에이전트](architecture/dlq-failure-triage-agent-v1-plan.md) | active | Core·AI·Slack의 구현된 분석·재시도 승인 흐름 |
 | [행동 이벤트 스키마](architecture/behavior-event-schema-v1.md) | active | 속성 타입과 인증 사용자 식별. ES 전환은 문서상 대기 상태 |
 | [선착순 설계 변천](architecture/campaign-activity-limit-flow.md) | reference | 초기 대안과 예약 설계 참고 |
@@ -133,3 +137,18 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 옮기지 않는다. 실험 리소스와 운영 인스턴스 수를 구조적 제한으로 일반화하지 않는다.
 Kafka consumer 병렬성과 여러 인스턴스 운영은 파티션·consumer group 조건을,
 전역 scheduler는 별도의 중복 실행 방지 조건을 확인한다.
+
+## 문서 탐색 유지
+
+`AGENTS.md`는 작업별 진입점, `architecture-map.md`는 서비스 경계,
+이 목록은 주제별 정본을 안내한다. 상세 구현과 실행 이력을 세 곳에 반복하지 않는다.
+긴 문서는 상단에 현재 설명, 제안, 과거 기록의 읽기 경로를 둔다.
+
+진입 문서의 상대 Markdown 링크와 `AGENTS.md`/`CLAUDE.md` 일치는
+`python3 scripts/ci/check-doc-navigation.py`로 검사하며 CI에서도 실행한다.
+검사 대상은 스크립트의 `ENTRY_DOCS`에 명시한다. 외부 URL, 절 앵커, 코드 경로와
+문서 내용의 사실성은 검사하지 않으므로 관련 변경 시 별도로 확인한다.
+
+이 구성은 [OpenAI의 저장소 지식 관리 사례](https://openai.com/index/harness-engineering/)와
+[Kiro의 주제별 지침 관리](https://kiro.dev/docs/steering/)를 참고했다.
+도구별 파일 구조를 복제하지 않고 기존 폴더에서 필요한 문서를 찾아 읽는 방식으로 적용한다.

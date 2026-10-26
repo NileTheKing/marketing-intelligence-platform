@@ -22,3 +22,7 @@ Compose 부하 준비는 `load-test/prepare-load-test-compose.sh`에서 시작�
 
 옛 K8s 도구와 사용하지 않는 비교 스크립트는
 [과거 자료](../archive/README.md)에 보관한다.
+
+문서 진입점 검사: `python3 scripts/ci/check-doc-navigation.py`.
+상대 Markdown 링크의 파일 존재 여부와 에이전트 지침 사본의 일치를 확인한다.
+외부 URL, 절 앵커와 문서 내용은 검사하지 않는다.

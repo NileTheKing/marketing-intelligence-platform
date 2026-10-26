@@ -4,6 +4,23 @@
 
 Status: active
 
+## 읽기 경로
+
+이 문서에는 운영 규칙과 날짜별 실행 증거가 함께 있다. 아래에서 필요한 절로 이동한다.
+문서의 최신 수정일은 VM 상태 확인일이 아니며, 배포 기록은 해당 날짜의 관측이다.
+
+| 목적 | 읽을 절 |
+|---|---|
+| 배포 방식과 실행 정책 | [CI/CD Execution Policy](#cicd-execution-policy) |
+| 앱 재생성 후 nginx 연결 확인 | [Mandatory Nginx Restart After App Recreate](#mandatory-nginx-restart-after-app-recreate) |
+| 로그인 설정 확인 | [네이버 로그인 환경변수](#네이버-로그인-환경변수) |
+| 데모 데이터와 마지막 오류 수정 기록 | [10월 24일 데이터 전환](#2026-10-24-관리자-시연-데이터-전환), [증분 분석과 편집 수정](#2026-10-24-증분-분석-진입과-쿠폰-활동-편집-오류-수정) |
+| 부하 실험 준비 | [Source Boundary](#source-boundary), [Baseline Assumptions](#baseline-assumptions), [Resource Profile](#resource-profile) |
+| 과거 실행 재현 | 해당 날짜와 커밋의 기록. `Pending`도 당시 상태이며 현재 할 일로 자동 적용하지 않는다. |
+
+부하 실험 준비 명령은 데이터와 실행 환경을 바꿀 수 있다. 일반 배포나 화면 확인의
+필수 절차로 실행하지 않는다. 현재 리소스는 적용한 Compose 파일과 override를 확인한다.
+
 ## Purpose
 
 Run a reproducible FCFS purchase-path baseline on the Oracle VM Docker Compose environment.

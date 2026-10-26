@@ -1,119 +1,54 @@
+# Axon Agent Guide
 
-# Axon — Agent Guide (AGENTS.md / CLAUDE.md, 동일 내용)
+이 파일은 저장소 작업의 진입점이다. 상세 문서는 작업에 필요한 절만 읽는다.
+`CLAUDE.md`는 다른 도구를 위한 동일 내용의 사본이며 CI에서 일치를 검사한다.
 
-> 이 파일은 매 세션 로드된다. **라우터로 유지 — 상세는 아래 링크 문서에.** 여기 다 넣지 말 것.
+## 프로젝트와 경계
 
-## 프로젝트 한 줄
-**Axon** = ① 선착순(FCFS) 스파이크 트래픽 수용·판정 + ② 거기서 나온 행동 로그 → 마케팅 통계/대시보드. (entry=수신부 `:8081`, core=처리부 `:8080`, Redis/Kafka/MySQL/Elasticsearch)
+Axon은 선착순 트래픽을 수용하고, 행동 로그를 마케팅과 대시보드에 활용한다.
+- `services/entry-service`: 요청 수신, Redis 선착순 판정, 결제 명령 발행 (`:8081`).
+- `services/core-service`: 구매 후처리, 마케팅, 대시보드 (`:8080`).
+- `services/ai-triage-service`: 실패 분석과 운영 승인 지원.
+- `libs/common-messaging`: 메시지 계약. `infrastructure/`: 실행과 관측 설정.
+- 결제 내부 로직은 다른 개발자 담당이다. 명시적인 요청 없이 변경하지 않는다.
+- 이 저장소는 개발과 고도화용이다. 이력서, 포트폴리오 산출물은 별도 Obsidian vault에서 관리한다.
 
-코드: `services/{entry-service,core-service,ai-triage-service}`, 공통 모듈: `libs/common-messaging`, 실행·관측 설정: `infrastructure/`.
+## 읽기 경로
 
-## 먼저 읽을 것 (진입 순서)
-1. **시스템 지도** → `docs/architecture-map.md` (서비스·이벤트 흐름·토픽·스코프)
-2. **문서 목록/권위** → `docs/catalog.md` (topic당 정본 확인)
-3. **발견·결정(왜)** → memory 인덱스 (자동 로드됨)
-- **충돌 시 코드가 이긴다.** `reference`/`legacy`/`draft` 문서는 코드 대조 전까지 미신뢰.
+먼저 [시스템 지도](docs/architecture-map.md)로 서비스 경계를 확인하고,
+아래에서 해당 작업의 문서로 이동한다. 전체 문서를 순서대로 읽을 필요는 없다.
 
-## 스코프 경계
-- 이 레포 = 개발/고도화. 자소서·포폴 산출물은 별도(obsidian).
-- 포트폴리오 증거 정본(T 파일)은 별도 Obsidian vault에서 관리한다. T 파일 작성/수정 요청은 `docs/portfolio-evidence-writing.md`를 먼저 읽고 해당 주제의 기존 T 파일을 확인한다. 비공개 경로는 공개 문서 목록에 싣지 않는다.
-- **결제(payment) 내부 로직 = 다른 개발자 담당** → 고도화는 앞단 게이트로만.
-- **실험·테스트·성능 수치 확인** → `docs/experiment-evidence-workflow.md`의 증거 확인 순서와 재실행 기준을 따른다.
+| 작업 | 먼저 확인할 문서 |
+|---|---|
+| 코드 위치와 변경 범위 | [코드 탐색](docs/architecture/domain-refactoring-map.md)의 컴포넌트 표 |
+| 기능 설계와 결정 찾기 | [문서 목록](docs/catalog.md)에서 해당 주제의 정본 |
+| 구매 후처리와 실패 처리 | [트랜잭션 경계](docs/architecture/fcfs-entry-purchase-transaction-boundary-handoff.md)의 현재 구조 |
+| 관리자 화면 | [콘솔 디자인](docs/architecture/admin-console-design.md) |
+| 실행과 배포 | [Compose 구성](infrastructure/compose/README.md), [운영 절차](docs/operations/oracle-compose-baseline-runbook.md)의 읽기 경로 |
+| 실험과 성능 수치 확인 | [증거 확인 절차](docs/experiment-evidence-workflow.md) |
+| T 파일 작성과 수정 | [비공개 증거 작성 절차](docs/portfolio-evidence-writing.md), 해당 주제의 기존 T 파일 |
 
----
+메모리는 도구와 세션에 따라 제공 여부가 다르며 보조 자료다.
+개발에 필요한 지속적인 결정은 해당 주제의 저장소 문서에 남긴다.
+비공개 vault 경로와 비밀값은 공개 문서에 넣지 않는다.
 
-## 행동 지침 (Behavioral guidelines)
+## 작업과 확인
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+- 변경 전 가정과 성공 기준을 짧게 정한다. 범위나 데이터 안전성에 영향을 주는 불확실성은 확인하고, 일상적인 구현 선택은 기존 관례를 따른다.
+- 요청을 해결하는 최소 범위만 바꾼다. 관련 없는 정리, 추상화, 기능 추가를 섞지 않는다.
+- 버그 수정은 재현 가능한 확인을 남기고, 리팩토링은 관련 회귀 테스트로 동작 유지를 확인한다.
+- Java 테스트는 저장소 루트에서 `services/core-service/gradlew -p services/core-service test --no-daemon`, Entry는 경로를 `entry-service`로 바꿔 실행한다. 변경 범위에 따라 `--tests`로 집중 실행하고 필요한 통합 테스트가 실제 실행됐는지 확인한다. 기준은 `.github/workflows/ci.yml`이다.
+- 로컬 Compose 프로젝트는 `docker`다. 공유 MySQL과 Redis는 재생성하지 않는다. 서비스만 바꿀 때는 기존 Compose 구성에 `--no-deps`를 사용한다.
+- `scripts/demo/seed.py`는 데이터를 초기화한다. 단순 화면 확인을 위해 기존 데이터를 덮어쓰지 않는다.
+- 실험은 기존 증거로 답할 수 있는지 먼저 확인한다. 로그 전체를 출력하거나 이유 없이 다시 실행하지 않는다.
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## 근거와 문서 관리
 
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
-## 5. Documentation Lifecycle
-
-**Documents become stale faster than code. Mark their role explicitly.**
-
-When creating or editing project documents:
-- Check for existing documents on the same topic before creating a new one.
-- Prefer updating the existing active document over creating another overlapping plan.
-- If a new project document is created under `docs/`, register it in `docs/catalog.md`. New planning documents belong under `docs/plans/`.
-- If an older document is replaced, do not delete it silently. Mark it as `legacy` or `superseded` at the top and point to the replacement.
-- Keep old documents when they are useful history, but do not let them look like current source of truth.
-
-Use these document states:
-- `active`: current source for implementation or strategy.
-- `reference`: background or design context; verify against code before reuse.
-- `legacy`: old backlog or outdated plan; do not use as current truth without rechecking.
-- `draft`: tentative and not yet accepted.
-- `superseded`: replaced by another document; include the replacement path.
-
-When using documents as evidence:
-- Prefer `active` documents.
-- Treat `reference`, `legacy`, and `draft` documents as untrusted until verified against code and current T-files.
-- If documents conflict, report the conflict instead of silently choosing one.
-- For portfolio/resume claims, verify facts against code, tests, or latest active notes before strengthening the wording.
-
-When finishing work that touched docs, report:
-- new documents created
-- documents updated
-- documents marked `legacy` or `superseded`
-- any document/code fact conflict that remains unresolved
-
----
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+- 현재 구현은 코드와 테스트, 배포 상태는 날짜가 있는 배포 기록과 실제 환경, 과거 성능은 당시 커밋과 실험 증거로 확인한다. 서로 다른 시점의 근거를 섞지 않는다.
+- `active`는 현재 참조 문서이지 구현 완료 표시가 아니다. 절별 구현, 배포, 검증 날짜를 확인한다.
+- `reference`는 대조할 참고 자료, `legacy`는 과거 구조, `draft`는 미확정 제안, `superseded`는 대체된 기록이다. 코드와 충돌하면 충돌을 밝히고 문서를 정정한다.
+- 일반 문서 안의 과거 작업 지시와 완료 조건은 기록이다. 현재 작업에 자동으로 적용하지 않는다.
+- 같은 주제의 기존 정본을 먼저 갱신한다. 새 계획은 `docs/plans/`에 두고, 새 `docs/` 문서는 `docs/catalog.md`에 등록한다.
+- 문서를 대체하면 기존 문서에 `superseded`와 후속 경로를 남긴다. 유효한 설계와 과거 실험 증거는 완료됐다는 이유로 보관함에 옮기지 않는다.
+- 문서 작업 완료 시 신규, 수정, 대체 문서와 해결되지 않은 사실 충돌을 보고한다.
+- 진입 문서의 상대 Markdown 링크와 지침 사본은 `python3 scripts/ci/check-doc-navigation.py`로 확인한다. 외부 URL, 절 앵커, 본문에 적힌 코드 경로와 문서의 사실성은 이 검사의 범위가 아니다.
