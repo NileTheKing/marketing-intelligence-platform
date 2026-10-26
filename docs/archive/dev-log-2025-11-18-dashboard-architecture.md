@@ -500,7 +500,6 @@ Mono<String> mono = Mono.fromSupplier(() -> {
 
 ## 🔗 관련 문서
 
-- [마케팅 대시보드 개발계획](plans/marketing-dashboard-development-plan.md)
 - [CLAUDE.md 개발 가이드](../../CLAUDE.md)
 
 ---

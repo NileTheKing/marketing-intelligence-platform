@@ -506,32 +506,6 @@ Runtime/config changes:
 - Keep Redis single instance unless testing Sentinel/Cluster separately.
 - Keep high-frequency normal-path logs at `DEBUG` during load tests; reserve `WARN` for abnormal states that require operator attention.
 
-## Portfolio Wording
-
-Safe wording:
-
-> The earlier KT Cloud K2P test validated the Kubernetes deployment shape, including Ingress routing, Service discovery, resource limits, and HPA configuration. The later Oracle VM test used Docker Compose to reduce orchestration variables and focus on backend bottleneck analysis with OpenTelemetry/Jaeger and k6.
-
-Safe wording:
-
-> In the Oracle reproduction environment, Kafka and Redis were intentionally configured as single-node components. The test focused on message flow, Redis Lua atomic operations, DLQ routing, DB idempotency, and request-level latency breakdown rather than HA failover.
-
-Avoid:
-
-> Oracle results improved over K2P, so the system became faster.
-
-Avoid:
-
-> Single-broker Kafka verified RF3/MISR2 HA behavior.
-
-Avoid:
-
-> Single Redis verified Sentinel or Cluster failover.
-
-Avoid:
-
-> HPA handled the 30-second spike.
-
 ## Future Hardening
 
 These are separate experiments after the baseline backend bottleneck analysis:

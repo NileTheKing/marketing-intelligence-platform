@@ -1,6 +1,6 @@
 # 토큰 기반 결제 플로우 설계 문서
 
-> 읽기 안내: 이 문서는 토큰 설계 참고 자료다. 본문의 PG 성공 시나리오는 실제 PG/Mock PG 연동 완료를 뜻하지 않는다. 현재 Entry confirm은 Kafka ACK까지 확인하며, 결제 영속화·Outbox는 [로드맵](../plans/2026-h2-portfolio-hardening-roadmap.md)의 계획이다.
+> 읽기 안내: 이 문서는 토큰 설계 참고 자료다. 본문의 PG 성공 시나리오는 실제 PG/Mock PG 연동 완료를 뜻하지 않는다. 현재 Entry confirm은 Kafka ACK까지 확인하며, 결제 상태 영속화와 Outbox는 미구현이다.
 
 > 상태: active/reference
 > 용도: 2단계 토큰 기반 결제 설계 상세 참고
@@ -963,4 +963,3 @@ export PAYMENT_TOKEN_SECRET="$(openssl rand -base64 32)"
 
 - [purchase-event-flow.md](../archive/purchase-event-flow.md) - 구매 이벤트 전체 플로우
 - [campaign-activity-limit-flow.md](campaign-activity-limit-flow.md) - FCFS 선착순 플로우
-- [redis-fast-validation-plan.md](../plans/redis-fast-validation-plan.md) - Redis 빠른 검증

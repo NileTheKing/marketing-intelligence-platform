@@ -64,7 +64,6 @@ Axon은 선착순 트래픽을 수용하고, 유입된 고객의 행동 로그�
 - 자동 쿠폰 조건과 실험 근거: [장바구니 이탈](experiments/abandoned-cart-coupon-candidate-query-v1-plan.md), [휴면 고객](experiments/dormant-customer-reengagement-query-v1-plan.md)
 - 실패 분석과 승인: [AI 처리 흐름](architecture/dlq-failure-triage-agent-v1-plan.md)
 - 실제 운영과 관측 설정: [운영 절차](operations/oracle-compose-baseline-runbook.md), [관측 구성](operations/observability-correlation-v1-plan.md)
-- 결제 영속화와 보류 작업: [개발 로드맵](plans/2026-h2-portfolio-hardening-roadmap.md)
 - 다른 주제의 정본과 과거 기록: [전체 문서 목록](catalog.md)
 
 Kafka 토픽 이름과 메시지 정의는 `libs/common-messaging`의 `KafkaTopics`와 DTO에서 확인한다.

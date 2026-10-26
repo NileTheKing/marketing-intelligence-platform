@@ -1,20 +1,9 @@
-# Session Handoff - 2026-07-30
+# Kafka backlog 전환과 강제 종료 복구 실험
 
-Status: reference (completed)
+Status: reference (completed, 2026-07-30)
 
-Current implementation replacement:
-`docs/architecture/fcfs-entry-purchase-transaction-boundary-handoff.md`.
-This file preserves the queue-removal A/B and first crash-recovery evidence;
-its Purchase event/transaction description is not current.
-
-## Current Code State
-
-- Local branch: `codex/kafka-native-backlog`
-- Code commit: `d5f396b`
-- Oracle VM branch/SHA: `codex/kafka-native-backlog` / `d5f396b`
-- Core full test suite: `BUILD SUCCESSFUL`
-- The local `README.md` has an unrelated unstaged user change. Do not revert or
-  stage it with this work.
+코드: `d5f396b`. 아래는 당시 구현과 실험 결과다. 현재 트랜잭션 경계는
+[구매 후처리](../../architecture/fcfs-entry-purchase-transaction-boundary-handoff.md)를 따른다.
 
 ## Implemented Boundary
 
@@ -51,33 +40,3 @@ Evidence:
 - `artifacts/load-test/20260730-152209-queue-before-main49ca-controlled`
 - `artifacts/load-test/20260730-153943-queue-after-d5f396b-controlled`
 - `artifacts/load-test/20260730-queue-crash-injection-d5f396b/result.md`
-
-## Oracle VM State
-
-- DB backup:
-  `/home/ubuntu/backups/axon-pre-queue-ab-20260730.sql`
-- Applied migrations:
-  - `2026-07-16-add-rfm-audience-segments.sql`
-  - `2026-07-28-add-purchase-status-and-campaign-only-product.sql`
-  - `2026-07-28-add-reconciliation-issues.sql`
-- Host nginx:
-  - keep `worker_connections 4096`
-  - keep `worker_rlimit_nofile 16384`
-  - keep systemd/master open-file limit `16384`
-  - upstream `keepalive 256` removed
-  - host `listen ... backlog=4096` removed
-- Axon nginx container was not changed. Its current VM config still has
-  `worker_connections 2048` and `listen 80 backlog=4096`.
-
-## Remaining Decision
-
-- Path B satisfies the current 800-result gate and is the preferred design.
-- Do not implement bounded queue + pause/resume unless a larger controlled Core
-  workload shows that listener-owned persistence cannot meet throughput or
-  DB-pool constraints.
-- `kafka_consumer_fetch_manager_records_lag_max` can remain stale after the
-  broker group has converged. Use `kafka-consumer-groups --describe` as the
-  committed-lag authority for final convergence.
-- The 3,000-user external run was not a valid Core A/B baseline: ingress
-  timeouts left DB at `606`, `666`, and `589` despite Redis reaching 800.
-  Preserve those artifacts as a rejected scenario, not queue-loss evidence.

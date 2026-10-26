@@ -22,7 +22,7 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 - Entry·Purchase는 기존 서비스 트랜잭션에 함께 참여한다. UserSummary는 기존처럼 별도 트랜잭션에서 동기 호출한다. 배치 실패 후 개별 재처리와 DLT 정책은 유지한다.
 - 관련 단위·MySQL 통합 테스트 20개 통과. 실제 INSERT 제약 위반 시 두 테이블 롤백, 같은 메시지 재처리 및 중복 방지, 최신 시각 유지와 누락된 Summary 처리까지 확인했다. 전체 Core 테스트 실행 결과를 의미하지는 않는다.
 - VM Core에 `cf36d63`의 JAR를 기존 런타임 이미지에 반영해 배포했다. 1.2 CPU·3 GiB에서 신규 메시지 20건의 Entry·Purchase·UserSummary 반영과 동일 메시지 재전송 시 중복 미생성을 확인했다. 최종 lag 0, DLT와 projection 실패 토픽의 추가 메시지 0건이다. 이 점검은 처리량 재측정이 아니다.
-- 이미지 ID·JAR 해시·소스 커밋·점검 결과와 이전 이미지 백업은 VM의 `/home/ubuntu/apps/axon-releases/core-bulk-cf36d63/manifest.json` 및 `axon-core-service:pre-bulk-cf36d63`에 보관한다. 자동 승인 검토에서 전체 소스 아카이브 전송을 거절해 JAR만 전송했다. VM Git checkout은 기존 `c8634b3a`를 유지하므로 이후 소스 재빌드 배포 시 `cf36d63`을 먼저 반영해야 한다.
+- 이미지 ID·JAR 해시·소스 커밋·점검 결과와 이전 이미지 백업은 VM의 `/home/ubuntu/apps/axon-releases/core-bulk-cf36d63/manifest.json` 및 `axon-core-service:pre-bulk-cf36d63`에 보관한다. VM Git checkout은 기존 `c8634b3a`를 유지하므로 이후 소스 재빌드 배포 시 `cf36d63`을 먼저 반영해야 한다.
 
 ## 실제 OCI 상태
 
@@ -176,58 +176,9 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 - FK가 없는 scalar ID를 일괄 연관관계로 바꾸지 않았다. 이벤트 원장과 삭제 정책을 먼저 정해야 한다.
 - 현재 실패 사례가 없는 범용 Repository·도메인 이벤트·Inbox/Outbox 계층을 추가하지 않았다.
 
-## SQL 성능 사례 후보 검토 (2026-10-15, 측정 전)
+## 추가 SQL 측정 기록
 
-상태: 코드와 기존 실험 아티팩트 검토 완료. 이번 검토에서는 실험 실행, 애플리케이션 코드·인덱스 변경을 하지 않았다. 인덱스 성과를 만들기 위해 업무 요구나 지연 목표를 새로 가정하지 않는다.
-
-### 판단 기준과 기존 실험의 경계
-
-- 필요한 업무 -> 지연의 영향 -> 실제 DB 병목 -> 구조 변경과 SQL 개선 비교 순서로 검증한다. 느린 SQL이나 전체 행 수만으로 비즈니스 필요성을 만들지 않는다.
-- 장바구니 후보는 완료/취소 이력을 작업 조회에서 분리하거나 정리하는 대안을 먼저 검토한다. 같은 테이블에 5M 이력을 유지한 기존 인덱스/발급 실험은 유효한 조건부 측정이지만, 그 저장 구조가 최선이라는 증거는 아니다. 분리 후의 조회·발급 개선도 아직 미측정이다.
-- 캠페인 성과 조회는 7/30일 분석이다. 1.5초 -> 0.5초 자체에 긴급한 사업상 이유나 SLA는 확인되지 않았다. 기존 인덱스 효과를 부정하지 않되 대표적인 업무 병목 해결로 강화하지 않는다.
-- 성과 조회 benchmark는 전체 대상 100,000명(TREATMENT 90,000 / HOLDOUT 10,000)이다. `targetPurchases = min(totalPurchases / 5, TARGET_USERS * 2)` 때문에 1M/5M 모두 대상자의 구매가 200,000건, 사용자당 2건이다. 늘어나는 것은 비대상 구매이며 기존 고객의 긴 구매 이력은 검증하지 않았다.
-- 해당 실행계획은 `(user_id, purchase_at)` 인덱스를 user_id lookup으로 사용한 뒤 기간을 필터링했다. 비교군에 user_id 단일 인덱스는 없으므로 날짜 컬럼 추가의 독립적 효과까지 입증한 것은 아니다. 5회 read 표본의 p95는 최댓값이며, 5M overlap의 read 표본은 인덱스 없음/있음 각각 1/3회다.
-- benchmark는 assignment group만 집계하고 모든 대상은 LOYAL이지만 현재 서비스는 group과 baseline RFM segment를 함께 집계한다. 한 Run, 간소화 스키마, warm-up 후 반복, 하나의 reader/writer 조건으로 한정한다.
-- 코호트 benchmark는 entity hydration과 SQL 집계의 비교다. `index-selectivity`와 `hydration-jfr`의 목적을 구분한 기존 기록은 유지하며 전체 배치나 인덱스 단독 성과로 바꾸지 않는다.
-
-기존 근거: `artifacts/benchmark/20261014-170325-campaign-incrementality-1m/`, `artifacts/benchmark/20261014-170500-campaign-incrementality-5m/`, `artifacts/benchmark/20260904-145007-cohort-sql-offloading-index-selectivity/`의 summary/실행계획 및 두 benchmark 소스. 미커밋 소스가 포함되므로 artifact와 현재 코드의 경계도 함께 확인한다.
-
-### 1순위: 캠페인 실행 준비의 대상 확정
-
-- 실제 경로: `POST /api/v1/campaign-activities/{activityId}/runs` -> `CampaignActivityRunService.prepare` -> `UserSummaryRepository.countCouponCampaignTargets` / `findCouponCampaignTargetUserIds`.
-- 업무: 지정 RFM 세그먼트에서 해당 쿠폰을 이미 받은 고객을 제외하고 현재 대상 수와 ID를 확정한다. 대상 스냅샷이 준비되어야 분석/검토/발송 절차로 진행한다.
-- 지연의 영향: 운영자 API 응답과 같은 활동의 실행 준비가 기다린다. `prepare`는 활동에 비관적 잠금을 잡은 트랜잭션 안에서 count, ID 조회, 대상 스냅샷 저장을 수행한다. 이 잠금이 일반 구매를 막는다고 주장하지 않는다. deadline/timeout 위반은 아직 관측되지 않았다.
-- 현재 인덱스: UserSummary 엔티티에는 PK와 `(last_purchase_at,user_id)`가 선언되어 있고 RFM 선두 인덱스는 확인되지 않았다. 쿠폰 발급 여부 확인은 기존 UNIQUE `(user_id,coupon_id)`를 사용할 수 있는 형태다. 실제 DB 인덱스와 실행계획은 아직 확인하지 않았다.
-- 다음 최소 검증: 실제 인덱스 확인 후 count와 ID 조회를 분리해 EXPLAIN/반복 시간 및 결과 동등성 확인. RFM 분포, 기존 발급 비율, 대상 수를 업무 가정으로 명시한다. `(rfm_segment,user_id)`는 검토안이며 채택하지 않았다. count에는 정렬이 없으므로 user_id 단일/PK 포함 특성까지 확인하고 복합 키 필요성을 과장하지 않는다.
-- 중단 기준: 자연스러운 규모에서 기존 조회가 충분하면 더 늘리지 않는다. 전체 prepare가 느려도 스냅샷 INSERT/JPA 시간이 주원인이면 SQL 조회 개선을 전체 원인 해결로 쓰지 않는다.
-- 검증 비용: 중간. 현재 SQL Lab 구매 fixture에는 UserSummary/UserCoupon 전체 도메인이 없으므로 그대로 실행할 수 없다. fixture 확장은 아직 하지 않는다.
-
-### 2순위: 이미 있는 휴면 고객 조회 사례의 활용 가능성
-
-- 실제 경로: `DormantCustomerCampaignScheduler` -> `findDormantUserIdsWithoutCampaignExecution`. UserSummary의 마지막 구매 시각과 캠페인 실행 이력 anti join으로 500명씩 선정한다.
-- 기존 근거: `docs/experiments/dormant-customer-reengagement-query-v1-plan.md`에 1M 고객, 휴면 50k, 기발송 10k에서 183ms -> 7ms가 기록되어 있다. 이미 도입한 `(last_purchase_at,user_id)` 및 UNIQUE `(reengagement_campaign_id,user_id)` 사례이며 새 발견/새 성과로 다루지 않는다.
-- 구조 차이: UserSummary는 고객당 현재 상태이며 완료 작업 이력을 같은 행으로 계속 append하는 후보 테이블과 다르다. 고객과 발송 이력은 계속 필요한 데이터다.
-- 제한: 하루 10시 배치에 완료 시간 목표는 확인되지 않았다. 새벽/정시 발송의 긴급성이나 전체 발급량 개선을 추가하지 않는다. user_id는 InnoDB PK이므로 `(last_purchase_at)`와 명시적 `(last_purchase_at,user_id)` 차이를 확인하기 전 두 컬럼이 모두 필수라고 주장하지 않는다.
-- 다음 최소 검증: 기존 아티팩트 존재/조건과 결과 동등성 검사를 우선 리뷰한다. 현재 harness는 반환 건수 500만 검사하고 ID/순서 동일성은 검사하지 않는다. 발송 진행으로 이미 처리한 고객 비율이 늘어날 때 anti join 비용이 어떻게 바뀌는지도 초기 500건과 구분한다.
-- 검증 비용: 낮음(기존 근거 검토), 추가 실행은 별도 결정. 기본 SQL 역량 사례로 검토하며 강한 사업상 장애 해결로 포장하지 않는다.
-
-### 3순위: 전일 Purchase–Entry 불일치 탐지
-
-- 실제 경로: 매일 03:00 `ReconciliationScheduler.detectGhostPurchases` -> `PurchaseRepository.findGhostPurchases`.
-- 업무: 전일 CONFIRMED 캠페인 구매 중 참여 원장이 없는 건을 찾아 운영 이슈로 남긴다. 구매 원장을 보존하면서 날짜 범위를 조회하므로 완료 작업 이력 청소와는 다른 문제다.
-- 현재 인덱스: Purchase의 활동 선두 인덱스들과 `(user_id,purchase_at)`은 있지만, 이 쿼리는 특정 활동 ID 동등 조건 없이 purchase_type/status/날짜로 시작한다. Entry의 `(campaign_activity_id,user_id)` UNIQUE는 NOT EXISTS 확인에 대응한다. 느리다는 측정은 없다.
-- 다음 최소 검증: 실제 DB 인덱스와 EXPLAIN 확인 후에만 필요성 판단. 보관 기간, 하루 구매량, 캠페인 구매 비중을 분리한다. batch 소요 시간이 실제 탐지/복구에 문제가 되는지 먼저 확인하며 임의 SLA를 만들지 않는다.
-- 검증 비용: 중간. Purchase/Entry fixture 및 정상/불일치 결과 검증 필요. 업무 빈도는 하루 1회라 1순위보다 우선도가 낮다.
-
-### 우선 제외/보류
-
-- `PurchaseRepository.findByUserId/findByProductId/findByPurchaseType/findByCampaignActivityId`와 `MarketingActionDispatchRepository.findFailureHistoryByActionSince`: 선언만으로 후보를 만들지 않는다. 현재 main 소스에서 호출 경로를 찾지 못했다.
-- `CouponService.getApplicableCoupons`: 2026-10-16 재확인에서 실제 호출 경로 `/checkout` -> `StoreViewService.getCheckoutViewData` -> `CouponService.getApplicableCoupons`가 확인됐다. 앞선 미호출 판단을 정정한다. 주문서 렌더링이 쿠폰 조회를 기다리지만 기존 user_id 인덱스와 Coupon EntityGraph가 있고, 보통의 인당 쿠폰 수에서 느리다는 측정은 없다. 인당 쿠폰을 억지로 수천 건 쌓아 병목을 만들지 않는다. `/mypage`의 유효 쿠폰 조회도 별도로 존재한다.
-- 최종 발송 실패 목록/triage 기간별 실패 집계: 실제 API 경로는 있지만 `(status,dlt_at)`와 `(execution_id,dispatch_sequence)` 인덱스가 이미 있고, 정상 운영의 실패 비율/운영 빈도가 확인되지 않았다. 장애를 인위적으로 대량 생성해 성과 근거로 삼지 않는다.
-- 취소/환불 후 최신 CONFIRMED 구매 복구: 현재 `(user_id,purchase_at)`로 최신순 접근이 가능한 형태이며 고객별 이력/취소 분포에 크게 좌우된다. 결제 내부 책임 경계와 미확인 호출 빈도를 고려해 보류한다.
-- 전역 대시보드 N+1, SSE 중복 집계, RFM keyset은 기존 개선이다. 신규 인덱스 후보로 다시 포장하지 않는다.
-
-다음 행동은 1순위의 짧은 검증 범위를 정하는 것이다. 아직 새 fixture 생성, benchmark 실행, 인덱스 추가나 서비스 변경을 승인된 다음 작업으로 확장하지 않았다. 무거운 실험/구현은 사용자 지시대로 Luna에 위임하며, 한도/권한 문제면 부모가 조용히 대신 실행하지 않는다.
+아래는 합성 fixture에서 수행한 개별 실험이다. API 구현 여부와 측정 조건을 각 절에서 구분한다.
 
 ### 관리자 구매 목록 필터/정렬 SQL 후보 (2026-10-16, SQL-only)
 
@@ -272,20 +223,6 @@ OCI 조회는 스키마와 건수만 읽었고 사용자 데이터 값은 출력
 읽기 후보 A(기존 인덱스 전부)와 B(추가 `(status,purchase_at)`)를 빈 private table에서 비교했다. `CREATE TABLE LIKE purchases`로 schema/index만 복제하고 1M fixture를 복사하지 않았다. warm-up 후 두 전용 테이블을 TRUNCATE해 같은 빈 시작 상태를 만들고, 고정 synthetic 20행 `INSERT SELECT`와 `COMMIT` 시간을 한 MySQL 세션에서 재었다. 초기 AB/BA 두 pair의 순위가 뒤집혀 두 pair를 더 추가했지만 네 표본에서도 순위가 다시 뒤집혔다. A 원시 ms `[4.195,3.038,4.080,3.912]`, median `3.996`; B `[3.112,5.203,2.949,5.050]`, median `4.081`; B 인덱스 build는 `214.494ms`로 query sample에서 제외했다. 이 차이는 표본 변동 내라 추가 인덱스의 쓰기 비용을 결론내릴 수 없다. 표본이 네 건/arm이므로 p95를 계산하지 않았다.
 
 아티팩트 `build/benchmark/admin-purchase-write-20261016T023131Z/`에는 raw tx 기록, 동일 synthetic row hash, SQL, harness, 설정 및 identity가 있다. SQL INSERT SELECT는 Spring/JPA `IDENTITY` 저장과 다르며 빈 테이블 smoke는 1M 행 테이블의 저장 비용을 재현하지 않는다. 운영 쓰기 성능으로 일반화하지 않는다. 각 tx는 20행 commit을 확인했고 A/B row hash가 같았다. 실행 후 A/B 임시 테이블만 제거했으며 원본 purchases 1M 행/기존 인덱스와 candidates 5M fixture ready 상태가 유지됐다. 이 검증은 B 인덱스 채택·제거 결정을 단독 정당화하지 않는다.
-
-
-### 실제 호출 목적 기준 조회 소재 재검토 (2026-10-16)
-
-관리자 구매 목록 SQL 실험은 아직 API/화면이 없고 호출 업무도 확정되지 않았다. 실험 수치에 맞추어 신규 사용처를 만들어 이력서 성과로 쓰지 않는다. 다음은 현재 코드에서 확인한 호출 경로이며 새 부하 실험은 하지 않았다.
-
-| 조회 경로 | 사용자와 지연 영향 | 현재 판단 |
-| --- | --- | --- |
-| 주문서 `/checkout` -> 적용 가능 쿠폰 | 주문서 화면이 상품/쿠폰 로딩을 기다림 | 실제 고객 경로. 사용자 인덱스와 EntityGraph가 이미 있어 병목 근거 없음. |
-| Entry 참여 -> Core `/api/v1/validation` -> 최근 구매 조건 | HEAVY 조건이 있는 신규 참여에서 자격 응답 후 Redis 선착순 판정 진행. 재시도 토큰 반환은 이 경로를 우회함 | 실제 서비스 간 동기 조회. 현재 UserSummary PK 단건 조회라 신규 복합 인덱스 후보로 부적합. 실제 호출량은 미측정. |
-| 활동 대시보드 -> `/api/v1/dashboard/activity/{id}` | 로드된 dashboard.js가 5초마다 반복 호출해 매출/전환/참여 현황 갱신. 캠페인 화면은 SSE로 5초마다 갱신 | 반복 수요가 코드에 존재. Purchase 집계는 이미 activity/status/period 인덱스가 있고 ES/Redis 작업도 포함하므로 SQL과 API 시간을 구분해야 함. |
-| 캠페인 실행 준비 POST -> 대상 수/ID 확정 -> 스냅샷 저장 | 준비 API 응답과 이후 검토/발송이 대상 확정을 기다림 | 실제 업무 의존성은 있으나 자주 호출되는 고객 서빙 조회는 아님. 조회보다 대량 저장이 병목일 수 있으며 미측정. |
-
-추천은 새 관리자 목록 API를 만드는 대신 기존 대시보드의 실제 API 비용을 먼저 보는 것이다. 기존 Global Dashboard의 캠페인별 반복 집계를 일괄 집계로 바꾼 개선과 Activity SSE의 중복 집계 제거는 위 7–9절에 이미 기록되어 있다. 이는 신규 발견/신규 인덱스 성과가 아니다. 전후 비교를 한다면 기존 변경의 의미를 확인하는 작업이며, 구매 지연이나 DB CPU 감소를 사전에 주장하지 않는다. 조건에 맞는 기존 조회는 이미 인덱스를 갖추고 있을 수 있고, 이 경우 신규 인덱스 소재를 억지로 만들지 않는다.
 
 
 ### 장바구니 후보 취소 조건 SQL 인덱스 확인 (2026-10-16, SQL-only)

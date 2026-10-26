@@ -22,6 +22,5 @@
 - [DB·JPA 개선과 JDBC 벌크 저장 적용](decisions/db-jpa-integrity-audit-2026-08-11.md)
 - [장바구니 이탈 후보 조회와 쿠폰 발급 측정](experiments/abandoned-cart-coupon-candidate-query-v1-plan.md)
 - [인프라·애플리케이션 병목 진단](experiments/dev-log-2026-07-10-fcfs-3000vu-bottleneck.md): nginx 연결 제한, CPU 할당과 부하 측정 조건
-- [리팩토링 결정 기록](decisions/critical-refactoring-decision-log.md)
 
 [전체 문서 목록](catalog.md)에서 나머지 기능 설계, 참고 자료와 과거 기록을 찾을 수 있다.

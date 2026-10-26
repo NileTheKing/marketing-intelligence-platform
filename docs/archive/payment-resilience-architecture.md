@@ -1,7 +1,7 @@
 # 결제 시스템 장애 대응 및 복구 아키텍처 (Payment Resilience Architecture)
 
 > 상태: superseded (2026-10-21 분류 정정)
-> 용도: 제거된 Core 결제 복구 경로의 과거 설명. 현재 구조는 `docs/architecture-map.md`, 결제 영속화·Outbox 계획은 `docs/plans/2026-h2-portfolio-hardening-roadmap.md` Main Upgrade 0을 따른다.
+> 용도: 제거된 Core 결제 복구 경로의 과거 설명. 현재 구조는 `docs/architecture-map.md`를 따른다. 결제 상태 영속화와 Outbox는 미구현이다.
 > 정정: 아래의 실패 로그·재시도 설계를 Transactional Outbox 구현으로 표현한 것은 부정확하다. 결제 상태와 이벤트를 같은 트랜잭션으로 저장하는 Outbox는 현재 미구현이다. 본문은 당시 설명을 보존하며 현재 동작의 근거로 사용하지 않는다.
 
 > **작성일**: 2026-01-13

@@ -22,26 +22,23 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 ## 문서 목록
 
 폴더는 문서의 주된 역할로 분류했다. 구현이 끝난 기능의 설계 문서는
-`architecture/`, 판단·감사는 `decisions/`, 측정 근거는 `experiments/`, 실행 절차는
-`operations/`, 진행·보류 계획은 `plans/`에서 찾는다.
-`plans/reference/`는 오래된 설계 제안으로, 현재 백로그나 구현 완료 목록이 아니다.
-`archive/`는 과거 배포·대체 문서·종료된 인수인계를 보존한다.
+`architecture/`, DB 정합성 개선은 `decisions/`, 측정 근거는 `experiments/`,
+실행 절차는 `operations/`에서 찾는다. `archive/`는 과거 구조와 실험 근거를 보존한다.
 
 ### 현재 구조와 기능 설계
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
-| [관리자 콘솔 디자인](architecture/admin-console-design.md) | active | 공통 디자인, 외부 데모의 목적과 재구성 검토, 화면 확인 기록 |
+| [관리자 콘솔 디자인](architecture/admin-console-design.md) | active | 공통 디자인과 화면 확인 기록 |
 | [실패 분석 AI 에이전트](architecture/dlq-failure-triage-agent-v1-plan.md) | active | Core·AI·Slack의 구현된 분석·재시도 승인 흐름 |
 | [행동 이벤트 스키마](architecture/behavior-event-schema-v1.md) | active | 속성 타입과 인증 사용자 식별. ES 전환은 문서상 대기 상태 |
 | [선착순 설계 변천](architecture/campaign-activity-limit-flow.md) | reference | 초기 대안과 예약 설계 참고 |
 | [쿠폰 발급 실행과 승인](architecture/campaign-activity-run-review-v1-plan.md) | active | 대상 확정과 승인 흐름. migration·배포 상태는 본문 참조 |
 | [쿠폰 캠페인 효과 분석](architecture/campaign-incrementality-analysis-v1-plan.md) | active | 실험군·대조군 배정과 매출 효과 계산 |
 | [코드 구조와 도메인 경계](architecture/domain-refactoring-map.md) | active | 서비스·패키지·컴포넌트 탐색 |
-| [구매 후처리 트랜잭션](architecture/fcfs-entry-purchase-transaction-boundary-handoff.md) | active | 현재 벌크 저장·실패 경계와 8월 회귀 근거 |
+| [구매 후처리 트랜잭션](architecture/fcfs-entry-purchase-transaction-boundary-handoff.md) | active | 현재 벌크 저장, 실패 경계와 8월 회귀 근거 |
 | [LLM 대시보드 질의 설계](architecture/llm-query-architecture.md) | reference | 설계 당시 참고 구조. 코드 대조 필요 |
 | [마케팅 실행과 전달 이력](architecture/marketing-action-execution-dispatch-history-plan.md) | active | 업무 실행과 개별 전송 시도 구분 |
-| [마케팅 다중 액션](architecture/marketing-rule-multi-action-handoff.md) | active | 구현 기록과 당시 스키마 반영 조건 |
 | [구매 취소와 캠페인 전용 상품](architecture/purchase-cancellation-and-campaign-product-v1-plan.md) | active | 취소 정책과 집계 반영 경계 |
 | [구매·집계 대사](architecture/reconciliation-issue-v1-plan.md) | active | 불일치 기록, 재계산과 운영 확인 |
 | [예약·결제 흐름 개요](architecture/reservation-payment-flow.md) | reference | 토큰 설계 참고. 실제 PG 연동은 미구현 |
@@ -49,13 +46,10 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 | [RFM 고객 세그먼트](architecture/rfm-audience-segment-v1-plan.md) | active | 구매 기반 계산과 마케팅 대상 필터 |
 | [토큰 기반 결제 상세](architecture/token-based-payment-flow.md) | reference | 2단계 토큰 설계와 예외 시나리오 참고 |
 
-### 설계 결정과 감사
+### DB 정합성 개선
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
-| [API 계약 감사](decisions/api-contract-audit-2026-08-11.md) | active | 인증·권한·오류 계약의 변경과 남은 작업 |
-| [백엔드 기본기 감사](decisions/backend-foundation-hardening-audit-2026-08-11.md) | active | 트랜잭션·외부 호출·동시성의 조치 기록 |
-| [리팩토링 결정 기록](decisions/critical-refactoring-decision-log.md) | active | 채택·보류 이유와 시점별 후속 작업 |
 | [DB·JPA 정합성 감사](decisions/db-jpa-integrity-audit-2026-08-11.md) | active | 쿼리·제약·트랜잭션 및 10월 벌크 배포 기록 |
 
 ### 실험과 진단 기록
@@ -84,24 +78,6 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 | [Oracle Compose 실행 절차](operations/oracle-compose-baseline-runbook.md) | active | 배포·부하 실행 명령과 측정 근거 |
 | [APM 진단 절차와 기록](operations/otel-jaeger-apm-plan.md) | active | OTel/Jaeger 설정과 과거 진단. 현행 운영은 관측 문서 참조 |
 
-### 진행·보류 계획과 인수인계
-
-| 문서 | 상태 | 내용 |
-|---|---|---|
-| [개발 로드맵](plans/2026-h2-portfolio-hardening-roadmap.md) | active | 결제 영속화·Outbox 등 계획과 완료·보류 상태 |
-| [유입 제어 검토](plans/admission-control-implementation-plan.md) | reference | 보류된 앞단 게이트 설계 |
-| [캠페인 분석 실험 인수인계](plans/handoffs/campaign-incrementality-benchmark-handoff.md) | reference | 10월 14일 조회·쓰기 동시 실험 결과와 당시 작업 상태 |
-| [SQL 실험 인수인계](plans/handoffs/sql-experiment-session-handoff.md) | active | 내부 작업용 실험 결정·정리·남은 확인 사항 |
-| [행동 SDK 확장 검토](plans/js-sdk-enhancement-plan.md) | reference | 추가 추적 항목과 설계 아이디어 |
-| [Redis 앞단 검증 설계 참고](plans/redis-fast-validation-plan.md) | reference | 미구현 제안과 현재 코드를 구분해 읽기 |
-| [퍼널 용어 정리 제안](plans/reference/FUNNEL_STANDARD_PLAN.md) | reference | 과거 이벤트 용어 표준화 계획 |
-| [초기 코드 개선 메모](plans/reference/code-improvements.md) | reference | 소규모 개선 아이디어. 현재 코드 대조 필요 |
-| [코호트 배치 최적화 제안](plans/reference/cohort-analysis-optimization-plan.md) | reference | 과거 증분 계산 설계 |
-| [퍼널 확장 제안](plans/reference/funnel-expansion-plan.md) | reference | 래플·쿠폰 확장 아이디어. 완료 목록 아님 |
-| [LLM 인사이트 기능 제안](plans/reference/llm-insights-feature-plan.md) | reference | 당시 설계와 구현 후보 |
-| [초기 마이크로 배치 제안](plans/reference/micro-batch-implementation-plan.md) | reference | 현재 Consumer 구현과 구분할 과거 계획 |
-| [구매 도메인 리팩토링 제안](plans/reference/purchase-domain-refactoring-plan.md) | reference | 과거 개편 설계. 구현 여부 재확인 필요 |
-
 ### 과거 기록
 
 | 문서 | 상태 | 내용 |
@@ -113,7 +89,6 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 | [대시보드 개발 기록 (2025-11-18)](archive/dev-log-2025-11-18-dashboard-architecture.md) | reference | 당시 구현과 의사결정. 현재 상태와 구분 |
 | [Fluentd 행동 로그 전환 검토](archive/behavior-event-fluentd-plan.md) | legacy | 현재는 Kafka Connect→ES 사용 |
 | [과거 행동 SDK 안내](archive/behavior-tracker.md) | superseded | 이전 API·토픽·초기화 예시. 현재 계약 아님 |
-| [7월 29일 인수인계](archive/handoffs/session-handoff-2026-07-29.md) | superseded | 7월 30일 기록으로 대체 |
 | [7월 30일 queue·offset 실험](archive/handoffs/session-handoff-2026-07-30.md) | reference (완료 기록) | 완료된 비교·강제 종료 실험. 당시 근거 보존 |
 | [과거 Fluent Bit 배포안](archive/k8s/FLUENT_BIT_DEPLOYMENT.md) | legacy | K8s 로그 수집 계획 |
 | [과거 K8s 모니터링 안내](archive/k8s/MONITORING_DEPLOYMENT.md) | legacy | 당시 Prometheus/Grafana 구성 |
@@ -121,15 +96,11 @@ Core는 구매 후처리와 마케팅 기능을 담당한다.
 | [과거 네트워크 구조](archive/k8s/network-architecture.md) | legacy | KT Cloud K2P·NodePort 경로 |
 | [과거 결제 복구 구조](archive/payment-resilience-architecture.md) | legacy | 실패 로그를 Outbox로 설명한 오류 정정 |
 | [과거 결제 복구 시나리오](archive/payment-resilience-flow.md) | legacy | 제거된 Core 결제·자동 복구 경로 |
-| [과거 대시보드 개발 계획](archive/plans/marketing-dashboard-development-plan.md) | legacy | 초기 팀 작업과 확장 아이디어 |
-| [과거 Pinpoint 검토](archive/plans/pinpoint-actuator-k6-prep.md) | legacy | ARM 환경 문제 이후 OTel/Jaeger로 전환 |
-| [과거 2주 백로그](archive/plans/remaining-tasks-and-improvements.md) | legacy | 당시 작업 목록이며 현행 백로그 아님 |
 | [과거 구매 이벤트 흐름](archive/purchase-event-flow.md) | superseded | 대체된 이벤트 핸들러 구조와 instrumentation 제안 |
 
 ## 기록 작성과 변경
 
 - [실험 증거 확인 절차](experiment-evidence-workflow.md)
-- [포트폴리오 증거 작성](portfolio-evidence-writing.md): 비공개 증거를 다루는 절차이며 공개 포트폴리오가 아님
 - [AGENTS.md](../AGENTS.md): 에이전트 작업 지침
 
 같은 주제의 정본을 먼저 갱신한다. 새 문서는 이 목록에 등록하고, 대체된 문서는

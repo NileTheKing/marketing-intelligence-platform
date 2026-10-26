@@ -9,8 +9,6 @@ Status: active
 - 지금 관측 구성을 확인하려면 [운영 관측 정본](observability-correlation-v1-plan.md)을 읽는다.
 - 진단의 측정 범위는 [Diagnosis Boundary](#diagnosis-boundary)를 확인한다.
 - 6~7월 원인 분석은 날짜가 붙은 실험 절에서 당시 코드와 측정 조건을 함께 확인한다.
-- `Next Session Handoff`, `Remaining Work`, `Current Conclusion`은 당시 세션의 기록이다.
-  현재 실행 지시나 미완료 목록으로 적용하지 않는다.
 
 설정과 과거 실행 예시는 현행 Compose 구성과 대조한 뒤 사용한다.
 
@@ -616,7 +614,6 @@ Interpretation:
 - The weak warm-up is not enough after entry redeploy; measured-1 still includes cold-start/JIT/Kafka/connection effects.
 - The strong warm-up makes the steady-state comparison more useful.
 - Dedicated backend-event executor shows a favorable steady-state signal under strong warm-up, but do not claim it as a standalone proven p95 optimization without more repeated A/B runs.
-- Safe portfolio wording: "Separated backend event publishing into a dedicated executor and validated that the warmed reservation path remained stable under 3,000 waiting users / FCFS 600; repeated measurements showed lower tail latency, while cold-start readiness was treated as a separate concern."
 
 Reservation-path timeline:
 
@@ -875,21 +872,7 @@ The result is strong enough for an engineering note:
 
 > APM and nginx/k6 logs were compared to narrow the p95 delay. Cache stampede on campaign metadata was removed with warm-up, and repeated tests showed that increasing Entry CPU quota from `0.6` to `1.5` eliminated timeout-class errors and roughly doubled observed throughput.
 
-### Remaining Work
-
-- Re-run the `ENTRY_CPUS=1.5` comparison with `PRELOAD_CAMPAIGN_META=true` if a clean `success=600` table is needed.
-- Inspect successful `200` traces with `{"http.response.status_code":"200"}` to reduce the remaining p95.
-- Compare an external k6 run against the VM-local k6 run to separate application latency from same-VM load-generator contention.
-- For headline portfolio numbers, keep OTel disabled and collect only k6/nginx/Prometheus summaries.
-
-## Next Session Handoff
-
-Status at compact time:
-
-- Cache stampede A/B script exists at `scripts/load-test/run-cache-stampede-ab-compose.sh`.
-- The VM also has the latest quiet version of that script copied manually.
-- Java production code should not contain manual stage timers. A direct `EntryStageMetrics` attempt was reverted.
-- `services/entry-service/gradlew compileJava` passed after reverting that manual instrumentation.
+## 2026-07-07 캐시 조회와 OTel 진단 근거
 
 Important evidence:
 
@@ -915,7 +898,6 @@ Interpretation:
 
 - Cache stampede was not the outage-level bottleneck at this scale.
 - It is still valid as proactive hot-path risk removal because burst-time Core metadata lookup fell from `60~70` to `0`.
-- Portfolio wording should say `hot-path external lookup removal`, not `system failure fixed`.
 
 OTel run caution:
 
@@ -937,26 +919,6 @@ http p95: 7885ms
   - `axon.event.behavior publish`
 - In long `200` traces, child Redis/Kafka spans were small; the root span had large gaps between child spans.
 - This does not prove the remaining bottleneck is any specific method. It means automatic instrumentation is insufficient to split the Entry internal path.
-
-Rules for next session:
-
-- Do not scp uncommitted Java production code to the VM for performance claims.
-- If code changes are needed, use git commit/push/pull or an explicitly named diagnostic branch.
-- Do not permanently pollute `EntryApplicationService` with inline timing wrappers.
-- If stage-level timing is needed, prefer one of:
-  - a diagnostic-only Spring profile,
-  - an AOP/aspect around `EntryApplicationService.createEntry`,
-  - Micrometer timers isolated behind a small instrumentation component and clearly documented as diagnostic,
-  - or non-code evidence from existing Jaeger/Prometheus/nginx logs.
-- Before claiming OTel overhead, run a controlled `OTel off -> OTel on -> OTel off` comparison under the same `ENTRY_CPUS`, `PRELOAD_CAMPAIGN_META`, and traffic shape.
-
-Recommended next action:
-
-1. Add Core-side pipeline metrics before changing queue or persistence behavior: consumer lag, internal queue depth, flush duration, retry/DLT count, and DB convergence.
-2. Run a warmed `FLOW=payment` boundary test above FCFS `600` (start at `800`, then `1000` if clean) with OTel off for headline latency.
-3. If Core delay or inconsistency appears, use OTel only to inspect trace shape and diagnose the relevant consumer/flush/DB path.
-4. Apply the smallest evidence-backed improvement, then repeat the same payment scenario and compare DB convergence and consistency.
-5. Do not start pre-event scale-out/warm-up automation until this Core capacity boundary and operational metric set are established.
 
 ## 2026-07-10 Core Pipeline Metric Baseline
 
