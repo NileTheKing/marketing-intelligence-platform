@@ -80,6 +80,8 @@ class SecurityConfigTest {
 
     @Test
     void anonymousCallerCannotReachProtectedApis() throws Exception {
+        mockMvc.perform(post("/api/v1/coupon-activities/1/issuances"))
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/v1/events")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))

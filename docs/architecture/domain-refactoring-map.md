@@ -24,6 +24,7 @@ Status: active
 |---|---|---|---|---|
 | FCFS reservation | `EntryController#createEntry` | `EntryApplicationService` → `EntryReservationService` → Redis Lua; success publishes a behavior event | `EntryReservationServiceRedisIntegrationTest` | Entry owns fast slot admission and reservation tokens. It must not persist Core ledger records directly. |
 | Payment command | `PaymentController` `prepare` / `confirm` | `PaymentService` / `CampaignActivityProducerService` → `CAMPAIGN_ACTIVITY_COMMAND` | `PaymentControllerTest` | Payment token internals are a separate owner. Do not change them while modifying Core purchase persistence unless explicitly requested. |
+| Direct coupon issuance | `DirectCouponIssueController` | Core validates a direct coupon activity and saves `UserCoupon` before responding | `DirectCouponIssueServiceTest` | Coupon ownership remains in Core; configured audience filters are rejected until their policy is decided. No FCFS coupon admission is implemented. |
 | FCFS ledger consumption | `CampaignActivityConsumerService` Kafka listener | `FcfsCommandOrchestrator` → `FcfsLedgerPersistenceService` → `CampaignActivityEntry` + `Purchase`; final command failure goes to DLT | `CampaignActivityConsumerServiceTest`, `FcfsCommandOrchestratorTest` | Core owns durable ledger persistence and Kafka completion. Keep Entry reservation and post-ledger projections outside this transaction. |
 | Purchase projection and repair | Post-ledger projection / scheduled reconciliation | `UserSummary` projection; failures recorded separately and reconciliation repairs from `Purchase` ledger | `ReconciliationSchedulerTest`, `ReconciliationIssueServiceIntegrationTest` | `Purchase` is the source of truth. `UserSummary` is rebuildable derived data, so do not make a projection failure roll back a committed ledger. |
 | Behavior collection | `BehaviorEventController` and reservation-approved application event | Event normalization → `BEHAVIOR_EVENT` → Elasticsearch sink | `BehaviorEventApiContractTest`, `BehaviorEventPropertyTest` | Entry accepts and normalizes behavior data; Core consumes analysis results. Keep official property schema separate from free-form attributes. |
@@ -167,11 +168,10 @@ Entry는 조회 전 버전을 읽고 저장 시 Lua로 비교해, 무효화 도�
 남는다. 이 경우 기존 캐시는 TTL까지 유지될 수 있으며, 영속 재시도는 현재 범위 밖이다.
 두 키를 사용하는 Lua는 현재 단일 Redis 구성 기준이다.
 
-직접 쿠폰 발급은 Core 메타의 활동 유형이 `COUPON`이고 `couponDeliveryMode`가
-`DIRECT`인 경우만 허용한다. 클라이언트가 보낸 유형은 이 판단에 사용하지 않는다.
-발급 방식이 없는 이전 쿠폰 활동 캐시는 Core에서 다시 조회하며, 조회 후에도 값이 없거나
-알 수 없으면 직접 발급을 거절한다. 선착순 등 비쿠폰 활동은 발급 방식 없이 캐시를 사용할 수 있다.
-자동 발급 스케줄러는 기존 내부 경로를 사용한다.
+2026-10-27: 직접 쿠폰 발급은 Core가 활동 유형 `COUPON`, 발급 방식 `DIRECT`,
+활동 상태와 기간을 확인하고 사용자당 한 장을 저장한다. 참여 조건이 설정된 기존 활동은
+조건을 무시하지 않고 발급을 거절한다. 자동 발급 스케줄러는 기존 경로를 사용한다.
+선착순 쿠폰 정원 판정은 구현하지 않았다.
 
 ### High-Traffic Flow
 

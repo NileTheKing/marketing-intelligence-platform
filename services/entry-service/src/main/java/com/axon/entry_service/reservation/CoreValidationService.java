@@ -18,7 +18,7 @@ public class CoreValidationService {
      *
      * @param Token               the Authorization header value (including scheme, e.g. "Bearer ...")
      * @param campaignActivityId  the ID of the campaign activity to validate
-     * @return                    a ValidationResponse containing the eligibility result; if the external call fails, `eligible` will be `false` and `errorMessage` will be "서버 오류"
+     * @return                    the eligibility result
      */
     public ValidationResponse isEligible(String Token, Long campaignActivityId) {
         try {
@@ -34,7 +34,7 @@ public class CoreValidationService {
             return response;
         } catch (Exception e) {
             log.error("CoreService로의 검증 로직에 오류가 발생 ", e);
-            return ValidationResponse.builder().eligible(false).errorMessage("서버 오류").build();
+            throw new CoreValidationUnavailableException(e);
         }
     }
 }
