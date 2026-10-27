@@ -130,14 +130,18 @@ HTTP 경로, JPA 엔티티·테이블 이름, 스케줄과 트랜잭션 경계�
 
 2026-10-22: `StoreViewService`의 일반 구매 저장을 `purchase/ShopPurchaseService`로
 분리했다. `StoreController`는 조회를 `StoreViewService`에, 구매 기록 저장을
-`ShopPurchaseService`에 맡긴다. 쿠폰 사용과 구매 저장은 같은 트랜잭션을 유지한다.
+`ShopPurchaseService`에 맡겼다. 쿠폰 사용과 구매 저장은 같은 트랜잭션을 유지했다.
 이번 변경은 책임 분리이며 기존 결제 시뮬레이션, 가격 입력과 HTTP 계약을 바꾸지 않는다.
 캠페인 메타 캐시의 상세 경계는 아래 절을 따른다.
 
 2026-10-27: 쿠폰 사용 직전에 서버에서 조회한 상품의 정상가와 카테고리로 적용 조건을
 다시 확인한다. 목록 조회와 동일한 기간, 최소 금액, 카테고리 규칙을 사용하며, 소유자와
 미사용 상태는 기존 행 잠금 아래에서 확인한다. 구매 저장 실패 시 쿠폰 사용도 롤백된다.
-일반 구매 성공 GET의 저장 동작과 요청 가격을 신뢰하는 기존 계약은 아직 남아 있다.
+일반 구매 확정은 `purchase/ShopPurchaseApplicationService`가 조율한다. 요청 키 조회와
+실패 복구는 DB 쓰기 트랜잭션 바깥에서 수행하고, `ShopPurchaseConfirmationService`가
+요청 기록 생성, 쿠폰 사용, 구매 저장을 같은 트랜잭션으로 커밋한다. 성공 GET은
+인증 사용자 소유 구매를 조회하며 저장하지 않는다. 기존 `ShopPurchaseService`는 제거했다.
+가격은 서버 상품·쿠폰 정보로 계산하며, HTTP 계약은 [API 경로](rest-api-route-clean-cutover-plan.md#일반-구매-확정-2026-10-27)를 따른다.
 
 | Style | Example | Reading impact |
 |---|---|---|

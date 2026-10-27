@@ -117,7 +117,11 @@ public class CouponService {
      * @return 적용 가능한 쿠폰 리스트
      */
     public List<ApplicableCouponDto> getApplicableCoupons(Long userId, BigDecimal productPrice, String productCategory) {
-        // 1. 사용자가 보유한 쿠폰 조회
+        return getApplicableCoupons(userId, productPrice, productCategory, productPrice);
+    }
+
+    public List<ApplicableCouponDto> getApplicableCoupons(Long userId, BigDecimal productPrice,
+            String productCategory, BigDecimal sellingPrice) {
         List<UserCoupon> userCoupons = userCouponRepository.findAllByUserId(userId);
 
         LocalDateTime now = LocalDateTime.now();
@@ -125,7 +129,7 @@ public class CouponService {
         // 2. 적용 가능한 쿠폰만 필터링
         return userCoupons.stream()
                 .filter(uc -> isApplicable(uc, productPrice, productCategory, now))
-                .map(uc -> toDto(uc, productPrice))
+                .map(uc -> toDto(uc, productPrice, sellingPrice))
                 .collect(Collectors.toList());
     }
 
@@ -169,9 +173,9 @@ public class CouponService {
     /**
      * UserCoupon을 DTO로 변환하면서 할인 금액 계산
      */
-    private ApplicableCouponDto toDto(UserCoupon userCoupon, BigDecimal productPrice) {
+    private ApplicableCouponDto toDto(UserCoupon userCoupon, BigDecimal productPrice, BigDecimal sellingPrice) {
         Coupon coupon = userCoupon.getCoupon();
-        BigDecimal calculatedDiscount = calculateDiscount(coupon, productPrice);
+        BigDecimal calculatedDiscount = calculateDiscount(coupon, productPrice).min(sellingPrice);
 
         return ApplicableCouponDto.builder()
                 .userCouponId(userCoupon.getId())
@@ -219,26 +223,37 @@ public class CouponService {
      * @param productCategory 서버에서 조회한 상품 카테고리
      */
     @Transactional
-    public void useCoupon(Long userCouponId, Long userId, BigDecimal productPrice, String productCategory) {
+    public BigDecimal useCoupon(Long userCouponId, Long userId, BigDecimal productPrice, String productCategory) {
         UserCoupon userCoupon = userCouponRepository.findByIdForUpdate(userCouponId)
-                .orElseThrow(() -> new IllegalArgumentException("UserCoupon not found: " + userCouponId));
+                .orElseThrow(() -> new InvalidCouponException());
 
         // 소유자 확인
         if (!userCoupon.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("UserCoupon does not belong to user: " + userId);
+            throw new InvalidCouponException();
         }
 
         // 이미 사용된 쿠폰인지 확인
         if (userCoupon.getStatus() != CouponStatus.ISSUED) {
-            throw new IllegalStateException("Coupon already used or invalid");
+            throw new CouponAlreadyUsedException();
         }
 
         if (!isApplicable(userCoupon, productPrice, productCategory, LocalDateTime.now())) {
-            throw new IllegalArgumentException("Coupon is not applicable to this purchase");
+            throw new CouponNotApplicableException();
         }
 
         // 쿠폰 사용 처리
         userCoupon.use();
         log.info("Coupon {} used by user {}", userCouponId, userId);
+        return calculateDiscount(userCoupon.getCoupon(), productPrice);
+    }
+
+    public static class InvalidCouponException extends IllegalArgumentException {
+        public InvalidCouponException() { super("Invalid coupon"); }
+    }
+    public static class CouponAlreadyUsedException extends IllegalStateException {
+        public CouponAlreadyUsedException() { super("Coupon already used or invalid"); }
+    }
+    public static class CouponNotApplicableException extends IllegalArgumentException {
+        public CouponNotApplicableException() { super("Coupon is not applicable to this purchase"); }
     }
 }

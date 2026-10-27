@@ -7,9 +7,10 @@
 </head>
 
 <body>
-    <div layout:fragment="content" class="w-full max-w-[800px] mx-auto px-4 py-12">
+    <div layout:fragment="content" id="shop-checkout" th:data-user-id="${checkoutUserId}" th:data-csrf-token="${_csrf.token}" th:data-csrf-header="${_csrf.headerName}" class="w-full max-w-[800px] mx-auto px-4 py-12">
 
-        <h1 class="text-3xl font-black mb-10 text-center">주문/결제</h1>
+        <h1 class="text-3xl font-black mb-4 text-center">주문/결제</h1>
+        <p class="text-sm text-gray-500 text-center mb-8">구매 체험 화면입니다. 실제 결제나 배송은 진행되지 않습니다.</p>
 
         <!-- Order Summary -->
         <div class="mb-10">
@@ -93,6 +94,9 @@
             </div>
         </div>
 
+        <p id="checkout-message" role="status" aria-live="polite" class="text-sm mb-4"></p>
+        <button id="checkout-new-purchase" type="button" hidden class="text-sm underline mb-4">같은 상품 다시 구매하기</button>
+
         <!-- Payment Summary -->
         <div class="mb-10 bg-gray-50 p-6 rounded-sm">
             <div class="flex justify-between mb-2">
@@ -128,7 +132,7 @@
             <button id="btn-pay"
                 class="w-full h-14 bg-accent text-white font-black text-lg rounded-sm hover:bg-blue-600 transition-colors shadow-lg flex justify-center items-center gap-2">
                 <span class="price-text" th:text="${product.price} + '원'">Price</span>
-                <span>결제하기</span>
+                <span id="checkout-action-label">구매 체험하기</span>
             </button>
         </div>
 
@@ -137,101 +141,7 @@
     </div>
 
     <th:block layout:fragment="script">
-        <script>
-            (function () {
-                'use strict';
-
-                // Wait for DOM to be fully loaded
-                window.addEventListener('load', function () {
-                    console.log('Page loaded, initializing coupon script...');
-
-                    // Get elements
-                    var originalPriceEl = document.getElementById('original-price');
-                    var couponSelect = document.getElementById('coupon-select');
-                    var discountDisplay = document.getElementById('discount-amount-display');
-                    var totalDisplay = document.getElementById('total-amount-display');
-                    var priceText = document.querySelector('.price-text');
-
-                    // Check all elements exist
-                    if (!originalPriceEl) {
-                        console.error('original-price element not found!');
-                        return;
-                    }
-                    if (!couponSelect) {
-                        console.error('coupon-select element not found!');
-                        return;
-                    }
-                    if (!discountDisplay) {
-                        console.error('discount-amount-display element not found!');
-                        return;
-                    }
-                    if (!totalDisplay) {
-                        console.error('total-amount-display element not found!');
-                        return;
-                    }
-                    if (!priceText) {
-                        console.error('price-text element not found!');
-                        return;
-                    }
-
-                    var originalPrice = parseFloat(originalPriceEl.value);
-                    var payButton = document.getElementById('btn-pay');
-
-                    // Coupon selection handler
-                    couponSelect.onchange = function () {
-
-                        var selectedOption = couponSelect.options[couponSelect.selectedIndex];
-                        var discount = 0;
-
-                        if (selectedOption.value !== '') {
-                            discount = parseFloat(selectedOption.getAttribute('data-discount')) || 0;
-                            console.log('Selected coupon discount:', discount);
-                        }
-
-                        var finalPrice = originalPrice - discount;
-                        if (finalPrice < 0) finalPrice = 0;
-
-                        // Format numbers
-                        var discountFormatted = Math.round(discount).toLocaleString('ko-KR');
-                        var priceFormatted = Math.round(finalPrice).toLocaleString('ko-KR');
-
-                        // Update UI
-                        discountDisplay.textContent = '-' + discountFormatted + '원';
-                        totalDisplay.textContent = priceFormatted + '원';
-                        priceText.textContent = priceFormatted + '원';
-
-                    };
-
-                    // Payment button handler
-                    payButton.onclick = function () {
-                        var selectedOption = couponSelect.options[couponSelect.selectedIndex];
-                        var selectedCouponId = selectedOption.value;
-
-                        // Calculate final price with discount
-                        var discount = 0;
-                        if (selectedCouponId !== '') {
-                            discount = parseFloat(selectedOption.getAttribute('data-discount')) || 0;
-                        }
-                        var finalPrice = originalPrice - discount;
-                        if (finalPrice < 0) finalPrice = 0;
-
-                        // Get product ID
-                        var productId = document.getElementById('product-id').value;
-
-                        // Build URL with required parameters
-                        var url = '/payment/success?productId=' + encodeURIComponent(productId) +
-                                  '&finalPrice=' + encodeURIComponent(finalPrice);
-                        if (selectedCouponId !== '') {
-                            url += '&couponId=' + encodeURIComponent(selectedCouponId);
-                        }
-
-                        console.log('Redirecting to:', url);
-                        window.location.href = url;
-                    };
-
-                });
-            })();
-        </script>
+        <script th:src="@{/js/shop-checkout.js}" defer></script>
     </th:block>
 </body>
 

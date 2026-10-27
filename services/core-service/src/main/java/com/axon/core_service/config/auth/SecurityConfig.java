@@ -57,7 +57,9 @@ public class SecurityConfig {
                         throws Exception {
                 http
                                 .httpBasic(httpBasic -> httpBasic.disable())
-                                .csrf(csrf -> csrf.disable())
+                                .csrf(csrf -> csrf.requireCsrfProtectionMatcher(request ->
+                                                HttpMethod.POST.matches(request.getMethod())
+                                                        && request.getRequestURI().equals(request.getContextPath() + "/api/v1/shop-purchases")))
                                 .sessionManagement(sm -> sm
                                                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))  // Allow session for OAuth2 login to preserve original request
                                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
@@ -100,6 +102,13 @@ public class SecurityConfig {
                                 .exceptionHandling(exceptions -> exceptions
                                                 .authenticationEntryPoint((request, response, authException) -> {
                                                         String uri = request.getRequestURI();
+                                                        if (uri.equals(request.getContextPath() + "/api/v1/shop-purchases")
+                                                                || uri.startsWith(request.getContextPath() + "/api/v1/shop-purchases/")) {
+                                                                response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                                                                response.setContentType("application/json");
+                                                                response.getWriter().write("{\"code\":\"AUTHENTICATION_REQUIRED\"}");
+                                                                return;
+                                                        }
                                                         if (uri.startsWith("/api/") || uri.startsWith("/core/api/")
                                                                 || uri.startsWith("/internal/")) {
                                                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)
@@ -111,6 +120,11 @@ public class SecurityConfig {
                                                 }))
                                 .logout(logout -> logout
                                                 .logoutUrl("/logout")
+                                                // Preserve the existing storefront GET logout link.
+                                                .logoutRequestMatcher(request ->
+                                                        (HttpMethod.GET.matches(request.getMethod())
+                                                                || HttpMethod.POST.matches(request.getMethod()))
+                                                        && request.getRequestURI().equals(request.getContextPath() + "/logout"))
                                                 .logoutSuccessUrl("/shop")
                                                 .deleteCookies("accessToken", "refreshToken")  // Delete JWT cookies
                                                 .addLogoutHandler(customLogoutHandler)  // Custom cleanup (Redis, events)

@@ -155,7 +155,7 @@ public class StoreViewService {
         List<ApplicableCouponDto> coupons = List.of();
         if (userId != null) {
             try {
-                coupons = couponService.getApplicableCoupons(userId, product.getPrice(), product.getCategory());
+                coupons = couponService.getApplicableCoupons(userId, product.getPrice(), product.getCategory(), discountedPrice(product));
             } catch (Exception e) {
                 log.error("Error loading coupons for checkout", e);
             }
@@ -286,13 +286,7 @@ public class StoreViewService {
     }
 
     private BigDecimal discountedPrice(Product product) {
-        BigDecimal originalPrice = product.getPrice();
-        if (product.getDiscountRate() == null || product.getDiscountRate() <= 0) {
-            return originalPrice;
-        }
-        BigDecimal discount = originalPrice.multiply(BigDecimal.valueOf(product.getDiscountRate()))
-                .divide(BigDecimal.valueOf(100));
-        return originalPrice.subtract(discount);
+        return com.axon.core_service.purchase.ShopPriceCalculator.sellingPrice(product);
     }
 
     private CampaignActivityDisplayDto convertToCampaignActivityDto(CampaignActivity activity) {

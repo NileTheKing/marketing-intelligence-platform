@@ -46,6 +46,42 @@ The target routes below are the current contract. The `Current` column is retain
 - 분석할 쿠폰 발송 이력이 없으면 증분 효과 화면에 빈 상태를 표시한다. 이벤트 목록도
   읽기 전용 데모에서 사용할 수 없는 생성 버튼을 안내하지 않는다.
 
+## 일반 구매 확정 (2026-10-27)
+
+일반 구매는 Core에서 처리하는 구매 체험 기능이다. 실제 PG 승인이나 배송을 수행하지 않는다.
+Entry의 선착순 prepare/confirm과 별개이며, 이 변경이 결제 상태 영속화나 Outbox를 구현하지는 않는다.
+
+| 경로 | 계약 |
+|---|---|
+| `POST /api/v1/shop-purchases` | 인증 사용자로 구매 확정. 입력은 UUID `requestId`, `productId`, 선택적 `userCouponId`이며 수량은 1이다. 가격과 사용자 ID는 요청으로 받지 않는다. |
+| `GET /api/v1/shop-purchases/{purchaseId}` | 본인 소유의 일반 구매 조회. 타인 구매와 미존재는 동일한 404다. |
+| `GET /payment/success?purchaseId=...` | 저장된 본인 구매의 결과 화면. 조회만 수행하며 과거 `productId/finalPrice/couponId` URL로 구매를 생성하지 않는다. |
+
+최초 확정은 201, 동일 요청 재시도는 200이며 같은 구매 ID와 저장 금액을 반환한다.
+같은 사용자·요청 ID로 상품이나 쿠폰을 바꾸면 409다. 쿠폰 미소유·조건 불일치는 400,
+다른 구매에 사용한 쿠폰은 409, DB 일시 장애는 503으로 실패를 반환한다.
+응답 필드는 `purchaseId`, `productId`, `quantity`, `paidAmount`, `status`다.
+
+`shop_purchase_requests`의 사용자·요청 ID unique insert를 첫 쓰기로 수행한다.
+요청 기록, 쿠폰 사용, 구매는 같은 트랜잭션에서 처리하며 실패 시 함께 롤백한다.
+동시 중복 요청이 unique 제약에 걸리면 실패 트랜잭션 종료 후 새 조회 트랜잭션으로 기존
+결과를 읽는다. 미완료 요청을 별도로 커밋하지 않으며 요청 기록은 자동 만료시키지 않는다.
+
+상품 판매가와 쿠폰 할인은 서버에서 계산하고 최종 금액을 `DECIMAL(10,2)`에 맞춰 확정한다.
+기존 정책대로 쿠폰 최소 금액과 정률 할인 기준은 상품 정상가이며, 적용 할인은 판매가를 넘지 않는다.
+쿠폰 소유·기간·상태·카테고리는 행 잠금 아래에서 다시 확인한다.
+브라우저는 응답 유실 시 같은 요청 ID와 입력을 보관해 재시도하고, 완료 후 새 구매는 사용자가
+명시적으로 시작한다. 성공 화면 재조회는 쿠폰이나 구매를 다시 처리하지 않는다.
+
+새 구매 POST에만 세션 CSRF 토큰을 요구한다. checkout은 토큰을 렌더링하고 JS가 헤더로 전송한다.
+그 외 기존 API의 CSRF 정책과 쇼핑몰 GET 로그아웃 링크는 유지한다. 미인증 API는 401이며,
+인증 검사보다 먼저 실행되는 CSRF 검사에 실패하면 403이다. 읽기 전용 데모는 구매를 할 수 없다.
+
+배포 시 `scripts/migrations/2026-10-27-shop-purchase-requests.sql`의 테이블을 준비해야 한다.
+2026-10-27 로컬 격리 MySQL에서 동시 중복·쿠폰 경쟁·트랜잭션 중간 실패 롤백을 확인했고,
+실제 JWT 쿠키를 사용하는 MockMvc로 checkout 토큰과 POST/GET 경계, 데모 차단을 확인했다.
+VM 배포 및 실제 PG 확인 결과가 아니다.
+
 ## Goal
 
 - 화면을 렌더링하는 SSR route와 JSON을 반환하는 API route를 구분한다.

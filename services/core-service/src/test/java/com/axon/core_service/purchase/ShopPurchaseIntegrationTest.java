@@ -1,10 +1,8 @@
 package com.axon.core_service.purchase;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.*;
 
 import com.axon.core_service.AbstractIntegrationTest;
 import com.axon.core_service.catalog.ProductRepository;
@@ -17,89 +15,131 @@ import com.axon.core_service.coupon.domain.UserCoupon;
 import com.axon.core_service.repository.PurchaseRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
+import java.util.UUID;
+import java.util.concurrent.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 class ShopPurchaseIntegrationTest extends AbstractIntegrationTest {
-    @Autowired private ShopPurchaseService shopPurchaseService;
-    @Autowired private ProductRepository products;
-    @Autowired private CouponRepository coupons;
-    @Autowired private UserCouponRepository userCoupons;
-    @MockitoSpyBean private PurchaseRepository purchases;
-
+    @Autowired ShopPurchaseApplicationService service;
+    @jakarta.persistence.PersistenceContext jakarta.persistence.EntityManager entityManager;
+    @MockitoSpyBean ShopPurchaseRequestRepository requests;
+    @Autowired ProductRepository products;
+    @Autowired CouponRepository coupons;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired UserCouponRepository userCoupons;
+    @MockitoSpyBean PurchaseRepository purchases;
     private Product product;
-    private Coupon coupon;
     private UserCoupon userCoupon;
 
     @BeforeEach
     void setUp() {
-        reset(purchases);
-        product = products.save(new Product("coupon checkout", 10L, BigDecimal.valueOf(10_000), "TECH"));
-        coupon = coupons.save(Coupon.builder().name("checkout discount")
-                .discountAmount(BigDecimal.valueOf(1_000)).minOrderAmount(BigDecimal.valueOf(10_000))
+        reset(purchases, requests);
+        requests.deleteAll(); purchases.deleteAll(); userCoupons.deleteAll(); coupons.deleteAll(); products.deleteAll();
+        product = products.save(new Product("shop", 10L, new BigDecimal("100.01"), "TECH", null, 15));
+        var coupon = coupons.save(Coupon.builder().name("sale").discountRate(10).minOrderAmount(new BigDecimal("100"))
                 .targetCategory("TECH").startDate(LocalDateTime.now().minusDays(1))
                 .endDate(LocalDateTime.now().plusDays(1)).build());
         userCoupon = userCoupons.save(UserCoupon.builder().userId(1L).coupon(coupon).build());
     }
 
-    @AfterEach
-    void cleanUp() {
-        reset(purchases);
-        purchases.deleteAll(purchases.findByUserId(1L).stream()
-                .filter(p -> product.getId().equals(p.getProductId())).toList());
-        userCoupons.deleteById(userCoupon.getId());
-        coupons.deleteById(coupon.getId());
-        products.deleteById(product.getId());
-    }
-
     @Test
-    void purchaseFailureRollsBackCouponUseAndAllowsRetry() {
-        doThrow(new IllegalStateException("purchase write failed")).when(purchases).save(any());
-        assertThatThrownBy(this::checkout).isInstanceOf(IllegalStateException.class);
-        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus())
-                .isEqualTo(CouponStatus.ISSUED);
-        reset(purchases);
-        checkout();
-        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus())
-                .isEqualTo(CouponStatus.USED);
-        assertThat(purchases.findByUserId(1L).stream()
-                .filter(p -> userCoupon.getId().equals(p.getUserCouponId()))).hasSize(1);
-    }
-
-    @Test
-    void concurrentCheckoutWithSameCouponCommitsOnlyOnePurchase() throws Exception {
-        var start = new CountDownLatch(1);
+    void sameKeyConcurrentRequestsConvergeAndDifferentPayloadConflicts() throws Exception {
+        var request = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        var gate = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> attemptCheckout(start));
-            var second = executor.submit(() -> attemptCheckout(start));
-            start.countDown();
-            assertThat(java.util.List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder(true, false);
+            var first = executor.submit(() -> { gate.await(); return service.confirm(1L, request); });
+            var second = executor.submit(() -> { gate.await(); return service.confirm(1L, request); });
+            gate.countDown();
+            var a = first.get(20, TimeUnit.SECONDS); var b = second.get(20, TimeUnit.SECONDS);
+            assertThat(a.purchase()).isEqualTo(b.purchase());
+            assertThat(a.created()).isNotEqualTo(b.created());
+            assertThat(a.purchase().paidAmount()).isEqualByComparingTo("75.01");
         }
-        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus())
-                .isEqualTo(CouponStatus.USED);
-        assertThat(purchases.findByUserId(1L).stream()
-                .filter(p -> userCoupon.getId().equals(p.getUserCouponId()))).hasSize(1);
+        assertThat(purchases.count()).isEqualTo(1);
+        assertThat(requests.count()).isEqualTo(1);
+        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus()).isEqualTo(CouponStatus.USED);
+        assertThatThrownBy(() -> service.confirm(1L, new ShopPurchaseRequest(request.requestId(), product.getId(), null)))
+                .isInstanceOf(ShopPurchaseException.class).hasMessage("REQUEST_ID_REUSED");
+        assertThatThrownBy(() -> service.getPurchase(2L, purchases.findAll().getFirst().getId()))
+                .isInstanceOf(ShopPurchaseException.class).hasMessage("PURCHASE_NOT_FOUND");
     }
 
-    private boolean attemptCheckout(CountDownLatch start) throws InterruptedException {
-        start.await();
-        try {
-            checkout();
-            return true;
-        } catch (IllegalStateException alreadyUsed) {
-            assertThat(alreadyUsed).hasMessageContaining("Coupon already used");
-            return false;
-        }
+    @Test
+    void committedRetryReturnsStoredPriceWithoutRevalidatingCouponOrProduct() {
+        var request = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        var original = service.confirm(1L, request);
+        jdbc.update("UPDATE products SET price = ? WHERE id = ?", new BigDecimal("500.00"), product.getId());
+        jdbc.update("UPDATE coupons SET end_date = ? WHERE id = ?", LocalDateTime.now().minusDays(1),
+                userCoupon.getCoupon().getId());
+        var retry = service.confirm(1L, request);
+        assertThat(retry.created()).isFalse();
+        assertThat(retry.purchase()).isEqualTo(original.purchase());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM shop_purchase_requests WHERE purchase_id IS NULL", Long.class))
+                .isZero();
+        assertThat(purchases.count()).isEqualTo(1);
     }
 
-    private void checkout() {
-        shopPurchaseService.recordPaymentSuccess(1L, product.getId(), userCoupon.getId(), BigDecimal.valueOf(9_000));
+    @Test
+    void purchaseFailureRollsBackRequestAndCouponAndSameKeyCanRetry() {
+        var request = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        doThrow(new IllegalStateException("injected failure")).when(purchases).saveAndFlush(any());
+        assertThatThrownBy(() -> service.confirm(1L, request)).hasMessage("injected failure");
+        assertThat(requests.count()).isZero();
+        assertThat(purchases.count()).isZero();
+        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus()).isEqualTo(CouponStatus.ISSUED);
+        reset(purchases);
+        assertThat(service.confirm(1L, request).created()).isTrue();
+        assertThat(requests.count()).isEqualTo(1);
+    }
+
+    @Test
+    void failureAfterRequestInsertRollsBackAndAllowsRetry() {
+        var request = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        doAnswer(call -> { entityManager.persist(call.getArgument(0)); entityManager.flush(); throw new IllegalStateException("after insert"); })
+                .when(requests).saveAndFlush(any());
+        assertThatThrownBy(() -> service.confirm(1L, request)).hasMessage("after insert");
+        reset(requests);
+        assertThat(requests.count()).isZero();
+        assertThat(purchases.count()).isZero();
+        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus()).isEqualTo(CouponStatus.ISSUED);
+        assertThat(service.confirm(1L, request).created()).isTrue();
+    }
+
+    @Test
+    void failureAfterPurchaseInsertRollsBackAllThreeTables() {
+        var request = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        doAnswer(call -> { entityManager.persist(call.getArgument(0)); entityManager.flush(); throw new IllegalStateException("after purchase"); })
+                .when(purchases).saveAndFlush(any());
+        assertThatThrownBy(() -> service.confirm(1L, request)).hasMessage("after purchase");
+        reset(purchases);
+        assertThat(requests.count()).isZero();
+        assertThat(purchases.count()).isZero();
+        assertThat(userCoupons.findById(userCoupon.getId()).orElseThrow().getStatus()).isEqualTo(CouponStatus.ISSUED);
+        assertThat(service.confirm(1L, request).created()).isTrue();
+    }
+
+    @Test
+    void differentKeysCompeteForOneCoupon() throws Exception {
+        var first = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        var second = new ShopPurchaseRequest(UUID.randomUUID(), product.getId(), userCoupon.getId());
+        var gate = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var results = java.util.List.of(executor.submit(() -> attempt(gate, first)),
+                    executor.submit(() -> attempt(gate, second)));
+            gate.countDown();
+            var outcomes = java.util.List.of(results.get(0).get(20, TimeUnit.SECONDS), results.get(1).get(20, TimeUnit.SECONDS));
+            assertThat(outcomes).containsExactlyInAnyOrder("OK", "COUPON_ALREADY_USED");
+        }
+        assertThat(purchases.count()).isEqualTo(1);
+        assertThat(requests.count()).isEqualTo(1);
+    }
+
+    private String attempt(CountDownLatch gate, ShopPurchaseRequest request) throws InterruptedException {
+        gate.await();
+        try { service.confirm(1L, request); return "OK"; }
+        catch (ShopPurchaseException failure) { return failure.code(); }
     }
 }

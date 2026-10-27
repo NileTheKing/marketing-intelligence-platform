@@ -64,8 +64,15 @@
             </div>
 
             <div class="animate-float">
-                <h1 class="text-5xl font-black mb-6 tracking-tight">PAYMENT SUCCESS!</h1>
-                <p class="text-gray-500 mb-12 text-xl font-medium">주문이 성공적으로 접수되었습니다.<br>설레는 마음으로 배송을 기다려주세요.</p>
+                <h1 class="text-5xl font-black mb-6 tracking-tight"
+                    th:text="${purchase.status.name() == 'CONFIRMED' ? '구매 완료' : '구매 상태 변경'}">구매 완료</h1>
+                <p class="text-gray-500 mb-4 text-xl font-medium"
+                    th:text="${purchase.status.name() == 'CONFIRMED' ? '구매 체험이 완료되었습니다. 실제 결제와 배송은 진행되지 않습니다.' : '현재 구매 상태를 확인해 주세요.'}"></p>
+                <dl class="text-sm text-gray-600 mb-12 space-y-2">
+                    <div>구매 번호 <b th:text="${purchase.purchaseId}"></b></div>
+                    <div>구매 금액 <b th:text="${#numbers.formatDecimal(purchase.paidAmount, 1, 'COMMA', 2, 'POINT')} + '원'"></b></div>
+                    <div>상태 <b th:text="${purchase.status.name() == 'CONFIRMED' ? '확정' : (purchase.status.name() == 'CANCELLED' ? '취소' : '환불')}"></b></div>
+                </dl>
             </div>
 
             <div class="flex gap-4 justify-center animate-scale-in"

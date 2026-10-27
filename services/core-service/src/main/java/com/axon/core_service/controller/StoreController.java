@@ -3,8 +3,9 @@ package com.axon.core_service.controller;
 import com.axon.core_service.config.auth.JwtTokenProvider;
 import com.axon.core_service.domain.user.CustomOAuth2User;
 import com.axon.core_service.service.StoreViewService;
-import com.axon.core_service.purchase.ShopPurchaseService;
-import java.math.BigDecimal;
+import com.axon.core_service.purchase.ShopPurchaseApplicationService;
+import com.axon.core_service.purchase.ShopPurchaseException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +26,7 @@ public class StoreController {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final StoreViewService storeViewService;
-    private final ShopPurchaseService shopPurchaseService;
+    private final ShopPurchaseApplicationService shopPurchaseApplicationService;
 
     @Value("${axon.entry-service-url}")
     private String entryServiceUrl;
@@ -60,9 +61,9 @@ public class StoreController {
 
     @GetMapping("/checkout")
     public String checkout(@RequestParam Long productId,
-            @CookieValue(value = "accessToken", required = false) String accessToken,
-            Model model) {
-        Long userId = extractUser(accessToken).userId();
+            Authentication authentication, Model model) {
+        Long userId = Long.valueOf(authentication.getName());
+        model.addAttribute("checkoutUserId", userId);
 
         StoreViewService.CheckoutViewData viewData = storeViewService.getCheckoutViewData(userId, productId);
         model.addAttribute("product", viewData.getProduct());
@@ -114,20 +115,16 @@ public class StoreController {
     }
 
     @GetMapping("/payment/success")
-    public String paymentSuccess(
-            @RequestParam(name = "couponId", required = false) Long userCouponId,
-            @RequestParam(required = false) Long productId,
-            @RequestParam(required = false) BigDecimal finalPrice,
-            @CookieValue(value = "accessToken", required = false) String accessToken) {
-        Long userId = extractUser(accessToken).userId();
-
+    public String paymentSuccess(@RequestParam Long purchaseId, Authentication authentication,
+            Model model, HttpServletResponse response) {
         try {
-            shopPurchaseService.recordPaymentSuccess(userId, productId, userCouponId, finalPrice);
-        } catch (Exception e) {
-            log.error("Failed to record payment success", e);
+            model.addAttribute("purchase", shopPurchaseApplicationService.getPurchase(
+                    Long.valueOf(authentication.getName()), purchaseId));
+            return "payment-success";
+        } catch (ShopPurchaseException failure) {
+            response.setStatus(failure.status().value());
+            return "purchase-error";
         }
-
-        return "payment-success";
     }
 
     @GetMapping("/mypage")
