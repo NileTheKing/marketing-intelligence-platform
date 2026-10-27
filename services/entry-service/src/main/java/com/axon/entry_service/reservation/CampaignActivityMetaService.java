@@ -1,6 +1,7 @@
 package com.axon.entry_service.reservation;
 
 import com.axon.entry_service.config.auth.JwtTokenProvider;
+import com.axon.messaging.CampaignActivityType;
 import com.axon.entry_service.reservation.domain.CampaignActivityMeta;
 import com.axon.entry_service.reservation.dto.CampaignActivitySummaryResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -88,8 +89,9 @@ public class CampaignActivityMetaService {
         }
         try {
             CampaignActivityMeta meta = objectMapper.readValue(cached, CampaignActivityMeta.class);
-            // Old cache entries lack the delivery mode; reload from Core.
-            if (meta.couponDeliveryMode() == null) {
+            // Delivery mode is required only for coupon issuance, not FCFS metadata.
+            if (meta.campaignActivityType() == CampaignActivityType.COUPON
+                    && meta.couponDeliveryMode() == null) {
                 return null;
             }
             return meta;

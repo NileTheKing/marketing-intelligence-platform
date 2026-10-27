@@ -16,6 +16,24 @@ import org.springframework.web.client.RestClient;
 
 class CampaignActivityMetaServiceTest {
     @Test
+    void nonCouponCacheDoesNotRequireCouponDeliveryMode() {
+        var redis = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked") ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.get("campaign:1:meta")).thenReturn("""
+                {"id":1,"campaignId":2,"status":"ACTIVE","campaignActivityType":"FIRST_COME_FIRST_SERVE"}
+                """);
+        var core = mock(RestClient.class);
+        var jwt = mock(JwtTokenProvider.class);
+        var service = new CampaignActivityMetaService(core, redis,
+                new ObjectMapper().findAndRegisterModules(), jwt);
+
+        assertThat(service.getMeta(1L).campaignActivityType())
+                .isEqualTo(com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+        verifyNoInteractions(core, jwt);
+    }
+
+    @Test
     void legacyCouponCacheIsReloadedFromCoreAndModeIsCached() {
         var redis = mock(StringRedisTemplate.class);
         @SuppressWarnings("unchecked") ValueOperations<String, String> values = mock(ValueOperations.class);
