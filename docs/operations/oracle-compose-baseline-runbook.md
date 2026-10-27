@@ -14,6 +14,7 @@ Status: active
 | 배포 방식과 실행 정책 | [CI/CD Execution Policy](#cicd-execution-policy) |
 | 앱 재생성 후 nginx 연결 확인 | [Mandatory Nginx Restart After App Recreate](#mandatory-nginx-restart-after-app-recreate) |
 | 로그인 설정 확인 | [네이버 로그인 환경변수](#네이버-로그인-환경변수) |
+| 구매·쿠폰 최신 배포 | [10월 27일 구매 확정과 쿠폰 처리](#2026-10-27-구매-확정과-쿠폰-처리-배포) |
 | 데모 데이터와 마지막 오류 수정 기록 | [10월 24일 데이터 전환](#2026-10-24-관리자-시연-데이터-전환), [증분 분석과 편집 수정](#2026-10-24-증분-분석-진입과-쿠폰-활동-편집-오류-수정) |
 | 부하 실험 준비 | [Source Boundary](#source-boundary), [Baseline Assumptions](#baseline-assumptions), [Resource Profile](#resource-profile) |
 | 과거 실행 재현 | 해당 날짜와 커밋의 기록. `Pending`도 당시 상태이며 현재 할 일로 자동 적용하지 않는다. |
@@ -142,6 +143,31 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   VM에서 실제 SSR 응답과 배포 JS, 정상 실행 분석 API 200, 데모 변경 요청 403을 확인했다.
 - Core health는 `UP`이며 환경변수와 CPU 제한은 교체 전후 동일하다.
   시연 DB, Entry, Redis, Kafka 및 ES 미기동 상태는 변경하지 않았다.
+
+## 2026-10-27 구매 확정과 쿠폰 처리 배포
+
+- 배포 기준 커밋: `da578e7` (`main`). Core는 `20a9186`에서 빌드한 이미지,
+  Entry는 `da578e7`에서 빌드한 이미지다. 두 커밋 사이 Core 코드는 동일하다.
+- 구매 후처리의 원본 순서 유지, 쿠폰 직접 발급 제한, 장바구니 발행 실패의 즉시 반복 방지,
+  쿠폰 적용 조건 재확인, 일반 구매 POST 확정/GET 결과 조회를 반영했다.
+- 배포 전 Core 전체 테스트는 325개 통과했고 opt-in 실험·외부 연동 9개는 제외됐다.
+  Entry 전체 68개와 필수 Redis 통합 테스트, JS 8개도 통과했다.
+  최종 [GitHub CI](https://github.com/NileTheKing/marketing-intelligence-platform/actions/runs/40442378518)는 성공했다.
+- 최초 CI에서 발견한 비쿠폰 캐시 회귀는 `da578e7`에서 수정했다. 발급 방식이 없는
+  쿠폰 활동만 Core에서 다시 조회하며 선착순 활동의 캐시는 그대로 사용한다.
+- 교체 전 앱 이미지·환경과 DB 스키마를 보호된 VM 백업 경로에 보존했다.
+  롤백 이미지 태그는 `axon-core-rollback:20261027-purchase`, `axon-entry-rollback:20261027-purchase`다.
+- `scripts/migrations/2026-10-27-shop-purchase-requests.sql`을 실제 DB에 적용해
+  InnoDB 요청 기록 테이블을 추가했다. 기존 테이블 데이터 초기화나 데모 seed는 실행하지 않았다.
+- 기존 Compose 파일·override로 Core와 Entry만 `--no-deps --no-build` 재생성하고 nginx를
+  재시작했다. CPU 제한 Core 1.2, Entry 1.5와 기존 메모리·환경변수가 동일함을 확인했다.
+  DB·Redis·Kafka·분석 저장소 및 같은 VM의 다른 서비스는 재생성하지 않았다.
+- 실제 VM 확인: Core/Entry health 200, 인증 checkout 200과 CSRF 토큰 표시,
+  CSRF 없는 POST 403, 요청 가격 입력 400, 없는 상품 확정 404와 요청 기록 롤백,
+  과거 성공 URL 400, 없는 구매 결과 404, 직접 쿠폰 대상이 아닌 활동 요청 400.
+- 확인 전후 구매는 `65,145`건, 새 요청 기록은 `0`건이었다. 정상 구매를 새로 생성하거나
+  쿠폰을 실제 발급하는 운영 smoke는 실행하지 않았다. 동시 구매·멱등성은 로컬 격리 DB 테스트 근거다.
+- 공개 HTTPS `/shop`, `/js/shop-checkout.js`의 200 응답을 확인했다. 실제 PG 연동은 여전히 없다.
 
 ## 네이버 로그인 환경변수
 

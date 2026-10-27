@@ -80,7 +80,7 @@ Entry의 선착순 prepare/confirm과 별개이며, 이 변경이 결제 상태 
 배포 시 `scripts/migrations/2026-10-27-shop-purchase-requests.sql`의 테이블을 준비해야 한다.
 2026-10-27 로컬 격리 MySQL에서 동시 중복·쿠폰 경쟁·트랜잭션 중간 실패 롤백을 확인했고,
 실제 JWT 쿠키를 사용하는 MockMvc로 checkout 토큰과 POST/GET 경계, 데모 차단을 확인했다.
-VM 배포 및 실제 PG 확인 결과가 아니다.
+VM 배포와 제한된 운영 확인 범위는 [10월 27일 운영 기록](../operations/oracle-compose-baseline-runbook.md#2026-10-27-구매-확정과-쿠폰-처리-배포)을 따른다. 실제 PG 연동 결과가 아니다.
 
 ## Goal
 
