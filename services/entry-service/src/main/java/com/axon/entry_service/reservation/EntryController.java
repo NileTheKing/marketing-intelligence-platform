@@ -1,6 +1,8 @@
 package com.axon.entry_service.reservation;
 
 import com.axon.entry_service.reservation.dto.EntryRequestDto;
+import com.axon.entry_service.payment.dto.PaymentConfirmationResponse;
+import com.axon.entry_service.reservation.domain.ReservationResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,12 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class EntryController {
     private final EntryApplicationService entryApplicationService;
+
+    @ExceptionHandler(CoreValidationUnavailableException.class)
+    public ResponseEntity<PaymentConfirmationResponse> validationUnavailable(CoreValidationUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(PaymentConfirmationResponse.failure(ReservationResult.error(), exception.getMessage()));
+    }
 
     @PostMapping("/api/v1/coupon-entries")
     public ResponseEntity<?> issueCoupon(@Valid @RequestBody EntryRequestDto requestDto,

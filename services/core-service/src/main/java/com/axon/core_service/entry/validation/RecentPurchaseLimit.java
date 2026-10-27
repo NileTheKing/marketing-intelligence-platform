@@ -40,8 +40,7 @@ public class RecentPurchaseLimit implements ValidationLimitStrategy {
      * @return a ValidationResponse indicating eligibility: `eligible` is `true` when the user's lastPurchaseAt
      *         meets the operator constraint; otherwise `eligible` is `false` and an explanatory errorMessage is set.
      *         If the user record is missing or lastPurchaseAt is null, returns `eligible = false` with a localized
-     *         recent-purchase error message. If input values are missing or malformed for the operator, returns
-     *         a generic page error response.
+     *         recent-purchase error message. Invalid configuration raises an exception.
      */
     @Override
     public ValidationResponse validateCampaignActivityLimit (Long userId, String operator, List<String> values) {
@@ -77,13 +76,10 @@ public class RecentPurchaseLimit implements ValidationLimitStrategy {
     }
 
     /**
-     * Produce a ValidationResponse indicating a generic page/value error for campaign validation.
-     *
-     * @return a ValidationResponse with eligible set to false and the error message "이벤트 응모 페이지에 문제가 발생했습니다."
+     * Report an invalid campaign validation configuration.
      */
     private ValidationResponse valueErrMsg() {
-        String valueErrMsg = "이벤트 응모 페이지에 문제가 발생했습니다.";
-        return ValidationResponse.builder().eligible(false).errorMessage(valueErrMsg).build();
+        throw new IllegalStateException("Invalid recent purchase validation configuration");
     }
 
     /**

@@ -10,12 +10,27 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DynamicValidationServiceTest {
+
+    @Test
+    void validationFailureIsNotReportedAsIneligibility() {
+        CampaignActivityRepository repository = mock(CampaignActivityRepository.class);
+        ValidationLimitStrategy strategy = strategy("FIRST");
+        DynamicValidationService service = new DynamicValidationService(repository, new ValidationLimitFactoryService(List.of(strategy)));
+        CampaignActivity activity = CampaignActivity.builder()
+                .filters(List.of(new FilterDetail("FIRST", "GTE", List.of("1"), "HEAVY"))).build();
+        when(repository.findById(10L)).thenReturn(Optional.of(activity));
+        when(strategy.validateCampaignActivityLimit(1L, "GTE", List.of("1")))
+                .thenThrow(new IllegalStateException("database unavailable"));
+
+        assertThatThrownBy(() -> service.validate(1L, 10L)).isInstanceOf(IllegalStateException.class);
+    }
 
     @Test
     void validateChecksEveryHeavyFilter() {
