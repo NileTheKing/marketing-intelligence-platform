@@ -24,26 +24,6 @@ public class EntryController {
         return toResponse(entryApplicationService.issueCoupon(requestDto, token, userId));
     }
 
-    /**
-     * Processes an entry creation request: validates eligibility, attempts an
-     * atomic reservation, and emits a campaign activity event.
-     *
-     * @param requestDto  the entry request containing campaignActivityId,
-     *                    productId, and optional activityType
-     * @param token       the raw "Authorization" header value used for heavy
-     *                    eligibility validation
-     * @param userDetails the authenticated principal whose username is parsed as
-     *                    the numeric userId
-     * @return a ResponseEntity with status:
-     *         202 Accepted on successful reservation and event emission;
-     *         404 Not Found if campaign metadata is missing;
-     *         400 Bad Request for fast- or heavy-validation failures or when the
-     *         activity is closed;
-     *         409 Conflict when the entry is duplicated;
-     *         410 Gone when the activity is sold out;
-     *         500 Internal Server Error for unexpected reservation failures.
-     */
-
     @PostMapping("/api/v1/entries")
     public ResponseEntity<?> createEntry(@Valid @RequestBody EntryRequestDto requestDto,
             @RequestHeader("Authorization") String token,

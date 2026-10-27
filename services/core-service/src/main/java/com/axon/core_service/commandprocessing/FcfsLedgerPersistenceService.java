@@ -13,9 +13,13 @@ import com.axon.core_service.service.ActivityUserKey;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -41,23 +45,23 @@ public class FcfsLedgerPersistenceService {
         List<Long> userIds = messages.stream()
                 .map(CampaignActivityKafkaProducerDto::getUserId).distinct().toList();
         Map<Long, CampaignActivity> activities = campaignActivityRepository.findAllById(activityIds).stream()
-                .collect(java.util.stream.Collectors.toMap(CampaignActivity::getId, activity -> activity));
+                .collect(Collectors.toMap(CampaignActivity::getId, activity -> activity));
         if (activities.size() != activityIds.size()) {
             throw new IllegalArgumentException("존재하지 않는 캠페인 활동이 포함되어 있습니다");
         }
 
         Map<ActivityUserKey, CampaignActivityEntry> entries = entryRepository
                 .findByActivityIdsAndUserIds(activityIds, userIds).stream()
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(Collectors.toMap(
                         entry -> new ActivityUserKey(entry.getCampaignActivity().getId(), entry.getUserId()), entry -> entry));
         Map<ActivityUserKey, Purchase> purchases = purchaseRepository
                 .findByCampaignActivityIdsAndUserIds(activityIds, userIds).stream()
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(Collectors.toMap(
                         purchase -> new ActivityUserKey(purchase.getCampaignActivityId(), purchase.getUserId()), purchase -> purchase));
 
-        List<CampaignActivityEntry> newEntries = new java.util.ArrayList<>();
-        List<Purchase> newPurchases = new java.util.ArrayList<>();
-        List<LedgerResult> results = new java.util.ArrayList<>();
+        List<CampaignActivityEntry> newEntries = new ArrayList<>();
+        List<Purchase> newPurchases = new ArrayList<>();
+        List<LedgerResult> results = new ArrayList<>();
         for (CampaignActivityKafkaProducerDto dto : messages) {
             CampaignActivity activity = activities.get(dto.getCampaignActivityId());
             ActivityUserKey key = new ActivityUserKey(activity.getId(), dto.getUserId());
@@ -81,9 +85,10 @@ public class FcfsLedgerPersistenceService {
                 newPurchases.add(purchase);
             }
             results.add(new LedgerResult(dto, activity.getCampaignId(), purchaseCreated,
-                    purchase.getPurchaseAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()));
+                    purchase.getPurchaseAt().atZone(ZoneId.of("Asia/Seoul")).toInstant()));
         }
 
+        // JdbcTemplate은 JPA와 같은 트랜잭션에 참여하며, 생성 ID는 후속 처리에서 사용하지 않는다.
         insertEntries(newEntries);
         insertPurchases(newPurchases);
         return results;
@@ -94,12 +99,12 @@ public class FcfsLedgerPersistenceService {
             return;
         }
 
-        String values = String.join(",", java.util.Collections.nCopies(entries.size(), "(?,?,?,?,?,?,?,?,?)"));
+        String values = String.join(",", Collections.nCopies(entries.size(), "(?,?,?,?,?,?,?,?,?)"));
         String sql = "INSERT INTO campaign_activity_entries "
                 + "(campaign_activity_id, product_id, status, user_id, requested_at, processed_at, additional_data, created_at, updated_at) "
                 + "VALUES " + values;
         LocalDateTime now = LocalDateTime.now();
-        List<Object> args = new java.util.ArrayList<>(entries.size() * 9);
+        List<Object> args = new ArrayList<>(entries.size() * 9);
         for (CampaignActivityEntry entry : entries) {
             args.add(entry.getCampaignActivity().getId());
             args.add(entry.getProductId());
@@ -119,11 +124,11 @@ public class FcfsLedgerPersistenceService {
             return;
         }
 
-        String values = String.join(",", java.util.Collections.nCopies(purchases.size(), "(?,?,?,?,?,?,?,?,?,?)"));
+        String values = String.join(",", Collections.nCopies(purchases.size(), "(?,?,?,?,?,?,?,?,?,?)"));
         String sql = "INSERT INTO purchases "
                 + "(user_id, product_id, campaign_activity_id, purchase_type, price, quantity, purchase_at, status, cancelled_at, cancellation_reason) "
                 + "VALUES " + values;
-        List<Object> args = new java.util.ArrayList<>(purchases.size() * 10);
+        List<Object> args = new ArrayList<>(purchases.size() * 10);
         for (Purchase purchase : purchases) {
             args.add(purchase.getUserId());
             args.add(purchase.getProductId());

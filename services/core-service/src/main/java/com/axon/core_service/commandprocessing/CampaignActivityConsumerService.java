@@ -25,7 +25,7 @@ public class CampaignActivityConsumerService {
             return;
         }
 
-        log.info("📥 [Kafka] Consumed batch: count={}", messages.size());
+        log.info("Consumed campaign command batch: count={}", messages.size());
         pipelineMetrics.recordCommandFlush(messages.size(), () -> dispatcher.dispatch(messages));
     }
 
