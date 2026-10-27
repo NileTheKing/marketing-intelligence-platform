@@ -24,8 +24,7 @@ public class DynamicValidationService {
      *
      * <p>When the campaign has no filters, returns an eligible response. For each filter with phase
      * "HEAVY", delegates validation to the corresponding ValidationLimitStrategy and returns its result.
-     * If a strategy for a filter does not exist or an error occurs during validation, returns an
-     * ineligible response with a user-facing error message.</p>
+     * If a strategy is missing or validation fails, propagates an error.</p>
      *
      * @param userId             the identifier of the user to validate
      * @param campaignActivityId the identifier of the campaign activity whose limits are validated
@@ -54,7 +53,7 @@ public class DynamicValidationService {
                 ValidationLimitStrategy strategy = validationLimitFactoryService.getStrategy(filterName);
                 if(strategy == null) {
                     log.warn("{} 의 전략함수는 존재하지 않습니다.", filterName);
-                    return ValidationResponse.builder().eligible(false).errorMessage("응모 요청 페이지에 오류가 발생했습니다.").build();
+                    throw new IllegalStateException("Unknown validation strategy: " + filterName);
                 }
                 ValidationResponse response = strategy.validateCampaignActivityLimit(userId, operator, filterValues);
                 if (!response.isEligible()) {
@@ -63,7 +62,7 @@ public class DynamicValidationService {
             }
         } catch (Exception err) {
             log.error("Dynamic Validation Error (userId: {})", userId, err);
-            return ValidationResponse.builder().eligible(false).errorMessage("해당 페이지의 참여조건을 알 수 없습니다.").build();
+            throw new IllegalStateException("Failed to validate participation conditions", err);
         }
         return ValidationResponse.builder().eligible(true).build();
     }

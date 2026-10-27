@@ -319,6 +319,7 @@
 
                 const btn = this;
                 const originalText = btn.innerHTML;
+                let issued = false;
                 btn.disabled = true;
                 btn.innerHTML = '<i class="ph-bold ph-spinner animate-spin"></i> 처리 중...';
 
@@ -330,24 +331,18 @@
                 }
 
                 try {
-                    const payload = {
-                        campaignActivityId: parseInt(currentCouponId),
-                        campaignActivityType: 'COUPON',
-                        productId: parseInt(document.querySelector(`[data-id="${currentCouponId}"]`).getAttribute('data-coupon-id')) || null
-                    };
-
-                    const response = await fetch(window.ENTRY_SERVICE_BASE + '/api/v1/coupon-entries', {
+                    const response = await fetch(`/api/v1/coupon-activities/${encodeURIComponent(currentCouponId)}/issuances`, {
                         method: 'POST',
                         headers: {
                             'Authorization': 'Bearer ' + accessToken,
                             'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
+                        }
                     });
 
                     const result = await response.json();
 
-                    if (response.ok && result.reservationToken) {
+                    if (response.ok && result.userCouponId) {
+                        issued = true;
                         const msgDiv = document.getElementById('coupon-modal-message');
                         msgDiv.textContent = '쿠폰이 성공적으로 발급되었습니다!';
                         msgDiv.className = 'mb-4 p-3 rounded text-sm text-center font-bold bg-green-100 text-green-700';
@@ -375,7 +370,6 @@
                         // setTimeout remove
 
                     } else {
-                        // Use result.reason as per backend contract (PaymentConfirmationResponse)
                         throw new Error(result.reason || result.message || '쿠폰 발급 실패');
                     }
                 } catch (e) {
@@ -385,8 +379,10 @@
                     msgDiv.className = 'mb-4 p-3 rounded text-sm text-center font-bold bg-red-100 text-red-700';
                     msgDiv.classList.remove('hidden');
                 } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = originalText;
+                    if (!issued) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }
                 }
             });
 

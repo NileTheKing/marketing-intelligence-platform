@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface UserCouponRepository extends JpaRepository<UserCoupon, Long> {
+    boolean existsByUserIdAndCouponId(Long userId, Long couponId);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT uc FROM UserCoupon uc WHERE uc.id = :id")
     Optional<UserCoupon> findByIdForUpdate(@Param("id") Long id);
