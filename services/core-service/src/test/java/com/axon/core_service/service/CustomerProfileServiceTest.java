@@ -27,6 +27,7 @@ import com.axon.core_service.repository.UserSummaryRepository;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,7 +68,8 @@ class CustomerProfileServiceTest {
     @Test
     @DisplayName("확정 구매만 매출에 합산하고 최근 구매에 상품명과 사용 쿠폰을 붙인다")
     void aggregatesConfirmedPurchasesAndCoupons() throws IOException {
-        Coupon coupon = Coupon.builder().name("장바구니 10% 쿠폰").build();
+        Coupon coupon = Coupon.builder().name("장바구니 10% 쿠폰").discountRate(10)
+                .startDate(LocalDateTime.now().minusDays(1)).endDate(LocalDateTime.now().plusDays(1)).build();
         UserCoupon used = UserCoupon.builder().userId(USER_ID).coupon(coupon).build();
         ReflectionTestUtils.setField(used, "id", 7L);
         used.use();

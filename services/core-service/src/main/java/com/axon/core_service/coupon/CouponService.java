@@ -6,7 +6,6 @@ import com.axon.core_service.coupon.domain.UserCoupon;
 import com.axon.core_service.coupon.dto.ApplicableCouponDto;
 import com.axon.core_service.coupon.dto.CouponRequest;
 import com.axon.core_service.coupon.dto.CouponResponse;
-import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -36,8 +34,6 @@ public class CouponService {
 
     @Transactional
     public Long createCoupon(CouponRequest request) {
-        validateCouponRequest(request);
-
         Coupon coupon = Coupon.builder()
                 .name(request.getCouponName())
                 .discountAmount(request.getDiscountAmount())
@@ -52,42 +48,10 @@ public class CouponService {
         return coupon.getId();
     }
 
-    private void validateCouponRequest(CouponRequest request) {
-        if (request.getCouponName() == null || request.getCouponName().trim().isEmpty()) {
-            throw new InvalidRequestException("쿠폰 이름은 필수입니다.");
-        }
-        if (request.getDiscountAmount() == null && request.getDiscountRate() == null) {
-            throw new InvalidRequestException("할인 금액 또는 할인율 중 하나는 필수입니다.");
-        }
-        if (request.getDiscountAmount() != null && request.getDiscountRate() != null) {
-            throw new InvalidRequestException("할인 금액과 할인율을 동시에 설정할 수 없습니다.");
-        }
-        if (request.getDiscountAmount() != null
-                && request.getDiscountAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidRequestException("할인 금액은 0보다 커야 합니다.");
-        }
-        if (request.getDiscountRate() != null
-                && (request.getDiscountRate() <= 0 || request.getDiscountRate() > 100)) {
-            throw new InvalidRequestException("할인율은 1에서 100 사이여야 합니다.");
-        }
-        if (request.getMinOrderAmount() != null
-                && request.getMinOrderAmount().compareTo(BigDecimal.ZERO) < 0) {
-            throw new InvalidRequestException("최소 주문 금액은 음수일 수 없습니다.");
-        }
-        if (request.getStartDate() == null || request.getEndDate() == null) {
-            throw new InvalidRequestException("시작 날짜와 종료 날짜는 필수입니다.");
-        }
-        if (!request.getEndDate().isAfter(request.getStartDate())) {
-            throw new InvalidRequestException("종료 날짜는 시작 날짜보다 느려야 합니다.");
-        }
-    }
-
     @Transactional
     public Long updateCoupon(Long id, CouponRequest request) {
         Coupon coupon = couponRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("coupon", id));
-
-        validateCouponRequest(request);
 
         coupon.update(
                 request.getCouponName(),
@@ -126,48 +90,16 @@ public class CouponService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 2. 적용 가능한 쿠폰만 필터링
         return userCoupons.stream()
                 .filter(uc -> isApplicable(uc, productPrice, productCategory, now))
                 .map(uc -> toDto(uc, productPrice, sellingPrice))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 쿠폰 적용 가능 여부 검증
-     */
-    private boolean isApplicable(UserCoupon userCoupon, BigDecimal productPrice, String productCategory, LocalDateTime now) {
-        Coupon coupon = userCoupon.getCoupon();
-
-        // 1. 이미 사용된 쿠폰은 제외
-        if (userCoupon.getStatus() != CouponStatus.ISSUED) {
-            log.debug("Coupon {} already used", coupon.getId());
-            return false;
-        }
-
-        // 2. 유효 기간 체크
-        if (now.isBefore(coupon.getStartDate()) || now.isAfter(coupon.getEndDate())) {
-            log.debug("Coupon {} expired or not started", coupon.getId());
-            return false;
-        }
-
-        // 3. 최소 주문 금액 체크
-        if (coupon.getMinOrderAmount() != null && productPrice.compareTo(coupon.getMinOrderAmount()) < 0) {
-            log.debug("Coupon {} requires min order amount {}, but product price is {}",
-                    coupon.getId(), coupon.getMinOrderAmount(), productPrice);
-            return false;
-        }
-
-        // 4. 카테고리 제한 체크
-        if (coupon.getTargetCategory() != null && !coupon.getTargetCategory().isEmpty()) {
-            if (!coupon.getTargetCategory().equalsIgnoreCase(productCategory)) {
-                log.debug("Coupon {} requires category {}, but product is {}",
-                        coupon.getId(), coupon.getTargetCategory(), productCategory);
-                return false;
-            }
-        }
-
-        return true;
+    private boolean isApplicable(UserCoupon userCoupon, BigDecimal productPrice,
+            String productCategory, LocalDateTime now) {
+        return userCoupon.getStatus() == CouponStatus.ISSUED
+                && userCoupon.getCoupon().isApplicable(productPrice, productCategory, now);
     }
 
     /**
@@ -175,7 +107,7 @@ public class CouponService {
      */
     private ApplicableCouponDto toDto(UserCoupon userCoupon, BigDecimal productPrice, BigDecimal sellingPrice) {
         Coupon coupon = userCoupon.getCoupon();
-        BigDecimal calculatedDiscount = calculateDiscount(coupon, productPrice).min(sellingPrice);
+        BigDecimal calculatedDiscount = coupon.calculateDiscount(productPrice).min(sellingPrice);
 
         return ApplicableCouponDto.builder()
                 .userCouponId(userCoupon.getId())
@@ -187,31 +119,6 @@ public class CouponService {
                 .targetCategory(coupon.getTargetCategory())
                 .calculatedDiscount(calculatedDiscount)
                 .build();
-    }
-
-    /**
-     * 실제 할인 금액 계산
-     */
-    private BigDecimal calculateDiscount(Coupon coupon, BigDecimal productPrice) {
-        BigDecimal discount = BigDecimal.ZERO;
-
-        // 정액 할인
-        if (coupon.getDiscountAmount() != null) {
-            discount = coupon.getDiscountAmount();
-        }
-        // 정률 할인
-        else if (coupon.getDiscountRate() != null) {
-            discount = productPrice
-                    .multiply(BigDecimal.valueOf(coupon.getDiscountRate()))
-                    .divide(BigDecimal.valueOf(100), 0, RoundingMode.DOWN);
-        }
-
-        // 할인 금액이 상품 가격을 초과할 수 없음
-        if (discount.compareTo(productPrice) > 0) {
-            discount = productPrice;
-        }
-
-        return discount;
     }
 
     /**
@@ -244,7 +151,7 @@ public class CouponService {
         // 쿠폰 사용 처리
         userCoupon.use();
         log.info("Coupon {} used by user {}", userCouponId, userId);
-        return calculateDiscount(userCoupon.getCoupon(), productPrice);
+        return userCoupon.getCoupon().calculateDiscount(productPrice);
     }
 
     public static class InvalidCouponException extends IllegalArgumentException {

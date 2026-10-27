@@ -234,7 +234,6 @@ class JpaAssociationQueryCountTest {
         return couponRepository.save(Coupon.builder()
                 .name(name)
                 .discountAmount(BigDecimal.valueOf(1000))
-                .discountRate(10)
                 .minOrderAmount(BigDecimal.ZERO)
                 .targetCategory("TECH")
                 .startDate(now.minusDays(1))

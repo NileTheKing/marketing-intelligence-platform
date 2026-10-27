@@ -98,7 +98,7 @@ class CouponAttributionRepositoryTest {
     }
 
     private Coupon coupon(String name) {
-        return Coupon.builder().name(name)
+        return Coupon.builder().name(name).discountAmount(BigDecimal.ONE)
                 .startDate(FROM).endDate(TO)
                 .build();
     }

@@ -94,6 +94,25 @@ class CouponServiceTest {
         assertThat(coupon.getStatus()).isEqualTo(CouponStatus.USED);
     }
 
+    @Test
+    void couponPreviewCapsDiscountAtSellingPriceWhileUsingNormalPriceAsItsBasis() {
+        var now = LocalDateTime.now();
+        var definition = Coupon.builder().name("percentage").discountRate(20)
+                .minOrderAmount(BigDecimal.valueOf(10_000))
+                .startDate(now.minusDays(1)).endDate(now.plusDays(1)).build();
+        var coupon = UserCoupon.builder().userId(1L).coupon(definition).build();
+        when(userCouponRepository.findAllByUserId(1L)).thenReturn(java.util.List.of(coupon));
+
+        var applicable = couponService.getApplicableCoupons(1L, BigDecimal.valueOf(10_000),
+                "TECH", BigDecimal.valueOf(1_000));
+
+        assertThat(applicable).hasSize(1);
+        assertThat(applicable.getFirst().getCalculatedDiscount()).isEqualByComparingTo("1000");
+        when(userCouponRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(coupon));
+        assertThat(couponService.useCoupon(10L, 1L, BigDecimal.valueOf(10_000), "TECH"))
+                .isEqualByComparingTo("2000");
+    }
+
     private void assertRejected(UserCoupon coupon, Long userId, String category, long price) {
         when(userCouponRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(coupon));
         assertThatThrownBy(() -> couponService.useCoupon(10L, userId, BigDecimal.valueOf(price), category))
