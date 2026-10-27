@@ -98,6 +98,48 @@ class AbandonedCartCouponSchedulerTest {
         verify(candidateService).releaseAfterPublishFailure(eq(prepared), eq("producer unavailable"));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void failedPageDrainsOtherSendsAndRetriesOnNextRun(boolean immediateFailure) throws Exception {
+        var failed = candidate(41L);
+        var successful = candidate(42L);
+        var failedPrepared = prepared(41L, 51L, 61L, 71L);
+        var successfulPrepared = prepared(42L, 52L, 62L, 72L);
+        when(candidateService.findDueCandidates(any(LocalDateTime.class), eq(500)))
+                .thenReturn(List.of(failed, successful), List.of(failed), List.of());
+        when(candidateService.claimAndPrepare(eq(41L), any(LocalDateTime.class))).thenReturn(failedPrepared);
+        when(candidateService.claimAndPrepare(eq(42L), any(LocalDateTime.class))).thenReturn(successfulPrepared);
+        if (immediateFailure) {
+            when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, failedPrepared.command()))
+                    .thenThrow(new IllegalStateException("broker unavailable"))
+                    .thenReturn(CompletableFuture.completedFuture(null));
+        } else {
+            when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, failedPrepared.command()))
+                    .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("broker unavailable")),
+                            CompletableFuture.completedFuture(null));
+        }
+        var pendingSuccess = new CompletableFuture<SendResult<String, Object>>();
+        var sent = new java.util.concurrent.CountDownLatch(1);
+        when(kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, successfulPrepared.command()))
+                .thenAnswer(invocation -> { sent.countDown(); return pendingSuccess; });
+        var scheduler = scheduler();
+        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var run = executor.submit(scheduler::dispatchDueCandidatesLocked);
+            org.assertj.core.api.Assertions.assertThat(sent.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            org.assertj.core.api.Assertions.assertThat(run.isDone()).isFalse();
+            pendingSuccess.complete(null);
+            run.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        verify(candidateService).releaseAfterPublishFailure(failedPrepared, "broker unavailable");
+        verify(candidateService).markPublished(successfulPrepared);
+        verify(candidateService, org.mockito.Mockito.times(1)).findDueCandidates(any(LocalDateTime.class), eq(500));
+
+        scheduler.dispatchDueCandidatesLocked();
+
+        verify(candidateService).markPublished(failedPrepared);
+        verify(candidateService, org.mockito.Mockito.times(3)).findDueCandidates(any(LocalDateTime.class), eq(500));
+    }
+
     private AbandonedCartCouponCandidate candidate(Long id) {
         AbandonedCartCouponCandidate candidate = org.mockito.Mockito.mock(AbandonedCartCouponCandidate.class);
         when(candidate.getId()).thenReturn(id);

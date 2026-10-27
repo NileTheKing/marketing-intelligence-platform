@@ -35,7 +35,12 @@ scheduled worker
   -> Purchase 재확인
   -> 기존 MarketingActionExecution / Dispatch / Kafka coupon command 재사용
   -> Kafka 수락을 확인한 뒤 남은 due 후보가 없을 때까지 다음 500건 반복
+  -> 페이지 내 발행 실패가 있으면 진행 중인 전송을 정리하고 이번 실행 종료
 ```
+
+2026-10-27: 동기 send 예외와 비동기 발행 실패 모두 후보를 다시 SCHEDULED로 돌린 뒤
+다음 스케줄 실행에서 재시도한다. 같은 실행에서 실패 후보를 즉시 다시 조회하지 않는다.
+이미 시작한 같은 페이지의 다른 전송은 결과 처리를 마친 뒤 종료하며, 성공 페이지는 계속 처리한다.
 
 `CART_ITEM_ADDED`와 `CART_ITEM_REMOVED`는 로그인 사용자와 기존 공식 속성 `productId`가 있어야 한다.
 익명 행동과 다른 일반 분석 이벤트는 Elasticsearch로만 전달되고 이 후보 상태를 바꾸지 않는다.
