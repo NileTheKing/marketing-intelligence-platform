@@ -4,6 +4,13 @@
 > Updated: 2026-07-14
 > Scope: Thymeleaf SSR을 유지한 채 JSON API URL을 정리한다. 개인 프로젝트이므로 이전 URL alias/deprecation 기간 없이 한 번에 전환한다.
 
+## 직접 쿠폰 발급 경로 변경 (2026-10-27)
+
+사용자 직접 발급은 Core의 `POST /api/v1/coupon-activities/{activityId}/issuances`가
+처리하며 사용자 쿠폰 저장 후 201을 반환한다. 활동은 `COUPON`, `DIRECT`, 활성 및
+발급 기간 내여야 한다. 참여 조건이 설정된 활동은 조건을 무시하지 않고 거절한다.
+기존 Entry `/api/v1/coupon-entries`는 제거했다. 아래 관련 경로 기술은 과거 전환 기록이다.
+
 ## Implementation Record
 
 Completed on 2026-07-14 as a clean cutover.
@@ -14,7 +21,7 @@ Completed on 2026-07-14 as a clean cutover.
 - The old `location /entry/` route and executable callers of old URLs were removed. No compatibility alias or redirect was added.
 - `core-service` and `entry-service` test suites passed; the mounted nginx configuration passed `nginx -t` syntax validation.
 
-The target routes below are the current contract. The `Current` column is retained only as migration history.
+The target routes below describe the original cutover; the direct coupon route above supersedes its coupon-entry details. The `Current` column is retained only as migration history.
 
 ## 관리자 읽기 전용 데모 (2026-10-23)
 

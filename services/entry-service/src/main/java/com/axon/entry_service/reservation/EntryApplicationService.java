@@ -4,7 +4,6 @@ import com.axon.entry_service.reservation.domain.CampaignActivityMeta;
 import com.axon.entry_service.reservation.domain.CampaignActivityStatus;
 import com.axon.entry_service.reservation.domain.ReservationResult;
 import com.axon.entry_service.reservation.domain.ReservationStatus;
-import com.axon.entry_service.reservation.dto.CouponRequestDto;
 import com.axon.entry_service.reservation.dto.EntryRequestDto;
 import com.axon.entry_service.payment.dto.PaymentConfirmationResponse;
 import com.axon.entry_service.payment.CheckoutTokenService;
@@ -27,60 +26,6 @@ public class EntryApplicationService {
     private final CoreValidationService coreValidationService;
     private final FastValidationService fastValidationService;
     private final CheckoutTokenService reservationTokenService;
-    private final CouponEntryService couponEntryService;
-
-    public EntryUseCaseResult issueCoupon(EntryRequestDto requestDto, String token, long userId) {
-        long campaignActivityId = requestDto.getCampaignActivityId();
-        CampaignActivityMeta meta = campaignActivityMetaService.getMeta(campaignActivityId);
-        if (meta == null) {
-            return EntryUseCaseResult.noBody(EntryUseCaseStatus.NOT_FOUND);
-        }
-        if (meta.campaignActivityType() != CampaignActivityType.COUPON
-                || !"DIRECT".equals(meta.couponDeliveryMode())) {
-            return EntryUseCaseResult.badRequest(
-                    PaymentConfirmationResponse.failure(ReservationResult.error(), "해당 쿠폰은 직접 발급 대상이 아닙니다."));
-        }
-        if (!meta.isParticipatableTime(Instant.now())) {
-            return EntryUseCaseResult.badRequest(
-                    PaymentConfirmationResponse.failure(ReservationResult.error(), "쿠폰 발급 기간이 아닙니다."));
-        }
-
-        if (meta.status() != CampaignActivityStatus.ACTIVE) {
-            return EntryUseCaseResult.badRequest(
-                    PaymentConfirmationResponse.failure(ReservationResult.error(), "해당 쿠폰은 발급 대상이 아닙니다."));
-        }
-
-        if (meta.hasFastValidation()) {
-            try {
-                fastValidationService.fastValidation(userId, meta);
-            } catch (FastValidationException e) {
-                return EntryUseCaseResult.badRequest(
-                        PaymentConfirmationResponse.failure(ReservationResult.error(), e.getMessage()));
-            }
-        }
-
-        if (meta.hasHeavyValidation()) {
-            ValidationResponse response = coreValidationService.isEligible(token, campaignActivityId);
-            if (!response.isEligible()) {
-                return EntryUseCaseResult.badRequest(
-                        PaymentConfirmationResponse.failure(ReservationResult.error(), response.getErrorMessage()));
-            }
-        }
-
-        if (meta.couponId() != null && !meta.couponId().equals(requestDto.getProductId())) {
-            log.warn("요청 중에 쿠폰 정보가 일치하지 않는 요청이 있습니다. Meta CouponId {} || Request ProductId {}",
-                    meta.couponId(), requestDto.getProductId());
-            return EntryUseCaseResult.badRequest(
-                    PaymentConfirmationResponse.failure(ReservationResult.error(), "쿠폰 정보가 일치하지 않습니다."));
-        }
-
-        CouponRequestDto payload = new CouponRequestDto(userId, meta.id(), meta.couponId(), meta.campaignActivityType());
-        if (!couponEntryService.publishCouponIssue(payload)) {
-            return EntryUseCaseResult.noBody(EntryUseCaseStatus.INTERNAL_SERVER_ERROR);
-        }
-
-        return EntryUseCaseResult.ok(PaymentConfirmationResponse.success("COUPON_ISSUED"));
-    }
 
     public EntryUseCaseResult createEntry(EntryRequestDto requestDto, String token, long userId) {
         long campaignActivityId = requestDto.getCampaignActivityId();

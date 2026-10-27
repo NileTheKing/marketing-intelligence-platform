@@ -48,7 +48,7 @@ class EntryApiContractTest {
 
     @Test
     void adminDemoTokenCannotBeUsedForEntryOrPayment() throws Exception {
-        for (String path : java.util.List.of("/api/v1/entries", "/api/v1/coupon-entries",
+        for (String path : java.util.List.of("/api/v1/entries",
                 "/api/v1/payments/prepare", "/api/v1/payments/confirm")) {
             mockMvc.perform(post(path).with(user("0").roles("DEMO"))
                             .contentType(MediaType.APPLICATION_JSON).content(VALID_REQUEST))

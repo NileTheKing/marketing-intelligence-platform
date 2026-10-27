@@ -24,14 +24,6 @@ public class EntryController {
                 .body(PaymentConfirmationResponse.failure(ReservationResult.error(), exception.getMessage()));
     }
 
-    @PostMapping("/api/v1/coupon-entries")
-    public ResponseEntity<?> issueCoupon(@Valid @RequestBody EntryRequestDto requestDto,
-            @RequestHeader("Authorization") String token,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        long userId = Long.parseLong(userDetails.getUsername());
-        return toResponse(entryApplicationService.issueCoupon(requestDto, token, userId));
-    }
-
     /**
      * Processes an entry creation request: validates eligibility, attempts an
      * atomic reservation, and emits a campaign activity event.

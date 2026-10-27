@@ -97,7 +97,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/test/**").permitAll() // Test endpoints (!prod only)
                         .requestMatchers("/actuator/health").permitAll() // Health checks
                         .requestMatchers("/api/v1/entries").authenticated() // FCFS entry endpoint
-                        .requestMatchers("/api/v1/coupon-entries").authenticated()
                         .requestMatchers("/api/v1/payments/**").authenticated() // Payment endpoints
                         .anyRequest().permitAll()) // Allow other requests
                 .exceptionHandling(exceptions -> exceptions
