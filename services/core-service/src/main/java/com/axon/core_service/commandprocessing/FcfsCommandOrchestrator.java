@@ -7,7 +7,6 @@ import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientException;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,27 +32,23 @@ public class FcfsCommandOrchestrator {
     private final CorePipelineMetrics pipelineMetrics;
 
     public void process(List<CampaignActivityKafkaProducerDto> messages) {
-        List<IndexedMessage> indexedMessages = deduplicate(messages);
-        List<CampaignActivityKafkaProducerDto> deduped = indexedMessages.stream()
-                .map(IndexedMessage::message)
-                .toList();
         List<FcfsLedgerPersistenceService.LedgerResult> successes;
         try {
-            successes = persistLedger(deduped);
+            successes = persistLedger(messages);
         } catch (Exception batchFailure) {
             if (isTransientPersistenceFailure(batchFailure)) {
                 throw new BatchListenerFailedException("Transient FCFS ledger batch failure", batchFailure,
-                        indexedMessages.getFirst().originalIndex());
+                        0);
             }
-            if (indexedMessages.size() == 1) {
+            if (messages.size() == 1) {
                 throw new BatchListenerFailedException("FCFS ledger message failed", batchFailure,
-                        indexedMessages.getFirst().originalIndex());
+                        0);
             }
             log.warn("FCFS ledger batch failed; retrying each message", batchFailure);
-            pipelineMetrics.recordPurchaseIndividualRetry(deduped.size());
+            pipelineMetrics.recordPurchaseIndividualRetry(messages.size());
             successes = new ArrayList<>();
-            for (int i = 0; i < indexedMessages.size(); i++) {
-                CampaignActivityKafkaProducerDto message = indexedMessages.get(i).message();
+            for (int i = 0; i < messages.size(); i++) {
+                CampaignActivityKafkaProducerDto message = messages.get(i);
                 try {
                     successes.add(persistLedger(List.of(message)).getFirst());
                 } catch (Exception failure) {
@@ -64,7 +59,7 @@ public class FcfsCommandOrchestrator {
                     updateProjection(successes);
                     publishPurchaseEvents(successes);
                     throw new BatchListenerFailedException(
-                            "FCFS ledger message failed", failure, indexedMessages.get(i).originalIndex());
+                            "FCFS ledger message failed", failure, i);
                 }
             }
         }
@@ -128,29 +123,5 @@ public class FcfsCommandOrchestrator {
         List<FcfsLedgerPersistenceService.LedgerResult> results = new ArrayList<>(messages.size());
         pipelineMetrics.recordPurchaseFlush(messages.size(), () -> results.addAll(ledgerPersistenceService.persistBatch(messages)));
         return results;
-    }
-
-    private List<IndexedMessage> deduplicate(List<CampaignActivityKafkaProducerDto> messages) {
-        Map<com.axon.core_service.service.ActivityUserKey, IndexedMessage> deduped = new LinkedHashMap<>();
-        for (int i = 0; i < messages.size(); i++) {
-            CampaignActivityKafkaProducerDto message = messages.get(i);
-            com.axon.core_service.service.ActivityUserKey key = new com.axon.core_service.service.ActivityUserKey(
-                    message.getCampaignActivityId(), message.getUserId());
-            IndexedMessage previous = deduped.get(key);
-            if (previous == null) {
-                deduped.put(key, new IndexedMessage(message, i));
-            } else if (newer(message, previous.message())) {
-                deduped.put(key, new IndexedMessage(message, i));
-            }
-        }
-        return List.copyOf(deduped.values());
-    }
-
-    private record IndexedMessage(CampaignActivityKafkaProducerDto message, int originalIndex) {
-    }
-
-    private boolean newer(CampaignActivityKafkaProducerDto candidate, CampaignActivityKafkaProducerDto current) {
-        return candidate.getTimestamp() != null
-                && (current.getTimestamp() == null || candidate.getTimestamp() > current.getTimestamp());
     }
 }

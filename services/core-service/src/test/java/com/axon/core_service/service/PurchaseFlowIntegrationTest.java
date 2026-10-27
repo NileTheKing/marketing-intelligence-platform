@@ -1,6 +1,9 @@
 package com.axon.core_service.service;
 
 import com.axon.core_service.AbstractIntegrationTest;
+import com.axon.core_service.event.CampaignActivityApprovedEvent;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import com.axon.core_service.commandprocessing.FcfsLedgerPersistenceService;
 import com.axon.core_service.commandprocessing.FcfsCommandOrchestrator;
 import com.axon.core_service.entry.domain.CampaignActivityEntry;
@@ -53,6 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 
+@RecordApplicationEvents
 @DisplayName("End-to-End: Kafka to MySQL 구매 플로우 통합 테스트")
 public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
@@ -100,6 +104,9 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
     @MockitoSpyBean
     private PurchaseRepository purchaseRepositorySpy;
+
+    @Autowired
+    private ApplicationEvents applicationEvents;
 
     private Long activityId;
     private Long productId;
@@ -183,6 +190,26 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(campaignActivityEntryRepository.count()).isEqualTo(1);
         assertThat(purchaseRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("배치 중복과 다음 배치 재전달은 구매와 이벤트를 각각 한 번만 만든다")
+    void duplicateBatchAndRedeliveryCreateOnePurchaseAndEvent() {
+        User user = userRepository.save(User.builder().name("duplicate-user")
+                .email("duplicate@example.test").role(Role.USER).build());
+        Instant firstTime = Instant.parse("2026-08-01T00:00:00Z");
+        var first = dto(user.getId(), firstTime);
+        var duplicate = dto(user.getId(), firstTime.plusSeconds(3600));
+        applicationEvents.clear();
+
+        orchestrator.process(List.of(first, duplicate));
+        orchestrator.process(List.of(duplicate));
+
+        assertThat(campaignActivityEntryRepository.count()).isEqualTo(1);
+        assertThat(purchaseRepository.count()).isEqualTo(1);
+        assertThat(purchaseRepository.findByUserId(user.getId()).getFirst().getPurchaseAt())
+                .isEqualTo(LocalDateTime.ofInstant(firstTime, java.time.ZoneId.of("Asia/Seoul")));
+        assertThat(applicationEvents.stream(CampaignActivityApprovedEvent.class)).hasSize(1);
     }
 
     @Test

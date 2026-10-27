@@ -93,22 +93,50 @@ class FcfsCommandOrchestratorTest {
     }
 
     @Test
-    void reportsSelectedDuplicateAtItsActualKafkaBatchIndex() {
+    void retriesDuplicatesInInputOrderAndReportsFirstUnprocessedIndex() {
         CampaignActivityKafkaProducerDto older = message(1);
+        CampaignActivityKafkaProducerDto middle = message(2);
         CampaignActivityKafkaProducerDto newer = message(1);
         older.setTimestamp(100L);
         newer.setTimestamp(200L);
-        when(ledger.persistBatch(any())).thenThrow(new IllegalArgumentException("poison"));
+        when(ledger.persistBatch(any())).thenAnswer(invocation -> {
+            List<CampaignActivityKafkaProducerDto> batch = invocation.getArgument(0);
+            if (batch.size() > 1) throw new IllegalStateException("batch failure");
+            if (batch.getFirst() == middle) throw new IllegalArgumentException("poison");
+            return List.of(result(batch.getFirst(), true));
+        });
 
-        assertThatThrownBy(() -> orchestrator.process(List.of(older, newer)))
+        assertThatThrownBy(() -> orchestrator.process(List.of(older, middle, newer)))
                 .isInstanceOf(BatchListenerFailedException.class)
                 .satisfies(failure -> org.assertj.core.api.Assertions.assertThat(
                         ((BatchListenerFailedException) failure).getIndex()).isEqualTo(1));
 
-        org.mockito.ArgumentCaptor<List<CampaignActivityKafkaProducerDto>> messages =
-                org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(ledger).persistBatch(messages.capture());
-        org.assertj.core.api.Assertions.assertThat(messages.getValue()).containsExactly(newer);
+        var calls = org.mockito.Mockito.inOrder(ledger);
+        calls.verify(ledger).persistBatch(List.of(older, middle, newer));
+        calls.verify(ledger).persistBatch(List.of(older));
+        calls.verify(ledger).persistBatch(List.of(middle));
+        calls.verifyNoMoreInteractions();
+        verify(eventPublisher).publishEvent(any(com.axon.core_service.event.CampaignActivityApprovedEvent.class));
+    }
+
+    @Test
+    void transientFailureDuringIndividualRetryReportsItsOriginalIndex() {
+        var first = message(1);
+        var middle = message(2);
+        var duplicate = message(1);
+        first.setTimestamp(100L);
+        duplicate.setTimestamp(200L);
+        when(ledger.persistBatch(any())).thenAnswer(invocation -> {
+            List<CampaignActivityKafkaProducerDto> batch = invocation.getArgument(0);
+            if (batch.size() > 1) throw new IllegalStateException("batch failure");
+            if (batch.getFirst() == middle) throw new TransientDataAccessResourceException("db unavailable");
+            return List.of(result(batch.getFirst(), true));
+        });
+        assertThatThrownBy(() -> orchestrator.process(List.of(first, middle, duplicate)))
+                .isInstanceOf(BatchListenerFailedException.class)
+                .satisfies(failure -> org.assertj.core.api.Assertions.assertThat(
+                        ((BatchListenerFailedException) failure).getIndex()).isEqualTo(1));
+        verify(ledger, org.mockito.Mockito.never()).persistBatch(List.of(duplicate));
     }
 
     @Test

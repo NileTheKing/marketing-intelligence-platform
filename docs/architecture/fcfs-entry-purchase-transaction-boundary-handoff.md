@@ -3,7 +3,7 @@
 Status: active (implemented and OCI-validated)
 
 Historical VM transaction-boundary verification: 2026-08-03, `bb34774`.
-Current code structure checked: 2026-10-21 (documentation review; no new tests or VM run).
+Current code structure checked: 2026-10-27 (local unit and MySQL/Kafka integration tests; no VM run).
 
 ## 현재 구조
 
@@ -23,6 +23,9 @@ Kafka batch listener
   메시지별 트랜잭션으로 처리한다. 최종 재시도·DLT는 Kafka error handler가 담당한다.
 - 집계 실패는 전용 실패 토픽에 기록하며, 그 기록도 실패하면 offset 진행을 막는다.
 - DB 커밋 후 offset 커밋 전 재전달은 DB unique key로 중복을 방어한다.
+- Orchestrator는 입력 순서를 유지하고 사전 중복 제거로 메시지 순서를 바꾸지 않는다.
+  저장 단계의 기존 구매 조회와 Map으로 배치 내부 중복을 합치며, 개별 복구 실패 시
+  원본 배치의 실패 위치를 Kafka error handler에 전달한다.
 - 2026-10-20 JDBC 벌크 적용·배포 확인은 `docs/decisions/db-jpa-integrity-audit-2026-08-11.md`의
   해당 절을 참고한다. 아래 8월 측정값은 당시 코드·환경의 기록이다.
 - 이 문서는 Core 후처리 경계를 다룬다. Entry 결제 상태 영속화와 Outbox는 미구현이다.
