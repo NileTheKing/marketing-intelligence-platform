@@ -35,6 +35,11 @@ public class EntryApplicationService {
         if (meta == null) {
             return EntryUseCaseResult.noBody(EntryUseCaseStatus.NOT_FOUND);
         }
+        if (meta.campaignActivityType() != CampaignActivityType.COUPON
+                || !"DIRECT".equals(meta.couponDeliveryMode())) {
+            return EntryUseCaseResult.badRequest(
+                    PaymentConfirmationResponse.failure(ReservationResult.error(), "해당 쿠폰은 직접 발급 대상이 아닙니다."));
+        }
         if (!meta.isParticipatableTime(Instant.now())) {
             return EntryUseCaseResult.badRequest(
                     PaymentConfirmationResponse.failure(ReservationResult.error(), "쿠폰 발급 기간이 아닙니다."));

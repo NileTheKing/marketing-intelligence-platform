@@ -87,7 +87,12 @@ public class CampaignActivityMetaService {
             return null;
         }
         try {
-            return objectMapper.readValue(cached, CampaignActivityMeta.class);
+            CampaignActivityMeta meta = objectMapper.readValue(cached, CampaignActivityMeta.class);
+            // Old cache entries lack the delivery mode; reload from Core.
+            if (meta.couponDeliveryMode() == null) {
+                return null;
+            }
+            return meta;
         } catch (JsonProcessingException e) {
             log.warn("Failed to deserialize campaign meta cache. id={}", campaignActivityId, e);
             redisTemplate.delete(metaCacheKey(campaignActivityId));
@@ -133,7 +138,8 @@ public class CampaignActivityMetaService {
                 hasHeavyValidation,
                 response.productId(),
                 response.couponId(),
-                response.activityType());
+                response.activityType(),
+                response.couponDeliveryMode());
 
         try {
             // 조회 도중 무효화됐다면 이전 응답을 캐시에 되살리지 않는다.

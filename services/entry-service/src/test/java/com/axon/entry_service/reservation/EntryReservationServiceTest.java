@@ -48,7 +48,7 @@ class EntryReservationServiceTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         reservationService.setDiagnosticStageRecorder(new EntryDiagnosticStageRecorder(meterRegistry));
-        activeMeta = new CampaignActivityMeta(1L, 1L, 3, CampaignActivityStatus.ACTIVE, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+        activeMeta = new CampaignActivityMeta(1L, 1L, 3, CampaignActivityStatus.ACTIVE, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
     }
 
     @Test
@@ -130,7 +130,7 @@ class EntryReservationServiceTest {
 
     @Test
     void reserveClosedWhenActivityInactive() {
-        CampaignActivityMeta meta = new CampaignActivityMeta(1L, 1L, 3, CampaignActivityStatus.PAUSED, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+        CampaignActivityMeta meta = new CampaignActivityMeta(1L, 1L, 3, CampaignActivityStatus.PAUSED, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
 
         ReservationResult result = reservationService.reserve(1L, 100L, meta, Instant.now());
 
@@ -152,7 +152,7 @@ class EntryReservationServiceTest {
                 10L,
                 null,
                 com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE
-        );
+        , null);
 
         ReservationResult result = reservationService.reserve(1L, 100L, meta, Instant.now());
 

@@ -21,7 +21,8 @@ public record CampaignActivityMeta(
         boolean hasHeavyValidation,
         Long productId,
         Long couponId,
-        CampaignActivityType campaignActivityType) {
+        CampaignActivityType campaignActivityType,
+        String couponDeliveryMode) {
 
     public CampaignActivityMeta {
         Objects.requireNonNull(id, "campaignActivityId must not be null");

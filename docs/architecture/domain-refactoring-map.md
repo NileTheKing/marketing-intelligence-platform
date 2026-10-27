@@ -158,6 +158,11 @@ Entry는 조회 전 버전을 읽고 저장 시 Lua로 비교해, 무효화 도�
 남는다. 이 경우 기존 캐시는 TTL까지 유지될 수 있으며, 영속 재시도는 현재 범위 밖이다.
 두 키를 사용하는 Lua는 현재 단일 Redis 구성 기준이다.
 
+직접 쿠폰 발급은 Core 메타의 활동 유형이 `COUPON`이고 `couponDeliveryMode`가
+`DIRECT`인 경우만 허용한다. 클라이언트가 보낸 유형은 이 판단에 사용하지 않는다.
+발급 방식이 없는 이전 캐시는 Core에서 다시 조회하며, 조회 후에도 값이 없거나
+알 수 없으면 직접 발급을 거절한다. 자동 발급 스케줄러는 기존 내부 경로를 사용한다.
+
 ### High-Traffic Flow
 
 1. `EntryController.createEntry()` maps HTTP input to `EntryApplicationService`; the application service validates request/user/meta and calls Redis reservation.

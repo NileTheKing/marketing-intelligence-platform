@@ -18,5 +18,6 @@ public record CampaignActivitySummaryResponse(
                 List<Map<String, Object>> filters,
                 Long productId,
                 Long couponId,
-                CampaignActivityType activityType) {
+                CampaignActivityType activityType,
+                String couponDeliveryMode) {
 }

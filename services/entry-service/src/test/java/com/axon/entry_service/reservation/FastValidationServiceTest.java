@@ -57,7 +57,7 @@ class FastValidationServiceTest {
                 "FAST");
         CampaignActivityMeta meta = new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null,
                 List.of(gradeRule, ageRule), true, false, 10L, null,
-                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
         when(valueOperations.get("userCache:1")).thenReturn(eligibleUser);
 
         // when
@@ -77,7 +77,7 @@ class FastValidationServiceTest {
                 "FAST");
         CampaignActivityMeta meta = new CampaignActivityMeta(1L, null, 100, CampaignActivityStatus.ACTIVE, null, null,
                 List.of(gradeRule, ageRule), true, false, 10L, null,
-                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
         when(valueOperations.get("userCache:1")).thenReturn(null);
 
         // when & then
@@ -94,7 +94,7 @@ class FastValidationServiceTest {
                 "FAST");
         CampaignActivityMeta meta = new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null,
                 List.of(gradeRule), true, false, 10L, null,
-                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
         when(valueOperations.get("userCache:1")).thenReturn(eligibleUser); // 사용자는 VIP 등급
 
         // when & then
@@ -111,7 +111,7 @@ class FastValidationServiceTest {
                 "FAST");
         CampaignActivityMeta meta = new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null,
                 List.of(ageRule), true, false, 10L, null,
-                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
         when(valueOperations.get("userCache:1")).thenReturn(eligibleUser); // 사용자는 25세
 
         // when & then
@@ -127,7 +127,7 @@ class FastValidationServiceTest {
         Map<String, Object> heavyRule = Map.of("type", "RECENT_PURCHASE", "phase", "HEAVY");
         CampaignActivityMeta meta = new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null,
                 List.of(heavyRule), false, true, 10L, null,
-                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
         when(valueOperations.get("userCache:1")).thenReturn(eligibleUser);
 
         // when

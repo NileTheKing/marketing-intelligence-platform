@@ -70,8 +70,8 @@ public class TestReservationController {
                                 false, // hasHeavyValidation
                                 request.getProductId(), // productId
                                 null, // couponId (test only)
-                                CampaignActivityType.FIRST_COME_FIRST_SERVE // campaignActivityType
-                );
+                                CampaignActivityType.FIRST_COME_FIRST_SERVE, // campaignActivityType
+                                null); // couponDeliveryMode
 
                 ReservationResult result = reservationService.reserve(
                                 request.getCampaignActivityId(),

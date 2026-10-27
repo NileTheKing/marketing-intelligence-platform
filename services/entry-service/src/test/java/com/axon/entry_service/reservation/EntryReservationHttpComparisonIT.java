@@ -220,7 +220,7 @@ class EntryReservationHttpComparisonIT {
         String metaKey = "campaign:" + activityId + ":meta";
         CampaignActivityMeta meta = new CampaignActivityMeta(activityId, 1L, LIMIT, CampaignActivityStatus.ACTIVE,
                 LocalDateTime.now().minusMinutes(5), LocalDateTime.now().plusMinutes(20), List.of(), false, false,
-                productId, null, CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                productId, null, CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
         long firstUserId = 4_000_000_000L + runNumber * REQUESTS;
         List<RequestSpec> requests = IntStream.range(0, REQUESTS).mapToObj(i -> {
             long userId = firstUserId + i;

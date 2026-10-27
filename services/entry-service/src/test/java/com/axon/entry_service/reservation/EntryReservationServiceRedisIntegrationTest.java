@@ -200,7 +200,7 @@ class EntryReservationServiceRedisIntegrationTest {
                 false,
                 10L,
                 null,
-                CampaignActivityType.FIRST_COME_FIRST_SERVE);
+                CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
     }
 
     private String participantsKey() {

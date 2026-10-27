@@ -68,7 +68,45 @@ class EntryControllerTest {
                 .roles("USER")
                 .build();
 
-        activeMeta = new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+        activeMeta = new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null, java.util.Collections.emptyList(), false, false, 10L, null, com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, null);
+    }
+
+    @Test
+    void issueCouponAllowsOnlyServerDeclaredDirectCoupon() {
+        var meta = couponMeta(com.axon.messaging.CampaignActivityType.COUPON, "DIRECT");
+        when(campaignActivityMetaService.getMeta(1L)).thenReturn(meta);
+        when(couponEntryService.publishCouponIssue(any())).thenReturn(true);
+        requestDto.setCampaignActivityType(com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE);
+
+        assertThat(entryController.issueCoupon(requestDto, "FAKETOKEN", userDetails).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        org.mockito.Mockito.verify(couponEntryService).publishCouponIssue(any());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.NullAndEmptySource
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"ABANDONED_CART", "DORMANT_CUSTOMER", "UNKNOWN"})
+    void issueCouponRejectsNonDirectOrUnknownMode(String mode) {
+        when(campaignActivityMetaService.getMeta(1L))
+                .thenReturn(couponMeta(com.axon.messaging.CampaignActivityType.COUPON, mode));
+        assertThat(entryController.issueCoupon(requestDto, "FAKETOKEN", userDetails).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verifyNoInteractions(couponEntryService);
+    }
+
+    @Test
+    void issueCouponRejectsNonCouponEvenIfModeIsDirect() {
+        when(campaignActivityMetaService.getMeta(1L))
+                .thenReturn(couponMeta(com.axon.messaging.CampaignActivityType.FIRST_COME_FIRST_SERVE, "DIRECT"));
+        requestDto.setCampaignActivityType(com.axon.messaging.CampaignActivityType.COUPON);
+        assertThat(entryController.issueCoupon(requestDto, "FAKETOKEN", userDetails).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        org.mockito.Mockito.verifyNoInteractions(couponEntryService);
+    }
+
+    private CampaignActivityMeta couponMeta(com.axon.messaging.CampaignActivityType type, String mode) {
+        return new CampaignActivityMeta(1L, 1L, 100, CampaignActivityStatus.ACTIVE, null, null,
+                java.util.List.of(), false, false, null, 10L, type, mode);
     }
 
     @Test
