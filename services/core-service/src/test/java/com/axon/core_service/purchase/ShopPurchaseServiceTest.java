@@ -28,12 +28,14 @@ class ShopPurchaseServiceTest {
     @Test
     void linksTheRecordedPurchaseToTheCouponUsedForCheckout() {
         when(productRepository.findByIdAndCampaignOnlyFalse(3L)).thenReturn(Optional.of(product));
+        when(product.getPrice()).thenReturn(BigDecimal.valueOf(10_000));
+        when(product.getCategory()).thenReturn("TECH");
 
         new ShopPurchaseService(productRepository, couponService, purchaseRepository).recordPaymentSuccess(1L, 3L, 9L, BigDecimal.valueOf(8_000));
 
         ArgumentCaptor<Purchase> purchase = ArgumentCaptor.forClass(Purchase.class);
         InOrder order = inOrder(couponService, purchaseRepository);
-        order.verify(couponService).useCoupon(9L, 1L);
+        order.verify(couponService).useCoupon(9L, 1L, BigDecimal.valueOf(10_000), "TECH");
         order.verify(purchaseRepository).save(purchase.capture());
         assertThat(purchase.getValue().getUserCouponId()).isEqualTo(9L);
     }

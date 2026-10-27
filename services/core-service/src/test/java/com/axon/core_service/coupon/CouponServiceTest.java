@@ -2,6 +2,8 @@ package com.axon.core_service.coupon;
 
 import com.axon.core_service.coupon.dto.CouponRequest;
 import com.axon.core_service.coupon.domain.CouponStatus;
+import com.axon.core_service.coupon.domain.Coupon;
+import static org.assertj.core.api.Assertions.assertThat;
 import com.axon.core_service.coupon.domain.UserCoupon;
 import org.junit.jupiter.api.Test;
 
@@ -52,15 +54,58 @@ class CouponServiceTest {
 
     @Test
     void useCouponLocksTheRowBeforeCheckingOneTimeStatus() {
-        UserCoupon userCoupon = mock(UserCoupon.class);
+        UserCoupon userCoupon = issuedCoupon(LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(1), null, null);
         when(userCouponRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(userCoupon));
-        when(userCoupon.getUserId()).thenReturn(1L);
-        when(userCoupon.getStatus()).thenReturn(CouponStatus.ISSUED);
 
-        couponService.useCoupon(10L, 1L);
+        couponService.useCoupon(10L, 1L, BigDecimal.valueOf(10_000), "TECH");
 
         verify(userCouponRepository).findByIdForUpdate(10L);
-        verify(userCoupon).use();
+        assertThat(userCoupon.getStatus()).isEqualTo(CouponStatus.USED);
+    }
+
+    @Test
+    void rejectsExpiredAndFutureCouponsWithoutChangingStatus() {
+        var now = LocalDateTime.now();
+        assertRejected(issuedCoupon(now.minusDays(2), now.minusDays(1), null, null), 1L, "TECH", 10_000);
+        assertRejected(issuedCoupon(now.plusDays(1), now.plusDays(2), null, null), 1L, "TECH", 10_000);
+    }
+
+    @Test
+    void checksMinimumAmountAndCategoryAtUseAsWellAsLookup() {
+        var now = LocalDateTime.now();
+        var coupon = issuedCoupon(now.minusDays(1), now.plusDays(1), BigDecimal.valueOf(10_000), "TECH");
+        assertRejected(coupon, 1L, "TECH", 9_999);
+        assertRejected(coupon, 1L, "FOOD", 10_000);
+        when(userCouponRepository.findAllByUserId(1L)).thenReturn(java.util.List.of(coupon));
+        assertThat(couponService.getApplicableCoupons(1L, BigDecimal.valueOf(9_999), "TECH")).isEmpty();
+        assertThat(couponService.getApplicableCoupons(1L, BigDecimal.valueOf(10_000), "tech")).hasSize(1);
+        couponService.useCoupon(10L, 1L, BigDecimal.valueOf(10_000), "tech");
+        assertThat(coupon.getStatus()).isEqualTo(CouponStatus.USED);
+    }
+
+    @Test
+    void rejectsAnotherUsersCouponAndRepeatedUse() {
+        var now = LocalDateTime.now();
+        var coupon = issuedCoupon(now.minusDays(1), now.plusDays(1), null, null);
+        assertRejected(coupon, 2L, "TECH", 10_000);
+        couponService.useCoupon(10L, 1L, BigDecimal.valueOf(10_000), "TECH");
+        assertThatThrownBy(() -> couponService.useCoupon(10L, 1L, BigDecimal.valueOf(10_000), "TECH"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(coupon.getStatus()).isEqualTo(CouponStatus.USED);
+    }
+
+    private void assertRejected(UserCoupon coupon, Long userId, String category, long price) {
+        when(userCouponRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(coupon));
+        assertThatThrownBy(() -> couponService.useCoupon(10L, userId, BigDecimal.valueOf(price), category))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(coupon.getStatus()).isEqualTo(CouponStatus.ISSUED);
+        assertThat(coupon.getUsedAt()).isNull();
+    }
+
+    private UserCoupon issuedCoupon(LocalDateTime start, LocalDateTime end, BigDecimal minimum, String category) {
+        return UserCoupon.builder().userId(1L).coupon(Coupon.builder().name("checkout")
+                .discountAmount(BigDecimal.valueOf(1_000)).minOrderAmount(minimum).targetCategory(category)
+                .startDate(start).endDate(end).build()).build();
     }
 
     private CouponRequest validRequest() {

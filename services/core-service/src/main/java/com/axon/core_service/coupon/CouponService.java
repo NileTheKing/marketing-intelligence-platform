@@ -215,9 +215,11 @@ public class CouponService {
      *
      * @param userCouponId 사용할 UserCoupon ID
      * @param userId 사용자 ID (검증용)
+     * @param productPrice 서버에서 조회한 쿠폰 적용 전 상품 금액
+     * @param productCategory 서버에서 조회한 상품 카테고리
      */
     @Transactional
-    public void useCoupon(Long userCouponId, Long userId) {
+    public void useCoupon(Long userCouponId, Long userId, BigDecimal productPrice, String productCategory) {
         UserCoupon userCoupon = userCouponRepository.findByIdForUpdate(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("UserCoupon not found: " + userCouponId));
 
@@ -229,6 +231,10 @@ public class CouponService {
         // 이미 사용된 쿠폰인지 확인
         if (userCoupon.getStatus() != CouponStatus.ISSUED) {
             throw new IllegalStateException("Coupon already used or invalid");
+        }
+
+        if (!isApplicable(userCoupon, productPrice, productCategory, LocalDateTime.now())) {
+            throw new IllegalArgumentException("Coupon is not applicable to this purchase");
         }
 
         // 쿠폰 사용 처리

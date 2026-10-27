@@ -23,10 +23,10 @@ public class ShopPurchaseService {
     @Transactional
     public void recordPaymentSuccess(Long userId, Long productId, Long userCouponId, BigDecimal finalPrice) {
         if (userId != null && productId != null && finalPrice != null) {
-            productRepository.findByIdAndCampaignOnlyFalse(productId)
+            var product = productRepository.findByIdAndCampaignOnlyFalse(productId)
                     .orElseThrow(() -> new IllegalArgumentException("Campaign-only products cannot use shop checkout"));
             if (userCouponId != null) {
-                couponService.useCoupon(userCouponId, userId);
+                couponService.useCoupon(userCouponId, userId, product.getPrice(), product.getCategory());
                 log.info("User coupon {} successfully used by user {} during payment", userCouponId, userId);
             }
             Purchase purchase = Purchase.builder()
