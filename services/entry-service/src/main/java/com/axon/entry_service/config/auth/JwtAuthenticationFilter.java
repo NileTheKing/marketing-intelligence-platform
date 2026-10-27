@@ -1,7 +1,6 @@
 package com.axon.entry_service.config.auth;
 
 
-import com.axon.util.CookieUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
@@ -64,8 +63,18 @@ public class JwtAuthenticationFilter extends GenericFilterBean {
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
             return bearerToken.substring(7);
         }
-        return CookieUtils.getCookie(request, ACCESS_TOKEN_COOKIE_NAME)
-                .map(Cookie::getValue)
-                .orElse(null);
+        return readAccessTokenCookie(request);
+    }
+
+    private String readAccessTokenCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (ACCESS_TOKEN_COOKIE_NAME.equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
     }
 }

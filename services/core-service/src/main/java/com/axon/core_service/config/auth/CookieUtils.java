@@ -1,4 +1,4 @@
-package com.axon.util;
+package com.axon.core_service.config.auth;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;

@@ -16,6 +16,9 @@ Status: active
 | `core-service` | Handles campaign/activity persistence, Kafka command consumption, purchase/entry persistence, dashboard aggregation, marketing rules, validation, and LLM query. | `CampaignActivityConsumerService`, `FcfsCommandOrchestrator`, `FcfsLedgerPersistenceService`, `DashboardService`, `BehaviorTriggerScheduler`, `GeminiLLMQueryService` |
 | `common-messaging` | Shares Kafka topic names and message DTOs between services. | `KafkaTopics`, `CampaignActivityKafkaProducerDto`, `ReservationTokenPayload`, `UserBehaviorEventMessage` |
 
+2026-10-27: 쿠키 도우미는 Core의 `config.auth`로 옮기고, Entry는 인증 필터에서
+필요한 쿠키 조회만 처리한다. `common-messaging`에서는 Servlet과 Spring 의존성을 제거했다.
+
 ### Current Component Navigation Map
 
 > **Current-code navigation, not a target package design.** Read this table before changing a feature. Follow the listed boundary and focused tests before expanding the change surface. Class names are search anchors, not a claim that one class owns every detail.
