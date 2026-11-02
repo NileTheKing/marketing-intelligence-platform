@@ -7,6 +7,9 @@ import com.axon.entry_service.payment.dto.PaymentConfirmationResponse;
 import com.axon.entry_service.payment.dto.PaymentPrepareRequest;
 import com.axon.entry_service.payment.dto.PaymentPrepareResponse;
 import com.axon.entry_service.payment.CheckoutTokenService.ConfirmationLeaseResult;
+import com.axon.entry_service.payment.v2.PaymentCredentials;
+import com.axon.entry_service.payment.v2.PaymentV2Facade;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -28,6 +31,12 @@ public class PaymentController {
 
     private final CheckoutTokenService reservationTokenService;
     private final PaymentService paymentService;
+    private PaymentV2Facade paymentV2;
+
+    @Autowired(required = false)
+    void setPaymentV2(PaymentV2Facade paymentV2) {
+        this.paymentV2 = paymentV2;
+    }
 
     @PostMapping("/prepare")
     public ResponseEntity<PaymentPrepareResponse> preparePayment(
@@ -36,6 +45,12 @@ public class PaymentController {
 
         long userId = Long.parseLong(userDetails.getUsername());
         String reservationToken = request.getReservationToken();
+        if (reservationToken != null && (reservationToken.startsWith(PaymentCredentials.PRIMARY)
+                || reservationToken.startsWith(PaymentCredentials.APPROVAL))) {
+            return paymentV2 == null ? ResponseEntity.status(HttpStatus.GONE)
+                    .body(PaymentPrepareResponse.failure("결제 시간이 만료되었습니다."))
+                    : paymentV2.prepare(reservationToken, userId);
+        }
 
         return reservationTokenService.getPayloadFromToken(reservationToken)
                 .filter(payload -> payload.getUserId() == userId)
@@ -69,6 +84,12 @@ public class PaymentController {
 
         long currentUserId = Long.parseLong(userDetails.getUsername());
         String token = request.getReservationToken();
+        if (token != null && (token.startsWith(PaymentCredentials.PRIMARY)
+                || token.startsWith(PaymentCredentials.APPROVAL))) {
+            return paymentV2 == null ? ResponseEntity.status(HttpStatus.GONE)
+                    .body(PaymentConfirmationResponse.failure(ReservationResult.error(), "결제 시간이 만료되었습니다."))
+                    : paymentV2.confirm(token, currentUserId);
+        }
 
         Optional<PaymentApprovalPayload> payloadOpt = reservationTokenService.getApprovalPayload(token);
 

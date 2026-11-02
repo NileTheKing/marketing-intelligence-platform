@@ -15,6 +15,7 @@ Axon은 선착순 트래픽을 수용하고, 유입된 고객의 행동 로그�
 | `services/core-service` (`:8080`) | 구매 저장, 집계와 대사, 쿠폰 발급, 관리자 화면 |
 | `services/ai-triage-service` | 실패 분석과 운영자 승인 지원 |
 | `libs/common-messaging` | 서비스 간 Kafka 토픽과 메시지 계약 |
+| `libs/payment` | 선택적 결제 v2의 예약 상태, 결제와 Outbox DB 트랜잭션 |
 | `infrastructure/` | nginx, Docker Compose, 관측 설정 |
 
 ## 핵심 흐름
@@ -41,7 +42,9 @@ Axon은 선착순 트래픽을 수용하고, 유입된 고객의 행동 로그�
 - 외부 Webhook 호출은 선착순 소비와 토픽을 분리한다.
 - Entry의 활동 메타 캐시는 Core 변경 시 무효화한다. 경쟁 조건과 single-flight 범위는 코드 탐색 문서의 상세 절을 확인한다.
 - 다중 인스턴스의 Kafka 소비는 파티션과 consumer group이 조율한다. 전역 스케줄러의 중복 실행 방지는 별도로 판단한다.
-- 결제 상태 영속화와 Outbox는 개발 로드맵의 계획이다. 현재 보장으로 해석하지 않는다.
+- 결제 v2는 기본 비활성화다. 명시한 신규 활동만 DB 예약과 결제, Outbox를 사용하며
+  Core 후처리는 유지한다. 기존 v1 또는 VM에 자동 적용된 보장으로 해석하지 않는다.
+  활성화와 전환 조건은 구매 후처리 문서의 결제 v2 절과 운영 절차를 확인한다.
 
 ## 실행과 관측
 

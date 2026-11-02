@@ -7,6 +7,8 @@ import com.axon.entry_service.reservation.domain.ReservationStatus;
 import com.axon.entry_service.reservation.dto.EntryRequestDto;
 import com.axon.entry_service.payment.dto.PaymentConfirmationResponse;
 import com.axon.entry_service.payment.CheckoutTokenService;
+import com.axon.entry_service.payment.v2.PaymentV2Facade;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.axon.messaging.CampaignActivityType;
 import com.axon.messaging.dto.payment.ReservationTokenPayload;
 import com.axon.messaging.dto.validation.ValidationResponse;
@@ -26,12 +28,21 @@ public class EntryApplicationService {
     private final CoreValidationService coreValidationService;
     private final FastValidationService fastValidationService;
     private final CheckoutTokenService reservationTokenService;
+    private PaymentV2Facade paymentV2;
+
+    @Autowired(required = false)
+    void setPaymentV2(PaymentV2Facade paymentV2) {
+        this.paymentV2 = paymentV2;
+    }
 
     public EntryUseCaseResult createEntry(EntryRequestDto requestDto, String token, long userId) {
         long campaignActivityId = requestDto.getCampaignActivityId();
         Instant now = Instant.now();
 
-        CampaignActivityMeta meta = campaignActivityMetaService.getMeta(campaignActivityId);
+        boolean useV2 = paymentV2 != null && paymentV2.handles(campaignActivityId);
+        CampaignActivityMeta meta = useV2
+                ? campaignActivityMetaService.getPaymentMeta(campaignActivityId)
+                : campaignActivityMetaService.getMeta(campaignActivityId);
         if (meta == null) {
             return EntryUseCaseResult.noBody(EntryUseCaseStatus.NOT_FOUND);
         }
@@ -53,13 +64,14 @@ public class EntryApplicationService {
                     PaymentConfirmationResponse.failure(ReservationResult.error(), "캠페인 타입이 일치하지 않습니다."));
         }
 
-        String deterministicToken = reservationTokenService.generateDeterministicToken(userId, campaignActivityId);
-        Optional<ReservationTokenPayload> existingToken = reservationTokenService.getPayloadFromToken(deterministicToken);
-
-        if (existingToken.isPresent()) {
-            log.info("재결제 시나리오: 기존 1차 토큰 재사용, userId={}, campaignActivityId={}",
-                    userId, campaignActivityId);
-            return EntryUseCaseResult.ok(PaymentConfirmationResponse.successWithRetry(deterministicToken));
+        if (!useV2) {
+            String deterministicToken = reservationTokenService.generateDeterministicToken(userId, campaignActivityId);
+            Optional<ReservationTokenPayload> existingToken = reservationTokenService.getPayloadFromToken(deterministicToken);
+            if (existingToken.isPresent()) {
+                log.info("재결제 시나리오: 기존 1차 토큰 재사용, userId={}, campaignActivityId={}",
+                        userId, campaignActivityId);
+                return EntryUseCaseResult.ok(PaymentConfirmationResponse.successWithRetry(deterministicToken));
+            }
         }
 
         if (meta.hasFastValidation()) {
@@ -82,6 +94,9 @@ public class EntryApplicationService {
             }
         }
 
+        if (useV2) {
+            return paymentV2.admit(meta, userId, requestDto.getQuantity());
+        }
         ReservationResult result = reservationService.reserve(campaignActivityId, userId, meta, now);
 
         if (result.status() == ReservationStatus.DUPLICATED) {

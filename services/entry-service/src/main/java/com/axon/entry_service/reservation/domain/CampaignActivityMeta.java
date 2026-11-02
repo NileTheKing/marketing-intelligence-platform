@@ -2,6 +2,7 @@ package com.axon.entry_service.reservation.domain;
 
 import com.axon.messaging.CampaignActivityType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -22,7 +23,17 @@ public record CampaignActivityMeta(
         Long productId,
         Long couponId,
         CampaignActivityType campaignActivityType,
-        String couponDeliveryMode) {
+        String couponDeliveryMode,
+        BigDecimal paymentUnitPrice,
+        String paymentCurrency) {
+
+    public CampaignActivityMeta(Long id, Long campaignId, Integer limitCount, CampaignActivityStatus status,
+            LocalDateTime startDate, LocalDateTime endDate, List<Map<String, Object>> filters,
+            boolean hasFastValidation, boolean hasHeavyValidation, Long productId, Long couponId,
+            CampaignActivityType campaignActivityType, String couponDeliveryMode) {
+        this(id, campaignId, limitCount, status, startDate, endDate, filters, hasFastValidation,
+                hasHeavyValidation, productId, couponId, campaignActivityType, couponDeliveryMode, null, null);
+    }
 
     public CampaignActivityMeta {
         Objects.requireNonNull(id, "campaignActivityId must not be null");

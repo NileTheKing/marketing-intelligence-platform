@@ -82,6 +82,18 @@ public class CampaignActivityMetaService {
         }
     }
 
+    public CampaignActivityMeta getPaymentMeta(Long campaignActivityId) {
+        CampaignActivityMeta meta = getMeta(campaignActivityId);
+        if (meta != null && (meta.paymentUnitPrice() == null || meta.paymentCurrency() == null)) {
+            evictMeta(campaignActivityId);
+            meta = getMeta(campaignActivityId);
+        }
+        if (meta == null || meta.paymentUnitPrice() == null || meta.paymentCurrency() == null) {
+            throw new IllegalStateException("payment price snapshot unavailable");
+        }
+        return meta;
+    }
+
     private CampaignActivityMeta readCached(Long campaignActivityId) {
         String cached = redisTemplate.opsForValue().get(metaCacheKey(campaignActivityId));
         if (cached == null) {
@@ -141,7 +153,9 @@ public class CampaignActivityMetaService {
                 response.productId(),
                 response.couponId(),
                 response.activityType(),
-                response.couponDeliveryMode());
+                response.couponDeliveryMode(),
+                response.paymentUnitPrice(),
+                response.paymentCurrency());
 
         try {
             // 조회 도중 무효화됐다면 이전 응답을 캐시에 되살리지 않는다.

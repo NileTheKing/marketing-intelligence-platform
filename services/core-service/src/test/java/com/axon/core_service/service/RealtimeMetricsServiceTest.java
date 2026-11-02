@@ -1,5 +1,6 @@
 package com.axon.core_service.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,6 +12,8 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.startsWith;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RealtimeMetricsService TDD 기반 단위 테스트")
@@ -24,6 +27,11 @@ public class RealtimeMetricsServiceTest {
 
     @InjectMocks
     private RealtimeMetricsService realtimeMetricsService;
+
+    @BeforeEach
+    void noV2CounterByDefault() {
+        lenient().when(valueOperations.get(startsWith("axon:v2:activity:"))).thenReturn(null);
+    }
 
     @Test
     @DisplayName("정상 케이스: Redis에서 참여자 수 조회")
@@ -39,6 +47,13 @@ public class RealtimeMetricsServiceTest {
 
         // then
         assertThat(count).isEqualTo(150L);
+    }
+
+    @Test
+    void v2CounterTakesPrecedenceOverLegacyCounter() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("axon:v2:activity:1:counter")).thenReturn("8");
+        assertThat(realtimeMetricsService.getParticipantCount(1L)).isEqualTo(8L);
     }
 
     @Test

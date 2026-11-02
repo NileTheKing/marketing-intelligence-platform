@@ -175,6 +175,43 @@ public class PurchaseFlowIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void kafkaPaymentSnapshotIsStoredOnceDespiteDuplicateDelivery() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+        UUID eventId = UUID.nameUUIDFromBytes(("payment-completed:" + paymentId)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var dto = CampaignActivityKafkaProducerDto.builder()
+                .userId(781L).productId(productId).campaignActivityId(activityId)
+                .campaignActivityType(CampaignActivityType.FIRST_COME_FIRST_SERVE)
+                .timestamp(System.currentTimeMillis()).quantity(2L).price(new BigDecimal("1234.56"))
+                .totalAmount(new BigDecimal("2469.12")).currency("KRW")
+                .paymentId(paymentId.toString()).eventId(eventId.toString()).build();
+        kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, dto).get();
+        var last = kafkaTemplate.send(KafkaTopics.CAMPAIGN_ACTIVITY_COMMAND, dto).get().getRecordMetadata();
+        try (var admin = AdminClient.create(Map.of("bootstrap.servers", kafkaBootstrapServers))) {
+            Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+                var offsets = admin.listConsumerGroupOffsets("axon-group").partitionsToOffsetAndMetadata().get();
+                var committed = offsets.get(new TopicPartition(last.topic(), last.partition()));
+                assertThat(committed).isNotNull();
+                assertThat(committed.offset()).isGreaterThanOrEqualTo(last.offset() + 1);
+            });
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            List<Purchase> purchases = purchaseRepository.findByUserId(781L);
+            assertThat(purchases).hasSize(1);
+            assertThat(purchases.getFirst().getPrice()).isEqualByComparingTo("1234.56");
+            assertThat(purchases.getFirst().getQuantity()).isEqualTo(2);
+            assertThat(campaignActivityEntryRepository.count()).isEqualTo(1);
+        });
+        assertThatThrownBy(() -> ledgerPersistenceService.persistBatch(List.of(
+                CampaignActivityKafkaProducerDto.builder().userId(782L).productId(productId + 1)
+                        .campaignActivityId(activityId).paymentId(paymentId.toString()).eventId(eventId.toString())
+                        .timestamp(System.currentTimeMillis()).quantity(2L).price(new BigDecimal("1234.56"))
+                        .totalAmount(new BigDecimal("2469.12")).currency("KRW").build())))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(purchaseRepository.findByUserId(782L)).isEmpty();
+    }
+
+    @Test
     @DisplayName("FCFS 원장은 Entry와 Purchase를 한 트랜잭션으로 함께 저장하고 재전달에 수렴한다")
     void ledgerPersistsEntryAndPurchaseAtomicallyAndIdempotently() {
         CampaignActivityKafkaProducerDto dto = CampaignActivityKafkaProducerDto.builder()

@@ -33,6 +33,8 @@ public class CampaignActivityResponse {
     private final String couponName;
     private final Integer originalPrice;
     private final Integer price;
+    private final java.math.BigDecimal paymentUnitPrice;
+    private final String paymentCurrency;
     private final Integer quantity;
     private final java.math.BigDecimal budget; // Added budget field
     private final Integer expectedRecipientCount;
@@ -91,6 +93,8 @@ public class CampaignActivityResponse {
                 .filters(campaignActivity.getFilters())
                 .imageUrl(campaignActivity.getImageUrl())
                 .price(campaignActivity.getPrice() != null ? campaignActivity.getPrice().intValue() : null)
+                .paymentUnitPrice(campaignActivity.getPrice())
+                .paymentCurrency("KRW")
                 .quantity(campaignActivity.getQuantity())
                 .budget(campaignActivity.getBudget()) // Populate budget
                 .expectedRecipientCount(campaignActivity.getExpectedRecipientCount())

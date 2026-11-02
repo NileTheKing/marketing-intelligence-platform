@@ -2,6 +2,7 @@ FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /workspace
 
 COPY libs/common-messaging ./libs/common-messaging
+COPY libs/payment ./libs/payment
 COPY services/entry-service ./services/entry-service
 
 WORKDIR /workspace/services/entry-service
