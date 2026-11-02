@@ -18,8 +18,12 @@ public class ShopPurchaseQueryService {
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public Optional<ShopPurchaseResponse> findCompleted(Long userId, ShopPurchaseRequest request) {
         return requests.findByUserIdAndRequestId(userId, request.requestId().toString()).map(record -> {
-            if (!record.matches(request)) throw new ShopPurchaseException(HttpStatus.CONFLICT, "REQUEST_ID_REUSED");
-            if (record.purchaseId() == null) throw new IllegalStateException("Incomplete shop purchase request");
+            if (!record.matches(request)) {
+                throw new ShopPurchaseException(HttpStatus.CONFLICT, "REQUEST_ID_REUSED");
+            }
+            if (record.purchaseId() == null) {
+                throw new IllegalStateException("Incomplete shop purchase request");
+            }
             return getPurchase(userId, record.purchaseId());
         });
     }

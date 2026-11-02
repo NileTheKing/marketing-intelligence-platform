@@ -47,7 +47,8 @@ class CampaignActivityCouponDeliveryModeTest {
     @Test
     void createsAbandonedCartConfigWithActivityAndAllowsCouponDefaultsWithoutPriceOrQuantity() {
         Campaign campaign = Campaign.builder().name("spring").build();
-        Coupon coupon = Coupon.builder().name("coupon").build();
+        Coupon coupon = Coupon.builder().name("coupon").discountRate(10)
+                .startDate(LocalDateTime.now().minusDays(1)).endDate(LocalDateTime.now().plusDays(1)).build();
         ReflectionTestUtils.setField(coupon, "id", 12L);
         MarketingAction action = MarketingAction.builder().actionType(RewardType.COUPON)
                 .referenceId(12L).isActive(true).build();
@@ -172,7 +173,8 @@ class CampaignActivityCouponDeliveryModeTest {
     }
 
     private Coupon coupon() {
-        Coupon coupon = Coupon.builder().name("coupon").build();
+        Coupon coupon = Coupon.builder().name("coupon").discountRate(10)
+                .startDate(LocalDateTime.now().minusDays(1)).endDate(LocalDateTime.now().plusDays(1)).build();
         ReflectionTestUtils.setField(coupon, "id", 12L);
         return coupon;
     }

@@ -50,6 +50,9 @@ public class UserCoupon extends BaseTimeEntity {
     }
 
     public void use() {
+        if (status != CouponStatus.ISSUED) {
+            throw new IllegalStateException("미사용 쿠폰만 사용할 수 있습니다.");
+        }
         this.status = CouponStatus.USED;
         this.usedAt = LocalDateTime.now();
     }

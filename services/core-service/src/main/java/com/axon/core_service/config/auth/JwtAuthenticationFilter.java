@@ -1,6 +1,5 @@
 package com.axon.core_service.config.auth;
 
-import com.axon.util.CookieUtils;
 import com.axon.core_service.demo.AdminDemoAccess;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

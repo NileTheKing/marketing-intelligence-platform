@@ -23,6 +23,9 @@ Entry의 `reservation.v2`는 Redis 예약 소유자 확인과 DB 기준 만료, 
 바뀌는 것은 아니다. [결제 경계](fcfs-entry-purchase-transaction-boundary-handoff.md#결제-v2의-실행-경계)와
 [활성화 조건](../operations/oracle-compose-baseline-runbook.md#결제-v2-활성화-조건-미배포)을 확인한다.
 
+2026-10-27: 쿠키 도우미는 Core의 `config.auth`로 옮기고, Entry는 인증 필터에서
+필요한 쿠키 조회만 처리한다. `common-messaging`에서는 Servlet과 Spring 의존성을 제거했다.
+
 ### Current Component Navigation Map
 
 > **Current-code navigation, not a target package design.** Read this table before changing a feature. Follow the listed boundary and focused tests before expanding the change surface. Class names are search anchors, not a claim that one class owns every detail.
@@ -68,6 +71,13 @@ coupon/
 트랜잭션과 쿼리는 바꾸지 않는다. Kafka의 `CouponStrategy`는 메시지 처리 경계를
 담당하므로 `commandprocessing`에 유지하고, 구매 매출 귀속 조회인
 `CouponAttributionRepository`도 이번 이동에 포함하지 않는다.
+
+2026-10-27: 쿠폰의 기간, 최소 금액, 카테고리 적용 조건과 할인 계산은 `Coupon`이
+담당한다. `UserCoupon`은 미사용 상태에서만 사용 상태로 전환한다. `CouponService`는
+조회, 소유자 확인과 행 잠금, API용 예외 처리를 조율한다. 정상가 기준 계산과 결제금액
+상한 정책, 구매와 쿠폰 사용의 트랜잭션 경계는 유지한다.
+생성과 수정의 유효성 검사도 `Coupon`이 수행한다. 수정은 모든 입력을 검사한 뒤
+필드를 변경하므로 잘못된 요청이 기존 객체 상태를 일부만 바꾸지 않는다.
 
 2026-10-22: Entry도 기능별로 묶었다. HTTP 경로, Redis 키·TTL, Kafka 메시지와
 처리 순서는 유지한다. 각 기능의 테스트도 같은 패키지로 옮겼다.

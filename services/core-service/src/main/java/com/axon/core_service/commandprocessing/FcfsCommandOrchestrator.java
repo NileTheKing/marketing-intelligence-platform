@@ -3,6 +3,7 @@ package com.axon.core_service.commandprocessing;
 import com.axon.core_service.event.CampaignActivityApprovedEvent;
 import com.axon.core_service.observability.CorePipelineMetrics;
 import com.axon.core_service.service.UserSummaryService;
+import com.axon.messaging.MarketingActionFailureCategory;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientException;
@@ -47,6 +48,7 @@ public class FcfsCommandOrchestrator {
             log.warn("FCFS ledger batch failed; retrying each message", batchFailure);
             pipelineMetrics.recordPurchaseIndividualRetry(messages.size());
             successes = new ArrayList<>();
+            // 입력 순서를 유지해야 실패 인덱스로 미처리 메시지를 정확히 재전달할 수 있다.
             for (int i = 0; i < messages.size(); i++) {
                 CampaignActivityKafkaProducerDto message = messages.get(i);
                 try {
@@ -54,7 +56,7 @@ public class FcfsCommandOrchestrator {
                 } catch (Exception failure) {
                     message.setFailureReason(failure.getMessage());
                     if (message.getFailureCategory() == null) {
-                        message.setFailureCategory(com.axon.messaging.MarketingActionFailureCategory.UNKNOWN);
+                        message.setFailureCategory(MarketingActionFailureCategory.UNKNOWN);
                     }
                     updateProjection(successes);
                     publishPurchaseEvents(successes);
@@ -121,7 +123,8 @@ public class FcfsCommandOrchestrator {
     private List<FcfsLedgerPersistenceService.LedgerResult> persistLedger(
             List<CampaignActivityKafkaProducerDto> messages) {
         List<FcfsLedgerPersistenceService.LedgerResult> results = new ArrayList<>(messages.size());
-        pipelineMetrics.recordPurchaseFlush(messages.size(), () -> results.addAll(ledgerPersistenceService.persistBatch(messages)));
+        pipelineMetrics.recordPurchaseFlush(messages.size(),
+                () -> results.addAll(ledgerPersistenceService.persistBatch(messages)));
         return results;
     }
 }

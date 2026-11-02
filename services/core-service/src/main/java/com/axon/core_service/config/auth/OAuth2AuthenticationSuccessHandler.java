@@ -6,7 +6,6 @@ import com.axon.core_service.event.UserLoginEvent;
 import com.axon.core_service.repository.UserRepository;
 import com.axon.core_service.service.UserSummaryService;
 import com.axon.messaging.dto.validation.UserCacheDto;
-import com.axon.util.CookieUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
