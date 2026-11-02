@@ -6,6 +6,7 @@ import com.axon.core_service.service.UserSummaryService;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -19,7 +20,8 @@ public class PurchaseCancellationService {
     private final PurchaseRepository purchaseRepository;
     private final UserSummaryService userSummaryService;
 
-    @Transactional
+    // Rebuild must see purchases committed after this transaction first read the old purchase.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public boolean cancelConfirmedPurchase(Long purchaseId, String reason, Instant occurredAt) {
         Purchase purchase = purchaseRepository.findById(purchaseId)
                 .orElseThrow(() -> new IllegalArgumentException("Purchase not found: " + purchaseId));
@@ -30,7 +32,8 @@ public class PurchaseCancellationService {
         return changed;
     }
 
-    @Transactional
+    // The outer transaction determines the isolation of the joined summary rebuild.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public boolean refundConfirmedPurchase(Long purchaseId, String reason, Instant occurredAt) {
         Purchase purchase = purchaseRepository.findById(purchaseId)
                 .orElseThrow(() -> new IllegalArgumentException("Purchase not found: " + purchaseId));
