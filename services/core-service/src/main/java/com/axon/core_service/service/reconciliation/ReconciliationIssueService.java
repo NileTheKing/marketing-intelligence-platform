@@ -82,6 +82,12 @@ public class ReconciliationIssueService {
     }
 
     @Transactional
+    public ReconciliationIssue detectUserSummaryRecoveryFailure(Long userId, String reason) {
+        return upsert(ReconciliationIssueType.USER_SUMMARY_MISMATCH, null, null, userId,
+                null, null, "Projection recovery failed: " + reason);
+    }
+
+    @Transactional
     public void resolveUserSummaryMismatch(Long userId) {
         issueRepository.findByFingerprint(fingerprint(
                         ReconciliationIssueType.USER_SUMMARY_MISMATCH, null, null, userId))

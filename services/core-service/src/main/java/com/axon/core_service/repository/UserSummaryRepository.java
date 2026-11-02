@@ -44,6 +44,14 @@ public interface UserSummaryRepository extends JpaRepository<UserSummary, Long> 
              AND purchase.status = 'CONFIRMED'
             GROUP BY summary.user_id, summary.last_purchase_at
             HAVING NOT (MAX(purchase.purchase_at) <=> summary.last_purchase_at)
+            UNION ALL
+            SELECT purchase.user_id AS userId,
+                   MAX(CASE WHEN purchase.status = 'CONFIRMED' THEN purchase.purchase_at ELSE NULL END) AS expectedLastPurchaseAt,
+                   NULL AS observedLastPurchaseAt
+            FROM purchases purchase
+            LEFT JOIN user_summary summary ON summary.user_id = purchase.user_id
+            WHERE summary.user_id IS NULL
+            GROUP BY purchase.user_id
             """, nativeQuery = true)
     List<UserSummaryPurchaseMismatch> findPurchaseSummaryMismatches();
 
