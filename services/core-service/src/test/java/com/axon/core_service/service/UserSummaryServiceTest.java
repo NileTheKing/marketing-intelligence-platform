@@ -3,6 +3,7 @@ package com.axon.core_service.service;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -150,5 +151,18 @@ class UserSummaryServiceTest {
 
         verify(summary).updateLastPurchaseAt(eq(java.time.LocalDateTime.of(2026, 7, 28, 1, 0)
                 .toInstant(java.time.ZoneOffset.UTC)));
+    }
+
+    @Test
+    void rebuildCreatesMissingSummaryAndUsesConfirmedLedger() {
+        var summary = mock(com.axon.core_service.domain.user.UserSummary.class);
+        when(userSummaryRepository.findByIdForUpdate(4L)).thenReturn(Optional.empty(), Optional.of(summary));
+        when(purchaseRepository.findFirstByUserIdAndStatusOrderByPurchaseAtDesc(4L, PurchaseStatus.CONFIRMED))
+                .thenReturn(Optional.empty());
+
+        userSummaryService.rebuildPurchaseSummary(4L);
+
+        verify(jdbcTemplate).update(contains("INSERT INTO user_summary"), eq(4L));
+        verify(summary).updateLastPurchaseAt(null);
     }
 }

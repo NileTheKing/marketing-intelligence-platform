@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 @Slf4j
 @Service
@@ -63,16 +64,22 @@ public class UserSummaryService {
         log.info("Updated purchase time for {} users", latestPurchaseTimes.size());
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void rebuildPurchaseSummary(Long userId) {
-        var summary = userSummaryRepository.findByIdForUpdate(userId)
+        var summary = userSummaryRepository.findByIdForUpdate(userId);
+        if (summary.isEmpty()) {
+            jdbcTemplate.update("INSERT INTO user_summary (user_id) SELECT id FROM users WHERE id = ? "
+                    + "ON DUPLICATE KEY UPDATE user_id = user_id", userId);
+            summary = userSummaryRepository.findByIdForUpdate(userId);
+        }
+        var lockedSummary = summary
                 .orElseThrow(() -> new IllegalArgumentException("User summary not found: " + userId));
 
         purchaseRepository.findFirstByUserIdAndStatusOrderByPurchaseAtDesc(userId, PurchaseStatus.CONFIRMED)
                 .ifPresentOrElse(
-                        purchase -> summary.updateLastPurchaseAt(
+                        purchase -> lockedSummary.updateLastPurchaseAt(
                                 purchase.getPurchaseAt().atZone(BUSINESS_ZONE).toInstant()),
-                        () -> summary.updateLastPurchaseAt(null));
+                        () -> lockedSummary.updateLastPurchaseAt(null));
     }
     /**
         * Records a login event for the specified user at the given timestamp, updating the user's activity summary.

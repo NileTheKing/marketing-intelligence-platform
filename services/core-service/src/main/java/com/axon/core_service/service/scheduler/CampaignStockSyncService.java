@@ -59,9 +59,10 @@ public class CampaignStockSyncService {
     }
 
     private void syncCampaignStock(CampaignActivity activity) {
-        String counterKey = "campaign:" + activity.getId() + ":counter";
-
-        String soldCountStr = redisTemplate.opsForValue().get(counterKey);
+        String soldCountStr = redisTemplate.opsForValue().get("axon:v2:activity:" + activity.getId() + ":counter");
+        if (soldCountStr == null) {
+            soldCountStr = redisTemplate.opsForValue().get("campaign:" + activity.getId() + ":counter");
+        }
         long redisSoldCount = soldCountStr != null ? Long.parseLong(soldCountStr) : 0L;
 
         long persistedPurchaseCount = purchaseRepository.countByCampaignActivityId(activity.getId());

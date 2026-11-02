@@ -13,6 +13,7 @@ Status: active
 |---|---|
 | 배포 방식과 실행 정책 | [CI/CD Execution Policy](#cicd-execution-policy) |
 | 앱 재생성 후 nginx 연결 확인 | [Mandatory Nginx Restart After App Recreate](#mandatory-nginx-restart-after-app-recreate) |
+| 결제 v2 활성화와 중단 조건 | [결제 v2 활성화 조건](#결제-v2-활성화-조건-미배포) |
 | 로그인 설정 확인 | [네이버 로그인 환경변수](#네이버-로그인-환경변수) |
 | 구매·쿠폰 최신 배포 | [10월 27일 구매 확정과 쿠폰 처리](#2026-10-27-구매-확정과-쿠폰-처리-배포) |
 | 데모 데이터와 마지막 오류 수정 기록 | [10월 24일 데이터 전환](#2026-10-24-관리자-시연-데이터-전환), [증분 분석과 편집 수정](#2026-10-24-증분-분석-진입과-쿠폰-활동-편집-오류-수정) |
@@ -182,6 +183,42 @@ Callback URL이 일치하는지도 확인한다. 현재 공개 도메인의 예�
 `https://axon.opicnic.xyz/login/oauth2/code/naver`다. Secret이나 인증 토큰은 로그·문서에
 기록하지 않는다. `client info invalid`라면 콜백 실패로 단정하지 말고 먼저 실제
 인증 요청이 개발용 client ID를 쓰는지 확인한다.
+
+## 결제 v2 활성화 조건 (미배포)
+
+2026-10-27 로컬 구현 기준이다. 이 절은 VM에 적용했다는 기록이 아니다.
+기본 설정은 off이며 기존 결제 흐름을 유지한다.
+
+| Entry 환경변수 | 의미 |
+|---|---|
+| `AXON_PAYMENT_V2_ENABLED` | 기본 `false`, 명시적으로 켤 때만 DB와 작업자 등록 |
+| `AXON_PAYMENT_V2_ACTIVITY_IDS` | 쉼표로 나눈 신규 활동 ID, 빈 목록이면 v2 신규 입장 없음 |
+| `AXON_PAYMENT_V2_JDBC_URL` | 결제 테이블이 있는 MySQL JDBC URL |
+| `AXON_PAYMENT_V2_DB_USER`, `AXON_PAYMENT_V2_DB_PASSWORD` | 해당 DB 계정, 공개 문서에 실제 값을 적지 않음 |
+| `PAYMENT_TOKEN_SECRET` | v2는 UTF-8 기준 32바이트 이상 필요, 기존 짧은 개발 기본값으로 켤 수 없음 |
+
+활성화 전 조건:
+
+1. DB 백업과 스키마 확인 후 `scripts/migrations/2026-10-27-add-payment-state.sql`을
+   대상 DB에 적용한다. 신규 테이블 생성문이며 중복 적용용 스크립트가 아니다.
+   Core가 읽는 구매 테이블을 Entry가 쓰게 만드는 변경은 아니다.
+2. Core의 v2 메시지 처리를 먼저 배포하고, 모든 Entry 인스턴스의 설정과 버전을 맞춘다.
+   판매 시작 전의 신규 활동만 목록에 넣는다. 기존 활동의 Redis 키를 지워 새 활동으로
+   취급하지 않는다. 기존 토큰이나 구매가 있는 활동을 이전하는 자동 절차는 제공하지 않는다.
+3. 해당 활동의 v1 입장이 없고 미처리 요청도 없음을 확인한 뒤 시작한다. v2 Lua도 기존
+   v1 users/counter가 존재하면 거절하지만, 서로 다른 설정의 Entry를 동시에 운영해도
+   안전하다는 보장은 아니다. 신규 활동 전환 중에는 입장을 닫아 둔다.
+4. 입장, prepare, confirm, Outbox 발행과 Core 구매 반영, 작업자 오류와 DB 풀 대기를
+   확인한다. 기존 1,000 RPS / p95 500ms는 새 경로의 달성 결과가 아니므로 재측정한다.
+
+신규 입장을 중단할 때는 외부에서 해당 활동을 닫고 목록에서 제외한다. `enabled=true`는
+유지해 이미 발급한 v2 토큰, 결제 복구와 Outbox 발행을 마무리한다. 전체 flag를 먼저
+끄거나 같은 활동을 v1으로 되돌리면 남은 처리를 막거나 정원이 분리될 수 있다.
+
+Redis는 단일 인스턴스 구성 전제다. hold와 미등록 인덱스에는 자동 TTL을 두지 않는다.
+반환한 UUID는 retired 집합에 보존한다. 활동 종료와 재시도 보존 기간 이후 DB 종료 기록과
+Redis hold/retired를 함께 정리하는 정책과 도구는 아직 구현하지 않았다. 기간 확정과
+정리 절차 마련이 장기 운영 전 남은 조건이다. 미확정 결제를 시간만으로 삭제하지 않는다.
 
 ## CI/CD Execution Policy
 

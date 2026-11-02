@@ -13,8 +13,10 @@ public class RealtimeMetricsService {
     private final CampaignActivityRepository campaignActivityRepository;
 
     public Long getParticipantCount(Long activityId) {
-        String key = "campaign:" + activityId + ":counter";
-        String value = redisTemplate.opsForValue().get(key);
+        String value = redisTemplate.opsForValue().get("axon:v2:activity:" + activityId + ":counter");
+        if (value == null) {
+            value = redisTemplate.opsForValue().get("campaign:" + activityId + ":counter");
+        }
         return value !=  null ? Long.parseLong(value) : 0L;
     }
 

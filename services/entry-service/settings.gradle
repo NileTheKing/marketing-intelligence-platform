@@ -1,2 +1,3 @@
 rootProject.name = 'entry-service'
 includeBuild('../../libs/common-messaging')
+includeBuild('../../libs/payment')

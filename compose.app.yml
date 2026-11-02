@@ -82,7 +82,7 @@ services:
       - "127.0.0.1:6379:6379"
     networks:
       - axon-network
-    command: redis-server --requirepass ${REDIS_PASSWORD:-axon1234} --save ""
+    command: redis-server --requirepass ${REDIS_PASSWORD:-axon1234} --save "" --appendonly yes --appendfsync everysec
     volumes:
       - redis_data:/data
 
@@ -202,6 +202,11 @@ services:
       AXON_CORS_ALLOWED_ORIGINS: ${AXON_CORS_ALLOWED_ORIGINS:-https://axon.opicnic.xyz}
       JWT_SECRET: ${JWT_SECRET:-local-compose-development-jwt-secret-32-bytes-minimum}
       PAYMENT_TOKEN_SECRET: ${PAYMENT_TOKEN_SECRET:-change-this-payment-secret}
+      AXON_PAYMENT_V2_ENABLED: ${AXON_PAYMENT_V2_ENABLED:-false}
+      AXON_PAYMENT_V2_ACTIVITY_IDS: ${AXON_PAYMENT_V2_ACTIVITY_IDS:-}
+      AXON_PAYMENT_V2_JDBC_URL: ${AXON_PAYMENT_V2_JDBC_URL:-}
+      AXON_PAYMENT_V2_DB_USER: ${AXON_PAYMENT_V2_DB_USER:-}
+      AXON_PAYMENT_V2_DB_PASSWORD: ${AXON_PAYMENT_V2_DB_PASSWORD:-}
 
   axon-nginx:
     image: nginx:1.27-alpine

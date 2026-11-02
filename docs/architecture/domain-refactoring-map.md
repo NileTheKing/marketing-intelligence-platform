@@ -16,6 +16,13 @@ Status: active
 | `core-service` | Handles campaign/activity persistence, Kafka command consumption, purchase/entry persistence, dashboard aggregation, marketing rules, validation, and LLM query. | `CampaignActivityConsumerService`, `FcfsCommandOrchestrator`, `FcfsLedgerPersistenceService`, `DashboardService`, `BehaviorTriggerScheduler`, `GeminiLLMQueryService` |
 | `common-messaging` | Shares Kafka topic names and message DTOs between services. | `KafkaTopics`, `CampaignActivityKafkaProducerDto`, `ReservationTokenPayload`, `UserBehaviorEventMessage` |
 
+2026-10-27: `libs/payment`는 예약 상태, 결제와 Outbox의 DB 트랜잭션을 제공한다.
+Entry의 `reservation.v2`는 Redis 예약 소유자 확인과 DB 기준 만료, 반환 재시도를 맡고,
+`payment.v2`는 인증 토큰, 결제 확인과 복구, Outbox 발행을 연결한다. 기본 설정은
+비활성화이며 명시한 신규 활동만 전환한다. 기존 v1 경로와 VM 동작이 자동으로
+바뀌는 것은 아니다. [결제 경계](fcfs-entry-purchase-transaction-boundary-handoff.md#결제-v2의-실행-경계)와
+[활성화 조건](../operations/oracle-compose-baseline-runbook.md#결제-v2-활성화-조건-미배포)을 확인한다.
+
 2026-10-27: 쿠키 도우미는 Core의 `config.auth`로 옮기고, Entry는 인증 필터에서
 필요한 쿠키 조회만 처리한다. `common-messaging`에서는 Servlet과 Spring 의존성을 제거했다.
 
@@ -27,6 +34,7 @@ Status: active
 |---|---|---|---|---|
 | FCFS reservation | `EntryController#createEntry` | `EntryApplicationService` → `EntryReservationService` → Redis Lua; success publishes a behavior event | `EntryReservationServiceRedisIntegrationTest` | Entry owns fast slot admission and reservation tokens. It must not persist Core ledger records directly. |
 | Payment command | `PaymentController` `prepare` / `confirm` | `PaymentService` / `CampaignActivityProducerService` → `CAMPAIGN_ACTIVITY_COMMAND` | `PaymentControllerTest` | Payment token internals are a separate owner. Do not change them while modifying Core purchase persistence unless explicitly requested. |
+| Payment v2 (opt-in) | `PaymentV2Facade`, `PaymentV2Configuration` | Redis hold → DB reservation → Mock PG → payment + Outbox → Kafka, DB-driven recovery | `ReservationLifecycleIntegrationTest`, `PaymentFlowIntegrationTest`, `PaymentV2BootIntegrationTest` | Default off. Entry writes payment state, Core owns Purchase and participation. New activities only; no automatic v1 migration. |
 | Direct coupon issuance | `DirectCouponIssueController` | Core validates a direct coupon activity and saves `UserCoupon` before responding | `DirectCouponIssueServiceTest` | Coupon ownership remains in Core; configured audience filters are rejected until their policy is decided. No FCFS coupon admission is implemented. |
 | FCFS ledger consumption | `CampaignActivityConsumerService` Kafka listener | `FcfsCommandOrchestrator` → `FcfsLedgerPersistenceService` → `CampaignActivityEntry` + `Purchase`; final command failure goes to DLT | `CampaignActivityConsumerServiceTest`, `FcfsCommandOrchestratorTest` | Core owns durable ledger persistence and Kafka completion. Keep Entry reservation and post-ledger projections outside this transaction. |
 | Purchase projection and repair | Post-ledger projection / scheduled reconciliation | `UserSummary` projection; failures recorded separately and reconciliation repairs from `Purchase` ledger | `ReconciliationSchedulerTest`, `ReconciliationIssueServiceIntegrationTest` | `Purchase` is the source of truth. `UserSummary` is rebuildable derived data, so do not make a projection failure roll back a committed ledger. |

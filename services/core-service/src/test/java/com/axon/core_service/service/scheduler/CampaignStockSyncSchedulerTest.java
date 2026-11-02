@@ -55,6 +55,7 @@ class CampaignStockSyncSchedulerTest {
 
     @org.junit.jupiter.api.BeforeEach
     void executeTransactionCallbacks() {
+        lenient().when(valueOperations.get(org.mockito.ArgumentMatchers.startsWith("axon:v2:activity:"))).thenReturn(null);
         doAnswer(invocation -> {
             java.util.function.Consumer<TransactionStatus> callback = invocation.getArgument(0);
             callback.accept(mock(TransactionStatus.class));
@@ -120,6 +121,19 @@ class CampaignStockSyncSchedulerTest {
 
         // Then
         verify(productService, times(1)).syncCampaignStock(eq(productId), eq(5L));
+    }
+
+    @Test
+    void reconciliationUsesV2CounterWhenPresent() {
+        CampaignActivity activity = mock(CampaignActivity.class);
+        when(activity.getId()).thenReturn(3L);
+        when(campaignActivityRepository.findById(3L)).thenReturn(Optional.of(activity));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("axon:v2:activity:3:counter")).thenReturn("4");
+        when(purchaseRepository.countByCampaignActivityId(3L)).thenReturn(2L);
+        syncService.syncCampaignStockManually(3L);
+        verify(reconciliationIssueService).detectRedisPurchaseCountMismatch(3L, 4L, 2L);
+        verify(valueOperations, never()).get("campaign:3:counter");
     }
 
     @Test

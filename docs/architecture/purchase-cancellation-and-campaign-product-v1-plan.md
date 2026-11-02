@@ -2,6 +2,19 @@
 
 Status: `active (implemented)`
 
+## 2026-11-02: 취소·환불과 동시 구매의 Summary 재계산
+
+취소·환불 트랜잭션은 `READ COMMITTED`로 실행한다. 취소 대상 구매를 읽은 뒤
+다른 구매가 커밋되더라도, 같은 트랜잭션에 참여하는 Summary 재계산이 이전
+스냅샷 대신 조회 시점에 커밋된 구매를 볼 수 있도록 한다. Summary 행 잠금은
+기존처럼 유지한다.
+
+로컬 Testcontainers MySQL 8.0에서 취소·환불 각각에 대해 첫 구매 조회 후
+새 구매와 Summary 갱신을 커밋하고 재계산을 이어가는 순서를 검증했다.
+변경 전 기본 `REPEATABLE READ`에서는 두 경우 모두 마지막 구매 시각이 null이
+되었고, 변경 후 새 구매 시각이 유지됐다. 이는 해당 경합의 회귀 검증이며
+배포나 모든 장애 순서에 대한 검증을 뜻하지 않는다.
+
 ## Goal
 
 Keep FCFS inventory isolated from normal shop inventory, then make a confirmed purchase

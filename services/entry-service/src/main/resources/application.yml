@@ -46,6 +46,12 @@ payment:
     secret: ${PAYMENT_TOKEN_SECRET:changeme}
 
 axon:
+  payment-v2:
+    enabled: ${AXON_PAYMENT_V2_ENABLED:false}
+    activity-ids: ${AXON_PAYMENT_V2_ACTIVITY_IDS:}
+    jdbc-url: ${AXON_PAYMENT_V2_JDBC_URL:}
+    db-user: ${AXON_PAYMENT_V2_DB_USER:}
+    db-password: ${AXON_PAYMENT_V2_DB_PASSWORD:}
   diagnostic:
     entry:
       enabled: ${AXON_DIAGNOSTIC_ENTRY_ENABLED:false}

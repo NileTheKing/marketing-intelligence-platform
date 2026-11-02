@@ -11,6 +11,10 @@ import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.service.ActivityUserKey;
 import com.axon.messaging.dto.CampaignActivityKafkaProducerDto;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -64,6 +68,7 @@ public class FcfsLedgerPersistenceService {
         List<LedgerResult> results = new ArrayList<>();
         for (CampaignActivityKafkaProducerDto dto : messages) {
             CampaignActivity activity = activities.get(dto.getCampaignActivityId());
+            BigDecimal purchasePrice = validatedPrice(dto, activity);
             ActivityUserKey key = new ActivityUserKey(activity.getId(), dto.getUserId());
             CampaignActivityEntry entry = entries.get(key);
             if (entry == null) {
@@ -80,7 +85,7 @@ public class FcfsLedgerPersistenceService {
             if (purchaseCreated) {
                 Instant purchasedAt = Optional.ofNullable(dto.occurredAt()).orElseGet(Instant::now);
                 purchase = new Purchase(dto.getUserId(), dto.getProductId(), activity.getId(),
-                        PurchaseType.CAMPAIGNACTIVITY, activity.getPrice(), quantity(dto), purchasedAt);
+                        PurchaseType.CAMPAIGNACTIVITY, purchasePrice, quantity(dto), purchasedAt);
                 purchases.put(key, purchase);
                 newPurchases.add(purchase);
             }
@@ -142,6 +147,31 @@ public class FcfsLedgerPersistenceService {
             args.add(null);
         }
         jdbcTemplate.update(sql, args.toArray());
+    }
+
+    private BigDecimal validatedPrice(CampaignActivityKafkaProducerDto dto, CampaignActivity activity) {
+        if (dto.getPaymentId() == null && dto.getEventId() == null
+                && dto.getTotalAmount() == null && dto.getCurrency() == null) {
+            return activity.getPrice();
+        }
+        try {
+            UUID paymentId = UUID.fromString(dto.getPaymentId());
+            UUID eventId = UUID.fromString(dto.getEventId());
+            UUID expected = UUID.nameUUIDFromBytes(("payment-completed:" + paymentId)
+                    .getBytes(StandardCharsets.UTF_8));
+            BigDecimal price = dto.getPrice().setScale(2, RoundingMode.UNNECESSARY);
+            BigDecimal total = dto.getTotalAmount().setScale(2, RoundingMode.UNNECESSARY);
+            if (!expected.equals(eventId) || dto.getTimestamp() == null || dto.getQuantity() == null
+                    || dto.getQuantity() <= 0 || dto.getQuantity() > Integer.MAX_VALUE
+                    || price.signum() < 0 || price.precision() > 10 || !"KRW".equals(dto.getCurrency())
+                    || !price.multiply(BigDecimal.valueOf(dto.getQuantity())).equals(total)
+                    || !java.util.Objects.equals(activity.getProductId(), dto.getProductId())) {
+                throw new IllegalArgumentException("invalid payment snapshot");
+            }
+            return price;
+        } catch (NullPointerException | IllegalArgumentException | ArithmeticException e) {
+            throw new IllegalArgumentException("invalid payment snapshot", e);
+        }
     }
 
     private Instant requestedAt(CampaignActivityKafkaProducerDto dto) {

@@ -23,6 +23,10 @@ public class CampaignActivityKafkaProducerDto {
     private Long timestamp;
     private Long quantity;
     private BigDecimal price;
+    private String paymentId;
+    private String eventId;
+    private BigDecimal totalAmount;
+    private String currency;
     private Long marketingRuleId;
     private Long marketingActionId;
     private Long actionReferenceId;
