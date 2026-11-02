@@ -82,7 +82,7 @@ services:
       - "127.0.0.1:6379:6379"
     networks:
       - axon-network
-    command: redis-server --requirepass ${REDIS_PASSWORD:-axon1234} --save ""
+    command: redis-server --requirepass ${REDIS_PASSWORD:-axon1234} --save "" --appendonly yes --appendfsync everysec
     volumes:
       - redis_data:/data
 
