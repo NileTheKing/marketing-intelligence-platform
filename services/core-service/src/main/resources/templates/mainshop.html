@@ -3,273 +3,179 @@
     layout:decorate="~{layout/default}">
 
 <head>
-    <title>SKU STORE - Home</title>
+    <title>OPENRUN</title>
 </head>
 
 <body>
     <div layout:fragment="content">
-        <div class="w-full">
 
         <!-- Category View -->
-        <div th:if="${selectedCategory != null}" class="max-w-[1200px] mx-auto px-4 py-10">
-            <h2 class="text-3xl font-black mb-8" th:text="${selectedCategory} + ' PRODUCTS'">CATEGORY</h2>
-            <div class="grid grid-cols-4 gap-x-5 gap-y-8">
-                <div th:each="item : ${categoryProducts}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
-                    <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
-                        <img th:src="${item.imageUrl}"
-                            class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                            alt="product">
-                    </div>
-                    <div class="pr-2">
-                        <span class="block text-[13px] font-bold text-black mb-1 underline underline-offset-2"
-                            th:text="${item.brand}">Brand</span>
-                        <div class="text-sm text-dark-gray mb-2 leading-snug" th:text="${item.name}">Product Name</div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-base font-extrabold text-black"
-                                th:text="${item.price} + '원'">10,000원</span>
-                        </div>
-                    </div>
+        <div th:if="${selectedCategory != null}" class="max-w-[1200px] mx-auto px-4 pt-8 pb-16">
+            <h2 class="text-[22px] font-bold mb-6" th:text="${selectedCategoryLabel}">카테고리</h2>
+            <div class="grid grid-cols-5 gap-x-4 gap-y-10">
+                <div th:each="item : ${categoryProducts}">
+                    <a th:replace="~{fragments/product_card :: card(${item}, null)}"></a>
                 </div>
             </div>
-            <div th:if="${#lists.isEmpty(categoryProducts)}" class="text-center py-20 text-gray">
-                <i class="ph ph-warning-circle text-4xl mb-2"></i>
-                <p>해당 카테고리에 등록된 상품이 없습니다.</p>
-            </div>
-            <nav th:if="${hasPrevious or hasNext}" class="flex justify-center gap-4 mt-10" aria-label="상품 목록 페이지">
+            <p th:if="${#lists.isEmpty(categoryProducts)}" class="text-center py-20 text-[#999] text-sm">
+                이 카테고리에 등록된 상품이 없어요.</p>
+            <nav th:if="${hasPrevious or hasNext}" class="flex justify-center items-center gap-2 mt-12 text-sm"
+                aria-label="상품 목록 페이지">
                 <a th:if="${hasPrevious}" th:href="@{/shop(category=${selectedCategory},page=${page - 1})}"
-                    class="px-4 py-2 border rounded">이전</a>
-                <span class="px-4 py-2" th:text="${page + 1}">1</span>
+                    class="h-9 px-4 flex items-center border border-[#ddd] rounded hover:border-black">이전</a>
+                <span class="h-9 px-3 flex items-center font-bold" th:text="${page + 1}">1</span>
                 <a th:if="${hasNext}" th:href="@{/shop(category=${selectedCategory},page=${page + 1})}"
-                    class="px-4 py-2 border rounded">다음</a>
+                    class="h-9 px-4 flex items-center border border-[#ddd] rounded hover:border-black">다음</a>
             </nav>
         </div>
 
-        <!-- Main View (Rankings & Sections) -->
-        <div th:unless="${selectedCategory != null}">
-            <!-- Hero Banner -->
-            <!-- Hero Banner Carousel -->
-            <div class="h-[400px] mx-[3%] mt-[1%] mb-16 rounded-[15px] relative overflow-hidden group">
-                <!-- Carousel Track -->
-                <div id="bannerTrack" class="flex h-full transition-transform duration-700 ease-in-out translate-x-0">
+        <!-- Home -->
+        <div th:unless="${selectedCategory != null}" class="max-w-[1200px] mx-auto px-4 pb-16">
 
-                    <!-- Slide 1 -->
-                    <div class="min-w-full h-full relative">
-                        <div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 hover:scale-105"
-                            style="background-image: url('/image/herobanner/banner1.jpg');"></div>
-                        <div class="absolute inset-0 bg-black/40"></div> <!-- Dark Overlay -->
-                        <div
-                            class="absolute inset-0 flex flex-col items-center justify-center text-center text-white z-10">
-                            <h2 class="text-[56px] font-black leading-[1.1] mb-5 tracking-tighter drop-shadow-lg">
-                                WINTER<br>COLLECTION</h2>
-                            <p class="text-xl font-medium opacity-90 tracking-widest drop-shadow-md">최대 80% 시즌 오프 · SKU
-                                STORE EXCLUSIVE</p>
+            <!-- Banners: 단색 배경 + 상품 사진 -->
+            <section class="grid grid-cols-[1.45fr_1fr] gap-3 pt-5">
+                <a href="/shop?category=FASHION" class="relative h-[340px] rounded-lg overflow-hidden group bg-[#1c1c1c]">
+                    <img src="/image/product/fcfs_padding.jpg" alt=""
+                        class="absolute right-0 top-0 h-full aspect-square object-cover transition-transform duration-500 group-hover:scale-[1.02]">
+                    <div class="absolute inset-y-0 right-[244px] w-24 bg-gradient-to-r from-[#1c1c1c] to-transparent"></div>
+                    <div class="absolute left-9 top-10 text-white">
+                        <p class="text-[13px] font-semibold text-white/60 mb-3">패션</p>
+                        <h2 class="text-[32px] font-bold leading-tight">겨울 아우터<br>모음</h2>
+                        <p class="text-[15px] text-white/70 mt-3">패딩, 코트, 니트</p>
+                    </div>
+                    <span class="absolute left-9 bottom-9 text-[13px] font-semibold text-white border-b border-white/60 pb-0.5">보러 가기</span>
+                </a>
+                <a href="/events" class="relative h-[340px] rounded-lg overflow-hidden group bg-[#d6d5d1]">
+                    <img src="/image/product/fcfs_earbuds.jpg" alt=""
+                        class="absolute -right-6 -bottom-6 w-[260px] h-[260px] object-cover rounded-lg transition-transform duration-500 group-hover:scale-[1.03]">
+                    <div class="absolute left-8 top-10">
+                        <p class="text-[13px] font-semibold text-[#f0302f] mb-3">오픈런</p>
+                        <h2 class="text-[28px] font-bold leading-tight text-black">정해진 시각,<br>한정 수량</h2>
+                        <p class="text-[15px] text-[#555] mt-3">선착순 특가</p>
+                    </div>
+                    <span class="absolute left-8 bottom-9 text-[13px] font-semibold text-black border-b border-black/60 pb-0.5">일정 보기</span>
+                </a>
+            </section>
+
+            <!-- Open Run (FCFS) -->
+            <section th:unless="${#lists.isEmpty(openRuns)}" class="mt-14">
+                <div class="flex items-end justify-between mb-5">
+                    <h3 class="text-[22px] font-bold">오픈런 <span class="ml-1 text-[15px] font-semibold text-[#f0302f]">선착순 한정</span></h3>
+                    <a href="/events" class="text-[13px] text-[#777] hover:text-black">전체보기</a>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <th:block th:each="run : ${openRuns}">
+                        <a th:href="${run.state.name() == 'ENDED'} ? null : @{/campaign-activities/{id}(id=${run.id})}"
+                            class="flex gap-4 p-3 rounded-lg border border-[#ebebeb] bg-white" style="align-items: stretch;"
+                            th:classappend="${run.state.name() == 'ENDED'} ? 'cursor-default' : 'hover:border-black transition-colors'">
+                            <div class="w-[104px] h-[104px] flex-none rounded overflow-hidden bg-[#f3f3f1]">
+                                <img th:if="${run.imageUrl != null}" th:src="${run.imageUrl}" th:alt="${run.title}"
+                                    class="w-full h-full object-cover"
+                                    th:classappend="${run.state.name() == 'ENDED'} ? 'opacity-50 grayscale'">
+                            </div>
+                            <div class="min-w-0 flex flex-col py-0.5" style="align-items: flex-start;">
+                                <div class="text-[14px] text-[#333] leading-snug line-clamp-2" th:text="${run.title}">상품명</div>
+                                <div class="mt-1 flex items-baseline gap-1">
+                                    <span th:if="${run.discountRate > 0}" class="text-[16px] font-bold text-[#f0302f]"
+                                        th:text="${run.discountRate} + '%'">40%</span>
+                                    <span class="text-[16px] font-bold" th:text="${run.price} + '원'">179,000원</span>
+                                </div>
+                                <div class="mt-auto text-[13px] font-semibold" th:switch="${run.state.name()}">
+                                    <span th:case="'OPEN'" class="text-[#f0302f]"
+                                        th:text="'진행 중, 한정 ' + ${#numbers.formatInteger(run.limitCount, 1, 'COMMA')} + '개'">진행 중</span>
+                                    <span th:case="'UPCOMING'" class="text-black js-countdown"
+                                        th:attr="data-start=${run.startDate}"
+                                        th:text="${#temporals.format(run.startDate, 'M월 d일 HH:mm')} + ' 오픈'">오픈 예정</span>
+                                    <span th:case="*" class="text-[#999]"
+                                        th:text="${#temporals.format(run.endDate, 'M월 d일')} + ' 마감'">마감</span>
+                                </div>
+                            </div>
+                        </a>
+                    </th:block>
+                </div>
+            </section>
+
+            <!-- Ranking -->
+            <section class="mt-14" data-tabs>
+                <div class="flex items-end justify-between mb-4">
+                    <h3 class="text-[22px] font-bold">실시간 랭킹</h3>
+                    <span class="text-[13px] text-[#999]" th:text="'최근 ' + ${rankingDays} + '일 판매량 기준'">최근 30일 판매량 기준</span>
+                </div>
+                <div class="flex gap-2 mb-5">
+                    <button th:each="entry, stat : ${rankings}" type="button" data-tab th:attr="data-key=${entry.key}"
+                        th:text="${entry.key == 'ALL'} ? '전체' : ${categories[entry.key]}"
+                        class="h-8 px-3.5 rounded-full border text-[13px] font-semibold"
+                        th:classappend="${stat.first} ? 'is-on'">전체</button>
+                </div>
+                <div th:each="entry, stat : ${rankings}" data-pane th:attr="data-key=${entry.key}"
+                    th:classappend="${stat.first} ? '' : 'hidden'">
+                    <div th:unless="${#lists.isEmpty(entry.value)}" class="grid grid-cols-5 gap-x-4 gap-y-10">
+                        <div th:each="item, i : ${entry.value}">
+                            <a th:replace="~{fragments/product_card :: card(${item}, ${i.count})}"></a>
                         </div>
                     </div>
+                    <p th:if="${#lists.isEmpty(entry.value)}" class="py-16 text-center text-sm text-[#999]"
+                        th:text="'최근 ' + ${rankingDays} + '일 동안 판매 기록이 없어요.'">판매 기록이 없어요.</p>
+                </div>
+            </section>
 
-                    <!-- Slide 2 -->
-                    <div class="min-w-full h-full relative">
-                        <div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 hover:scale-105"
-                            style="background-image: url('/image/herobanner/banner2.jpg');"></div>
-                        <div class="absolute inset-0 bg-black/40"></div> <!-- Dark Overlay -->
-                        <div
-                            class="absolute inset-0 flex flex-col items-center justify-center text-center text-white z-10">
-                            <h2 class="text-[56px] font-black leading-[1.1] mb-5 tracking-tighter drop-shadow-lg">
-                                MERRY<br>CHRISTMAS</h2>
-                            <p class="text-xl font-medium opacity-90 tracking-widest drop-shadow-md">특별한 연말 선물 · HOLIDAY
-                                SPECIAL</p>
-                        </div>
+            <!-- Category Deals -->
+            <section class="mt-14" data-tabs>
+                <div class="flex items-end justify-between mb-4">
+                    <h3 class="text-[22px] font-bold">카테고리 특가</h3>
+                    <a href="/shop?category=DIGITAL" data-more class="text-[13px] text-[#777] hover:text-black">더보기</a>
+                </div>
+                <div class="flex gap-2 mb-5">
+                    <button th:each="entry, stat : ${categoryDeals}" type="button" data-tab th:attr="data-key=${entry.key}"
+                        th:text="${categories[entry.key]}"
+                        class="h-8 px-3.5 rounded-full border text-[13px] font-semibold"
+                        th:classappend="${stat.first} ? 'is-on'">디지털</button>
+                </div>
+                <div th:each="entry, stat : ${categoryDeals}" data-pane th:attr="data-key=${entry.key}"
+                    class="grid grid-cols-4 gap-x-4 gap-y-10" th:classappend="${stat.first} ? '' : 'hidden'">
+                    <div th:each="item : ${entry.value}">
+                        <a th:replace="~{fragments/product_card :: card(${item}, null)}"></a>
                     </div>
-
                 </div>
+            </section>
+        </div>
 
-                <!-- Indicators -->
-                <div class="absolute bottom-5 left-0 right-0 flex justify-center gap-2 z-20">
-                    <button onclick="goToSlide(0)"
-                        class="w-2 h-2 rounded-full bg-white opacity-100 transition-all indicator"></button>
-                    <button onclick="goToSlide(1)"
-                        class="w-2 h-2 rounded-full bg-white/50 hover:bg-white transition-all indicator"></button>
-                </div>
-            </div>
-
-            <script>
-                let currentSlide = 0;
-                const totalSlides = 2;
-                const track = document.getElementById('bannerTrack');
-                const indicators = document.querySelectorAll('.indicator');
-                let slideInterval;
-
-                function updateSlide() {
-                    track.style.transform = `translateX(-${currentSlide * 100}%)`;
-
-                    // Update indicators
-                    indicators.forEach((ind, index) => {
-                        if (index === currentSlide) {
-                            ind.classList.remove('bg-white/50');
-                            ind.classList.add('bg-white', 'w-6'); // Active state
-                        } else {
-                            ind.classList.add('bg-white/50');
-                            ind.classList.remove('bg-white', 'w-6');
-                        }
+        <style>
+            [data-tab] { border-color: #ddd; color: #555; background: #fff; }
+            [data-tab]:hover { border-color: #111; }
+            [data-tab].is-on { background: #111; border-color: #111; color: #fff; }
+        </style>
+        <script>
+            document.querySelectorAll('[data-tabs]').forEach(function (section) {
+                section.querySelectorAll('[data-tab]').forEach(function (tab) {
+                    tab.addEventListener('click', function () {
+                        var key = tab.dataset.key;
+                        section.querySelectorAll('[data-tab]').forEach(function (t) {
+                            t.classList.toggle('is-on', t === tab);
+                        });
+                        section.querySelectorAll('[data-pane]').forEach(function (pane) {
+                            pane.classList.toggle('hidden', pane.dataset.key !== key);
+                        });
+                        var more = section.querySelector('[data-more]');
+                        if (more) more.href = '/shop?category=' + key;
                     });
+                });
+            });
+
+            // 오픈 24시간 전부터는 남은 시간을 초 단위로 보여준다.
+            document.querySelectorAll('.js-countdown').forEach(function (el) {
+                var start = new Date(el.dataset.start).getTime();
+                function tick() {
+                    var left = Math.floor((start - Date.now()) / 1000);
+                    if (left <= 0) { el.textContent = '지금 오픈'; el.style.color = '#f0302f'; return; }
+                    if (left > 86400) return;
+                    var pad = function (n) { return String(n).padStart(2, '0'); };
+                    el.textContent = '오픈까지 ' + pad(Math.floor(left / 3600)) + ':' + pad(Math.floor(left % 3600 / 60)) + ':' + pad(left % 60);
+                    setTimeout(tick, 1000);
                 }
-
-                function nextSlide() {
-                    currentSlide = (currentSlide + 1) % totalSlides;
-                    updateSlide();
-                }
-
-                function goToSlide(index) {
-                    currentSlide = index;
-                    updateSlide();
-                    resetInterval();
-                }
-
-                function resetInterval() {
-                    clearInterval(slideInterval);
-                    slideInterval = setInterval(nextSlide, 5000); // 5 seconds
-                }
-
-                // Start auto-slide
-                resetInterval();
-            </script>
-
-            <!-- Ranking Section -->
-            <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
-                <h3 class="text-2xl font-extrabold text-black tracking-tight">실시간 랭킹</h3>
-            </div>
-
-            <div class="grid grid-cols-5 gap-x-5 gap-y-8 mb-24 mx-[3%]">
-                <div th:each="item, stat : ${rankings}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
-                    <div class="w-full aspect-[3/4] bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
-                        <div class="absolute top-0 left-0 bg-black text-white w-9 h-9 flex items-center justify-center font-extrabold text-lg z-10"
-                            th:text="${stat.count}">1</div>
-                        <img th:src="${item.imageUrl}"
-                            class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                            alt="product">
-                    </div>
-                    <div class="pr-2">
-                        <span class="block text-[13px] font-bold text-black mb-1 underline underline-offset-2"
-                            th:text="${item.brand}">Brand</span>
-                        <div class="text-sm text-dark-gray mb-2 leading-snug h-10 overflow-hidden line-clamp-2"
-                            th:text="${item.name}">Product Name</div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-base font-extrabold text-black"
-                                th:text="${item.price} + '원'">10,000원</span>
-                            <span class="text-base font-extrabold text-danger" th:if="${item.discountRate > 0}"
-                                th:text="${item.discountRate} + '%'">10%</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tech Section -->
-            <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
-                <h3 class="text-2xl font-extrabold text-black tracking-tight">테크 특가</h3>
-                <a href="/shop?category=TECH"
-                    class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
-            </div>
-            <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
-                <div th:each="item : ${techDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
-                    <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
-                        <img th:src="${item.imageUrl}"
-                            class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                            alt="product">
-                    </div>
-                    <div class="pr-2">
-                        <span class="block text-[13px] font-bold text-black mb-1 underline underline-offset-2"
-                            th:text="${item.brand}">Brand</span>
-                        <div class="text-sm text-dark-gray mb-2 leading-snug" th:text="${item.name}">Product Name</div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-base font-extrabold text-black"
-                                th:text="${item.price} + '원'">10,000원</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Food Section -->
-            <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
-                <h3 class="text-2xl font-extrabold text-black tracking-tight">푸드 특가</h3>
-                <a href="/shop?category=FOOD"
-                    class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
-            </div>
-            <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
-                <div th:each="item : ${foodDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
-                    <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
-                        <img th:src="${item.imageUrl}"
-                            class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                            alt="product">
-                    </div>
-                    <div class="pr-2">
-                        <span class="block text-[13px] font-bold text-black mb-1 underline underline-offset-2"
-                            th:text="${item.brand}">Brand</span>
-                        <div class="text-sm text-dark-gray mb-2 leading-snug" th:text="${item.name}">Product Name</div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-base font-extrabold text-black"
-                                th:text="${item.price} + '원'">10,000원</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Fashion Section -->
-            <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
-                <h3 class="text-2xl font-extrabold text-black tracking-tight">패션 특가</h3>
-                <a href="/shop?category=FASHION"
-                    class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
-            </div>
-            <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
-                <div th:each="item : ${fashionDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
-                    <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
-                        <img th:src="${item.imageUrl}"
-                            class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                            alt="product">
-                    </div>
-                    <div class="pr-2">
-                        <span class="block text-[13px] font-bold text-black mb-1 underline underline-offset-2"
-                            th:text="${item.brand}">Brand</span>
-                        <div class="text-sm text-dark-gray mb-2 leading-snug" th:text="${item.name}">Product Name</div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-base font-extrabold text-black"
-                                th:text="${item.price} + '원'">10,000원</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Home Section -->
-            <div class="flex justify-between items-end mb-8 pb-4 border-b-2 border-black mx-[3%]">
-                <h3 class="text-2xl font-extrabold text-black tracking-tight">홈/리빙 특가</h3>
-                <a href="/shop?category=HOME"
-                    class="text-sm text-gray font-semibold hover:text-black transition-colors">더보기 ></a>
-            </div>
-            <div class="grid grid-cols-4 gap-x-5 gap-y-8 mb-24 mx-[3%]">
-                <div th:each="item : ${homeDeals}" class="group cursor-pointer"
-                    th:onclick="'location.href=\'/products/' + ${item.id} + '\''">
-                    <div class="w-full aspect-square bg-[#f4f4f4] mb-4 overflow-hidden relative rounded-sm">
-                        <img th:src="${item.imageUrl}"
-                            class="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                            alt="product">
-                    </div>
-                    <div class="pr-2">
-                        <span class="block text-[13px] font-bold text-black mb-1 underline underline-offset-2"
-                            th:text="${item.brand}">Brand</span>
-                        <div class="text-sm text-dark-gray mb-2 leading-snug" th:text="${item.name}">Product Name</div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-base font-extrabold text-black"
-                                th:text="${item.price} + '원'">10,000원</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-        </div>
+                tick();
+            });
+        </script>
     </div>
 </body>
 

@@ -5,6 +5,7 @@ import com.axon.core_service.coupon.CouponService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +14,10 @@ import com.axon.core_service.catalog.domain.Product;
 import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.catalog.ProductRepository;
 import com.axon.core_service.coupon.UserCouponRepository;
+import com.axon.core_service.campaign.domain.CampaignActivity;
+import com.axon.core_service.campaign.dto.CampaignActivityStatus;
+import com.axon.core_service.repository.PurchaseRepository;
+import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.List;
@@ -32,6 +37,7 @@ class StoreViewServiceTest {
     @Mock private ProductRepository productRepository;
     @Mock private UserCouponRepository userCouponRepository;
     @Mock private CouponService couponService;
+    @Mock private PurchaseRepository purchaseRepository;
     @Mock private Product product;
 
     @Test
@@ -70,27 +76,57 @@ class StoreViewServiceTest {
     }
 
     @Test
-    void homeLoadsFourLimitedCategoriesAndPreservesTheConfiguredRankingOrder() {
+    void homeRanksBySalesOrderAndLoadsEveryShopCategory() {
+        when(purchaseRepository.findTopSellingProductIds(any(), any(), any(), any())).thenReturn(List.of());
+        when(purchaseRepository.findTopSellingProductIds(any(), any(), isNull(), any()))
+                .thenReturn(List.of(40L, 1L, 16L));
         Product rankingForty = rankingProduct(40L);
         Product rankingOne = rankingProduct(1L);
         Product rankingSixteen = rankingProduct(16L);
-        when(productRepository.findAllByIdInAndCampaignOnlyFalse(List.of(1L, 16L, 31L, 46L, 40L)))
-                .thenReturn(List.of(rankingForty, rankingSixteen, rankingOne));
-        for (String category : List.of("TECH", "FOOD", "HOME", "FASHION")) {
-            when(productRepository.findByCampaignOnlyFalseAndCategoryIgnoreCase(
-                    org.mockito.ArgumentMatchers.eq(category), any()))
-                    .thenReturn(new SliceImpl<>(List.of(), PageRequest.of(0, 4), false));
-        }
+        when(productRepository.findAllByIdInAndCampaignOnlyFalse(List.of(40L, 1L, 16L)))
+                .thenReturn(List.of(rankingOne, rankingSixteen, rankingForty));
+        when(productRepository.findAllByIdInAndCampaignOnlyFalse(List.of())).thenReturn(List.of());
 
         var view = service().getMainShopViewData(null, 0);
 
-        assertThat(view.getRankings()).extracting(StoreViewService.ProductDisplayDto::getId)
-                .containsExactly(1L, 16L, 40L);
-        verify(productRepository, org.mockito.Mockito.never()).findByCampaignOnlyFalse(any());
-        for (String category : List.of("TECH", "FOOD", "HOME", "FASHION")) {
-            verify(productRepository).findByCampaignOnlyFalseAndCategoryIgnoreCase(
-                    org.mockito.ArgumentMatchers.eq(category), any());
+        assertThat(view.getRankings().get("ALL")).extracting(StoreViewService.ProductDisplayDto::getId)
+                .containsExactly(40L, 1L, 16L);
+        assertThat(view.getRankings().keySet())
+                .containsExactly("ALL", "DIGITAL", "FASHION", "BEAUTY", "LIVING", "FOOD");
+        for (String category : StoreViewService.SHOP_CATEGORIES.keySet()) {
+            verify(productRepository).findTop20ByCampaignOnlyFalseAndCategoryOrderByDiscountRateDescIdAsc(category);
         }
+    }
+
+    @Test
+    void openRunsShowOpenThenUpcomingThenRecentlyEnded() {
+        LocalDateTime now = LocalDateTime.now();
+        CampaignActivity endedEarlier = fcfs(1L, CampaignActivityStatus.ENDED, now.minusDays(9), now.minusDays(5));
+        CampaignActivity endedLater = fcfs(2L, CampaignActivityStatus.ENDED, now.minusDays(9), now.minusDays(1));
+        CampaignActivity upcoming = fcfs(3L, CampaignActivityStatus.ACTIVE, now.plusHours(2), now.plusDays(1));
+        CampaignActivity open = fcfs(4L, CampaignActivityStatus.ACTIVE, now.minusHours(1), now.plusHours(5));
+        when(campaignActivityRepository.findAllByActivityTypeAndStatusIn(any(), any()))
+                .thenReturn(List.of(endedEarlier, upcoming, endedLater, open));
+        when(purchaseRepository.findTopSellingProductIds(any(), any(), any(), any())).thenReturn(List.of());
+
+        var view = service().getMainShopViewData(null, 0);
+
+        assertThat(view.getOpenRuns()).extracting(StoreViewService.OpenRunDisplayDto::getId)
+                .containsExactly(4L, 3L, 2L);
+        assertThat(view.getOpenRuns().get(0).getDiscountRate()).isEqualTo(40);
+    }
+
+    private CampaignActivity fcfs(Long id, CampaignActivityStatus status, LocalDateTime start, LocalDateTime end) {
+        CampaignActivity activity = mock(CampaignActivity.class);
+        org.mockito.Mockito.lenient().when(activity.getId()).thenReturn(id);
+        org.mockito.Mockito.lenient().when(activity.getName()).thenReturn("run-" + id);
+        org.mockito.Mockito.lenient().when(activity.getStatus()).thenReturn(status);
+        org.mockito.Mockito.lenient().when(activity.getStartDate()).thenReturn(start);
+        org.mockito.Mockito.lenient().when(activity.getEndDate()).thenReturn(end);
+        org.mockito.Mockito.lenient().when(activity.getPrice()).thenReturn(new BigDecimal("60000"));
+        org.mockito.Mockito.lenient().when(activity.getProduct())
+                .thenReturn(new Product("p", 1L, new BigDecimal("100000"), "DIGITAL", "brand", 0));
+        return activity;
     }
 
     private Product rankingProduct(Long id) {
@@ -105,6 +141,6 @@ class StoreViewServiceTest {
 
     private StoreViewService service() {
         return new StoreViewService(campaignActivityRepository, productRepository, userCouponRepository,
-                couponService);
+                couponService, purchaseRepository);
     }
 }

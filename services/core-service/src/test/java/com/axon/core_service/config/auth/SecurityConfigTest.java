@@ -72,8 +72,16 @@ class SecurityConfigTest {
     }
 
     @Test
-    void anonymousBrowserRequestStillStartsOAuthLogin() throws Exception {
+    void storefrontDetailAndOpenRunPagesArePublic() throws Exception {
         mockMvc.perform(get("/products/1"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/events"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void anonymousBrowserRequestStillStartsOAuthLogin() throws Exception {
+        mockMvc.perform(get("/mypage"))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost/oauth2/authorization/naver"));
     }
