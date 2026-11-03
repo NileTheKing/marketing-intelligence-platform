@@ -68,4 +68,9 @@ class SecurityProbeController {
     String productPage() {
         return "ok";
     }
+
+    @GetMapping("/events")
+    String eventsPage() {
+        return "ok";
+    }
 }

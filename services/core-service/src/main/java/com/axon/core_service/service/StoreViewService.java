@@ -16,11 +16,15 @@ import com.axon.core_service.exception.CampaignActivityNotFoundException;
 import com.axon.core_service.exception.InvalidRequestException;
 import com.axon.core_service.campaign.CampaignActivityRepository;
 import com.axon.core_service.catalog.ProductRepository;
+import com.axon.core_service.domain.purchase.PurchaseStatus;
+import com.axon.core_service.repository.PurchaseRepository;
 import com.axon.core_service.coupon.UserCouponRepository;
 import com.axon.messaging.CampaignActivityType;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.List;
@@ -41,12 +45,18 @@ import org.springframework.data.domain.Sort;
 @Slf4j
 public class StoreViewService {
 
-    private static final List<Long> RANKING_PRODUCT_IDS = List.of(1L, 16L, 31L, 46L, 40L);
+    public static final Map<String, String> SHOP_CATEGORIES = categoryLabels();
+    private static final int RANKING_DAYS = 30;
+    private static final int RANKING_SIZE = 5;
+    private static final int DEAL_SIZE = 4;
+    private static final int OPEN_RUN_SIZE = 3;
+    private static final int OPEN_RUN_PAGE_SIZE = 24;
 
     private final CampaignActivityRepository campaignActivityRepository;
     private final ProductRepository productRepository;
     private final UserCouponRepository userCouponRepository;
     private final CouponService couponService;
+    private final PurchaseRepository purchaseRepository;
 
     @Transactional(readOnly = true)
     public MainShopViewData getMainShopViewData(String category, int page) {
@@ -55,28 +65,114 @@ public class StoreViewService {
             ProductListResponse products = getProductList(normalizedCategory, page, 20);
             return MainShopViewData.builder()
                     .selectedCategory(normalizedCategory)
+                    .selectedCategoryLabel(SHOP_CATEGORIES.getOrDefault(normalizedCategory.toUpperCase(), normalizedCategory))
                     .categoryProducts(products.items().stream().map(this::toDisplayDto).toList())
                     .page(products.page())
                     .hasNext(products.hasNext())
                     .build();
         }
 
-        Map<Long, ProductDisplayDto> ranked = productRepository
-                .findAllByIdInAndCampaignOnlyFalse(RANKING_PRODUCT_IDS).stream()
-                .map(this::convertToProductDto)
-                .collect(Collectors.toMap(ProductDisplayDto::getId, Function.identity()));
-        List<ProductDisplayDto> rankings = RANKING_PRODUCT_IDS.stream()
-                .map(ranked::get)
-                .filter(java.util.Objects::nonNull)
-                .toList();
+        Map<String, List<ProductDisplayDto>> rankings = new LinkedHashMap<>();
+        rankings.put("ALL", topSellingProducts(null));
+        Map<String, List<ProductDisplayDto>> categoryDeals = new LinkedHashMap<>();
+        for (String key : SHOP_CATEGORIES.keySet()) {
+            rankings.put(key, topSellingProducts(key));
+            categoryDeals.put(key, productRepository
+                    .findTop20ByCampaignOnlyFalseAndCategoryOrderByDiscountRateDescIdAsc(key).stream()
+                    .map(this::convertToProductDto)
+                    .filter(distinctPhoto())
+                    .limit(DEAL_SIZE)
+                    .toList());
+        }
 
         return MainShopViewData.builder()
                 .rankings(rankings)
-                .techDeals(homeCategoryProducts("TECH"))
-                .foodDeals(homeCategoryProducts("FOOD"))
-                .homeDeals(homeCategoryProducts("HOME"))
-                .fashionDeals(homeCategoryProducts("FASHION"))
+                .rankingDays(RANKING_DAYS)
+                .categoryDeals(categoryDeals)
+                .openRuns(openRuns(OPEN_RUN_SIZE))
                 .build();
+    }
+
+    // 같은 상태 안에서는 진행 중과 예정은 시작 시각 순, 마감은 최근 마감 순
+    private static int compareWithinState(OpenRunDisplayDto a, OpenRunDisplayDto b) {
+        return a.getState() == OpenRunState.ENDED
+                ? b.getEndDate().compareTo(a.getEndDate())
+                : a.getStartDate().compareTo(b.getStartDate());
+    }
+
+    private OpenRunDisplayDto toOpenRun(CampaignActivity activity, LocalDateTime now) {
+        OpenRunState state;
+        if (activity.getStatus() == CampaignActivityStatus.ENDED || activity.getEndDate().isBefore(now)) {
+            state = OpenRunState.ENDED;
+        } else if (activity.getStartDate().isAfter(now)) {
+            state = OpenRunState.UPCOMING;
+        } else {
+            state = OpenRunState.OPEN;
+        }
+        BigDecimal listPrice = activity.getProduct() != null ? activity.getProduct().getPrice() : activity.getPrice();
+        int discountRate = listPrice.signum() > 0
+                ? listPrice.subtract(activity.getPrice()).multiply(BigDecimal.valueOf(100))
+                        .divide(listPrice, 0, java.math.RoundingMode.DOWN).intValue()
+                : 0;
+        return OpenRunDisplayDto.builder()
+                .id(activity.getId())
+                .title(activity.getName())
+                .imageUrl(activity.getImageUrl())
+                .price(NumberFormat.getInstance(Locale.KOREA).format(activity.getPrice()))
+                .discountRate(Math.max(discountRate, 0))
+                .limitCount(activity.getLimitCount() != null ? activity.getLimitCount() : 0)
+                .startDate(activity.getStartDate())
+                .endDate(activity.getEndDate())
+                .state(state)
+                .build();
+    }
+
+    private static Map<String, String> categoryLabels() {
+        Map<String, String> labels = new LinkedHashMap<>();
+        labels.put("DIGITAL", "디지털");
+        labels.put("FASHION", "패션");
+        labels.put("BEAUTY", "뷰티");
+        labels.put("LIVING", "리빙");
+        labels.put("FOOD", "푸드");
+        return java.util.Collections.unmodifiableMap(labels);
+    }
+
+    // 최근 판매 수량 순. 구매 기록이 없는 기간이면 빈 목록이 된다.
+    private List<ProductDisplayDto> topSellingProducts(String category) {
+        List<Long> ids = purchaseRepository.findTopSellingProductIds(PurchaseStatus.CONFIRMED,
+                LocalDateTime.now().minusDays(RANKING_DAYS), category, PageRequest.of(0, RANKING_SIZE * 4));
+        Map<Long, ProductDisplayDto> products = productRepository.findAllByIdInAndCampaignOnlyFalse(ids).stream()
+                .map(this::convertToProductDto)
+                .collect(Collectors.toMap(ProductDisplayDto::getId, Function.identity()));
+        return ids.stream().map(products::get).filter(java.util.Objects::nonNull)
+                .filter(distinctPhoto())
+                .limit(RANKING_SIZE)
+                .toList();
+    }
+
+    // 같은 품목은 사진을 같이 쓰므로, 메인 목록에서는 사진이 겹치는 상품을 한 번만 보여준다.
+    private static java.util.function.Predicate<ProductDisplayDto> distinctPhoto() {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        return p -> p.getImageUrl() == null || seen.add(p.getImageUrl());
+    }
+
+    // 진행 중, 오픈 예정, 최근 마감 순으로 선착순 판매를 보여준다.
+    // 오픈런 페이지는 메인과 같은 순서로 더 많이 보여준다.
+    @Transactional(readOnly = true)
+    public List<OpenRunDisplayDto> getOpenRuns() {
+        return openRuns(OPEN_RUN_PAGE_SIZE);
+    }
+
+    private List<OpenRunDisplayDto> openRuns(int limit) {
+        LocalDateTime now = LocalDateTime.now();
+        return campaignActivityRepository.findAllByActivityTypeAndStatusIn(
+                        CampaignActivityType.FIRST_COME_FIRST_SERVE,
+                        List.of(CampaignActivityStatus.ACTIVE, CampaignActivityStatus.ENDED)).stream()
+                .map(activity -> toOpenRun(activity, now))
+                .sorted(Comparator.comparing(OpenRunDisplayDto::getState)
+                        .thenComparing(StoreViewService::compareWithinState))
+                .limit(limit)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -104,12 +200,6 @@ public class StoreViewService {
                 : productRepository.findByCampaignOnlyFalseAndCategoryIgnoreCase(category, pageable);
     }
 
-    private List<ProductDisplayDto> homeCategoryProducts(String category) {
-        return productSlice(category, 0, 4).getContent().stream()
-                .map(this::convertToProductDto)
-                .toList();
-    }
-
     private String normalizeCategory(String category) {
         if (category == null || category.isBlank()) {
             return null;
@@ -126,7 +216,7 @@ public class StoreViewService {
         }
         return new ProductListItemDto(
                 product.getId(), product.getProductName(),
-                product.getBrand() != null ? product.getBrand() : "SKU STORE",
+                product.getBrand() != null ? product.getBrand() : "OPENRUN",
                 product.getCategory(), imagePath, originalPrice, sellingPrice,
                 product.getDiscountRate() != null ? product.getDiscountRate() : 0);
     }
@@ -145,6 +235,16 @@ public class StoreViewService {
         Product product = productRepository.findByIdAndCampaignOnlyFalse(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
         return convertToProductDto(product);
+    }
+
+    // 상세 하단의 같은 카테고리 인기 상품. 보고 있는 상품과 사진이 같은 상품은 뺀다.
+    @Transactional(readOnly = true)
+    public List<ProductDisplayDto> getRelatedProducts(ProductDisplayDto product) {
+        return topSellingProducts(product.getCategory()).stream()
+                .filter(p -> !p.getId().equals(product.getId())
+                        && !java.util.Objects.equals(p.getImageUrl(), product.getImageUrl()))
+                .limit(DEAL_SIZE)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -177,10 +277,6 @@ public class StoreViewService {
                 .filter(dto -> dto != null)
                 .collect(Collectors.toList());
 
-        List<CampaignActivityDisplayDto> fcfsActivities = allActivities.stream()
-                .filter(activity -> activity.getActivityType() == CampaignActivityType.FIRST_COME_FIRST_SERVE)
-                .collect(Collectors.toList());
-
         List<CampaignActivityDisplayDto> raffleActivities = allActivities.stream()
                 .filter(activity -> activity.getActivityType() == CampaignActivityType.GIVEAWAY)
                 .collect(Collectors.toList());
@@ -194,7 +290,6 @@ public class StoreViewService {
                 : List.of();
 
         return CampaignActivitiesViewData.builder()
-                .fcfsCampaignActivities(fcfsActivities)
                 .raffleCampaignActivities(raffleActivities)
                 .coupons(couponActivities)
                 .issuedCouponIds(issuedCouponIds)
@@ -274,7 +369,7 @@ public class StoreViewService {
         return ProductDisplayDto.builder()
                 .id(product.getId())
                 .name(product.getProductName())
-                .brand(product.getBrand() != null ? product.getBrand() : "SKU STORE")
+                .brand(product.getBrand() != null ? product.getBrand() : "OPENRUN")
                 .price(currency.format(sellingPrice))
                 .rawPrice(sellingPrice)
                 .originalPrice(currency.format(originalPrice))
@@ -331,15 +426,33 @@ public class StoreViewService {
     @Getter
     @Builder
     public static class MainShopViewData {
-        private List<ProductDisplayDto> rankings;
+        private Map<String, List<ProductDisplayDto>> rankings;
+        private int rankingDays;
+        private Map<String, List<ProductDisplayDto>> categoryDeals;
+        private List<OpenRunDisplayDto> openRuns;
         private String selectedCategory;
+        private String selectedCategoryLabel;
         private List<ProductDisplayDto> categoryProducts;
         private int page;
         private boolean hasNext;
-        private List<ProductDisplayDto> techDeals;
-        private List<ProductDisplayDto> foodDeals;
-        private List<ProductDisplayDto> homeDeals;
-        private List<ProductDisplayDto> fashionDeals;
+    }
+
+    public enum OpenRunState {
+        OPEN, UPCOMING, ENDED
+    }
+
+    @Getter
+    @Builder
+    public static class OpenRunDisplayDto {
+        private Long id;
+        private String title;
+        private String imageUrl;
+        private String price;
+        private int discountRate;
+        private int limitCount;
+        private LocalDateTime startDate;
+        private LocalDateTime endDate;
+        private OpenRunState state;
     }
 
     @Getter
@@ -352,7 +465,6 @@ public class StoreViewService {
     @Getter
     @Builder
     public static class CampaignActivitiesViewData {
-        private List<CampaignActivityDisplayDto> fcfsCampaignActivities;
         private List<CampaignActivityDisplayDto> raffleCampaignActivities;
         private List<CampaignActivityDisplayDto> coupons;
         private List<Long> issuedCouponIds;

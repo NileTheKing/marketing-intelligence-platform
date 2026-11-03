@@ -4,6 +4,7 @@ import com.axon.core_service.domain.purchase.Purchase;
 import com.axon.core_service.domain.purchase.PurchaseType;
 import com.axon.core_service.domain.purchase.PurchaseStatus;
 import com.axon.core_service.domain.dto.user.UserRfmMetricsDto;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +13,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
+
+        // 쇼핑몰 랭킹: 기간 내 판매 수량이 많은 일반 상품 순 (category가 null이면 전체)
+        @Query("SELECT p.productId FROM Purchase p JOIN Product pr ON pr.id = p.productId " +
+                        "WHERE pr.campaignOnly = false AND p.status = :status AND p.purchaseAt >= :since " +
+                        "AND (:category IS NULL OR pr.category = :category) " +
+                        "GROUP BY p.productId ORDER BY SUM(p.quantity) DESC, p.productId ASC")
+        List<Long> findTopSellingProductIds(@Param("status") PurchaseStatus status,
+                        @Param("since") LocalDateTime since,
+                        @Param("category") String category,
+                        Pageable pageable);
 
         // 사용자별 구매 내역 조회
         List<Purchase> findByUserId(Long userId);

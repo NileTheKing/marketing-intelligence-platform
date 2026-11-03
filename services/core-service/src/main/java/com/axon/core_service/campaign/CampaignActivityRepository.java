@@ -3,6 +3,7 @@ package com.axon.core_service.campaign;
 import com.axon.core_service.campaign.domain.CampaignActivity;
 import com.axon.core_service.campaign.dto.CampaignActivityStatus;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import com.axon.messaging.CampaignActivityType;
@@ -32,6 +33,10 @@ public interface CampaignActivityRepository extends JpaRepository<CampaignActivi
 
     @EntityGraph(attributePaths = {"product", "coupon"})
     List<CampaignActivity> findAllByStatus(CampaignActivityStatus status);
+
+    @EntityGraph(attributePaths = {"product"})
+    List<CampaignActivity> findAllByActivityTypeAndStatusIn(CampaignActivityType activityType,
+            Collection<CampaignActivityStatus> statuses);
 
     @Query("SELECT ca.id FROM CampaignActivity ca WHERE ca.status = :status")
     List<Long> findIdsByStatus(@Param("status") CampaignActivityStatus status);
