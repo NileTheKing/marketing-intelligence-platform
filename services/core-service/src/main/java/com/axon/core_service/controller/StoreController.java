@@ -105,6 +105,7 @@ public class StoreController {
         }
 
         model.addAttribute("campaignActivity", campaignActivity);
+        model.addAttribute("navActive", "OPENRUN");
         return "entry";
     }
 
