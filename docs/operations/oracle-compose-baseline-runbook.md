@@ -190,6 +190,9 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
 - 운영에서 주문서와 결제 완료까지의 구매 흐름은 이 기록 시점에 확인하지 않았다.
   같은 화면의 구매 흐름은 로컬에서 Entry와 함께 확인했다.
 - 로그인하지 않은 방문자가 활동 상세를 열면 네이버 로그인으로 이동한다.
+- 같은 날 `05a7819`로 Core를 다시 교체했다(`main`은 `bdeb115`). 관리자 데모에서 선착순 상세가 403으로
+  막히던 것을 허용 목록에 추가했다. 이전 이미지는 `axon-core-demo-fix-rollback:20261105`다.
+  데모 쿠키로 공개 주소의 `/campaign-activities/6` 200, `/mypage` 403, 쿠키만으로 보낸 `POST /api/v1/entries` 401을 확인했다.
 
 ## 네이버 로그인 환경변수
 
