@@ -39,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -233,7 +235,7 @@ public class StoreViewService {
     @Transactional(readOnly = true)
     public ProductDisplayDto getProductDisplay(Long productId) {
         Product product = productRepository.findByIdAndCampaignOnlyFalse(productId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found: " + productId));
         return convertToProductDto(product);
     }
 

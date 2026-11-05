@@ -24,6 +24,8 @@ import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -137,6 +139,15 @@ class StoreViewServiceTest {
         when(product.getBrand()).thenReturn("brand");
         when(product.getCategory()).thenReturn("TECH");
         return product;
+    }
+
+    @Test
+    void productDisplayReturnsNotFoundForMissingOrCampaignOnlyProduct() {
+        when(productRepository.findByIdAndCampaignOnlyFalse(301L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().getProductDisplay(301L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     private StoreViewService service() {
