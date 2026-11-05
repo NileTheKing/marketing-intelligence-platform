@@ -45,6 +45,7 @@ class AdminDemoIntegrationTest extends AbstractIntegrationTest {
             mockMvc.perform(get(path).cookie(cookie)).andExpect(status().isOk());
         }
         mockMvc.perform(get("/events").cookie(cookie)).andExpect(status().isOk());
+        mockMvc.perform(get("/campaign-activities/1").cookie(cookie)).andExpect(status().isOk());
     }
 
     @Test

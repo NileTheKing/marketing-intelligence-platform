@@ -16,7 +16,7 @@ public final class AdminDemoAccess {
             + "|campaign-activities(?:/\\d+|/count)?|coupons(?:/\\d+)?|events(?:/\\d+|/active)?"
             + "|dashboard/(?:overview|(?:activity|campaign)/\\d+|cohort/activity/\\d+"
             + "|campaign-runs/\\d+/incrementality|stream/(?:activity|campaign)/\\d+))");
-    private static final Pattern PRODUCT_PAGE = Pattern.compile("/products/\\d+");
+    private static final Pattern STORE_DETAIL_PAGE = Pattern.compile("/(?:products|campaign-activities)/\\d+");
     private static final Pattern DASHBOARD_PAGE = Pattern.compile(
             "/admin/(?:dashboard/(?:\\d+|cohort/\\d+|campaign/\\d+)|campaign-runs/\\d+/incrementality)");
 
@@ -34,7 +34,7 @@ public final class AdminDemoAccess {
         }
         String path = request.getRequestURI().substring(request.getContextPath().length());
         return PAGES.contains(path) || READ_API.matcher(path).matches() || DASHBOARD_PAGE.matcher(path).matches()
-                || PRODUCT_PAGE.matcher(path).matches()
+                || STORE_DETAIL_PAGE.matcher(path).matches()
                 || path.startsWith("/js/") || path.startsWith("/css/")
                 || path.startsWith("/image/") || path.startsWith("/images/") || path.equals("/favicon.ico");
     }
