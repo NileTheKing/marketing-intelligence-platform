@@ -196,6 +196,9 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
 - 이어서 `9feb6c8`로 Core를 다시 교체했다(`main`은 `200a830`). 브라우저의 403 화면을 Whitelabel 대신
   `error/403.html` 안내로 표시한다. 이전 이미지는 `axon-core-forbidden-page-rollback:20261105`다.
   데모 쿠키로 공개 주소의 `/mypage`, `/cart`에서 403과 안내 문구를 확인했다. 일반 계정 문구는 로컬에서만 확인했다.
+- 마지막으로 데모 계정 표시를 "데모 계정"으로 바꾸고, 없는 상품과 선착순 전용 상품의 상세를 500 대신
+  404 안내 화면으로 처리했다. 이전 이미지는 `axon-core-product-404-rollback:20261105`다.
+  공개 주소의 `/products/301`, `/products/999999` 404와 데모 표시를 확인했다.
 
 ## 네이버 로그인 환경변수
 
