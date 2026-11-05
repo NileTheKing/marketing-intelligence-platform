@@ -187,8 +187,8 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   깨진 이미지 0개, 활동 6의 진행 중 표시를 확인했다.
 - 교체 전후 CPU 제한은 같다. Core 환경변수 해시는 달라졌고, 이미지의 `JAVA_VERSION`이 다른 것을
   확인했다. `compose` 파일과 `.env`는 바뀌지 않았지만 교체 전 값을 항목별로 대조하지는 못했다.
-- 운영에서 주문서와 결제 완료까지의 구매 흐름은 이 기록 시점에 확인하지 않았다.
-  같은 화면의 구매 흐름은 로컬에서 Entry와 함께 확인했다.
+- 운영 구매 흐름은 네이버 로그인 계정으로 확인했다. 구매와 참여 기록, Redis 카운터가 각각
+  1,042건으로 일치한다. 남은 수량은 19개다.
 - 로그인하지 않은 방문자가 활동 상세를 열면 네이버 로그인으로 이동한다.
 - 같은 날 `05a7819`로 Core를 다시 교체했다(`main`은 `bdeb115`). 관리자 데모에서 선착순 상세가 403으로
   막히던 것을 허용 목록에 추가했다. 이전 이미지는 `axon-core-demo-fix-rollback:20261105`다.
@@ -199,6 +199,10 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
 - 마지막으로 데모 계정 표시를 "데모 계정"으로 바꾸고, 없는 상품과 선착순 전용 상품의 상세를 500 대신
   404 안내 화면으로 처리했다. 이전 이미지는 `axon-core-product-404-rollback:20261105`다.
   공개 주소의 `/products/301`, `/products/999999` 404와 데모 표시를 확인했다.
+- 네이버 로그인 복구: 10월 24일 시연 데이터 전환 때 보존한 로그인 계정에 `user_summary` 행이 없어 콜백이
+  500으로 실패했다. `User.userSummary`가 `optional = false`라 `save()`의 병합 조회에서 사용자를 찾지 못한다.
+  백업 후 이 계정의 빈 행 1개를 추가해 요약 행이 없는 계정을 0개로 맞췄다. 코드는 바꾸지 않았다.
+  `user_summary` 백업은 같은 배포 백업 디렉터리에 있다.
 
 ## 네이버 로그인 환경변수
 
