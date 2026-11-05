@@ -170,6 +170,27 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   쿠폰을 실제 발급하는 운영 smoke는 실행하지 않았다. 동시 구매·멱등성은 로컬 격리 DB 테스트 근거다.
 - 공개 HTTPS `/shop`, `/js/shop-checkout.js`의 200 응답을 확인했다. 실제 PG 연동은 여전히 없다.
 
+## 2026-11-05 쇼핑몰 화면과 구매 흐름 배포
+
+- 배포 코드: `3047464` (`deploy/storefront-20261105`). VM의 `da578e7`에 쇼핑몰 화면 커밋 2개만
+  얹은 브랜치이며, 같은 변경은 `main`의 `973c53f`에 합쳤다. `main`의 PR #4, #5 코드는 VM에 없다.
+- Core만 재빌드, 재생성하고 nginx를 재시작했다. Entry, MySQL, Redis, Kafka는 재생성하지 않았다.
+  VM 저장소는 이 배포 브랜치에 있으므로, 다음 배포 전 `main`으로 돌아가 PR #4, #5 포함 여부를 정한다.
+- 이전 Core 이미지는 `axon-core-storefront-rollback:20261105`로 보관했다. 교체 전 커밋과
+  `products`, `campaign_activities` 덤프는 VM의 `.git/deploy-backups/20261105-storefront`에 있다.
+- 시연 DB 변경: 상품 300개의 `image_url`을 카탈로그 사진 경로로 채웠다. 활동 6을 `ACTIVE`로
+  바꾸고 종료일을 2026-12-31 23:59로 늦췄다. 남은 수량은 20개다(한정 1,061개, 참여 1,041건).
+  Redis의 `activeEvents::ALL`을 지웠고 `campaign:6:counter`는 바꾸지 않았다.
+- 배포 전 테스트: 배포 브랜치 Core 336개 중 실패 0, 건너뜀 55. `main` 병합 결과 Core 370개 중
+  실패 0, 건너뜀 59. Entry 테스트는 코드 변경이 없어 다시 실행하지 않았다.
+- VM Core와 Entry health는 `UP`이다. 공개 주소에서 `/shop`, `/events`, `/products/1`의 응답과
+  깨진 이미지 0개, 활동 6의 진행 중 표시를 확인했다.
+- 교체 전후 CPU 제한은 같다. Core 환경변수 해시는 달라졌고, 이미지의 `JAVA_VERSION`이 다른 것을
+  확인했다. `compose` 파일과 `.env`는 바뀌지 않았지만 교체 전 값을 항목별로 대조하지는 못했다.
+- 운영에서 주문서와 결제 완료까지의 구매 흐름은 이 기록 시점에 확인하지 않았다.
+  같은 화면의 구매 흐름은 로컬에서 Entry와 함께 확인했다.
+- 로그인하지 않은 방문자가 활동 상세를 열면 네이버 로그인으로 이동한다.
+
 ## 네이버 로그인 환경변수
 
 운영 VM의 `/home/ubuntu/apps/axon/.env`에는 실제 발급받은 `NAVER_CLIENT_ID`와
