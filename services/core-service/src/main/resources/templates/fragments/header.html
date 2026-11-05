@@ -12,7 +12,8 @@
         <a sec:authorize="isAnonymous()" href="/oauth2/authorization/naver" class="hover:text-black">로그인</a>
 
         <th:block sec:authorize="isAuthenticated()">
-            <span><span th:text="${#authentication.principal.displayName}" class="font-semibold text-black">User</span>님</span>
+            <span sec:authorize="hasRole('DEMO')" class="font-semibold text-black">데모 계정</span>
+            <span sec:authorize="!hasRole('DEMO')"><span th:text="${#authentication.principal.displayName}" class="font-semibold text-black">User</span>님</span>
             <a sec:authorize="hasRole('ADMIN')" href="/admin" class="font-semibold text-black hover:underline">관리자</a>
             <a sec:authorize="hasRole('DEMO')" href="/demo/exit" class="hover:text-black">데모 나가기</a>
             <a sec:authorize="!hasRole('DEMO')" href="#" onclick="common.logout()" class="hover:text-black">로그아웃</a>
