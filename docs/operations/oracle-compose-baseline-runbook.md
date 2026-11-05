@@ -204,6 +204,18 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
   백업 후 이 계정의 빈 행 1개를 추가해 요약 행이 없는 계정을 0개로 맞췄다. 코드는 바꾸지 않았다.
   `user_summary` 백업은 같은 배포 백업 디렉터리에 있다.
 
+## 2026-11-05 운영을 `main`으로 전환
+
+- 배포 코드: `6c00e62` (`main`). VM 저장소도 `main`으로 되돌렸다. PR #4, #5의 코드가 이때 처음 운영에 나갔다.
+- Core를 먼저 교체한 뒤 Entry를 교체하고 nginx를 재시작했다. Redis, MySQL, Kafka 컨테이너는 그대로다.
+- Redis는 재생성하지 않아 `compose.app.yml`의 AOF 설정이 아직 적용되지 않았다. 지금 Redis는 영속화가 없어,
+  재생성하면 `campaign:*` 키가 사라진다. 적용 전 키 백업과 재구성 절차가 필요하다.
+- 결제 v2는 꺼져 있고 `2026-10-27-add-payment-state.sql`은 적용하지 않았다.
+- 이전 이미지는 `axon-core-main-cutover-rollback:20261105`, `axon-entry-main-cutover-rollback:20261105`다.
+  교체 전 커밋과 환경 파일은 VM의 `.git/deploy-backups/20261105-main-cutover`에 있다.
+- Core와 Entry health `UP`, nginx 설정 검사 통과. 공개 주소의 쇼핑몰, 오픈런, 상품 404와 데모 관리자 화면,
+  데모 변경 요청 403을 확인했다. 전환 후 실제 구매 흐름은 이 기록 시점에 확인하지 않았다.
+
 ## 네이버 로그인 환경변수
 
 운영 VM의 `/home/ubuntu/apps/axon/.env`에는 실제 발급받은 `NAVER_CLIENT_ID`와
