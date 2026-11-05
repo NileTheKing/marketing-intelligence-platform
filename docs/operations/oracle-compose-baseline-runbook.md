@@ -193,6 +193,9 @@ wrapper calls it with `REDIS_MODE=docker`. Do not archive it with the K8s-only t
 - 같은 날 `05a7819`로 Core를 다시 교체했다(`main`은 `bdeb115`). 관리자 데모에서 선착순 상세가 403으로
   막히던 것을 허용 목록에 추가했다. 이전 이미지는 `axon-core-demo-fix-rollback:20261105`다.
   데모 쿠키로 공개 주소의 `/campaign-activities/6` 200, `/mypage` 403, 쿠키만으로 보낸 `POST /api/v1/entries` 401을 확인했다.
+- 이어서 `9feb6c8`로 Core를 다시 교체했다(`main`은 `200a830`). 브라우저의 403 화면을 Whitelabel 대신
+  `error/403.html` 안내로 표시한다. 이전 이미지는 `axon-core-forbidden-page-rollback:20261105`다.
+  데모 쿠키로 공개 주소의 `/mypage`, `/cart`에서 403과 안내 문구를 확인했다. 일반 계정 문구는 로컬에서만 확인했다.
 
 ## 네이버 로그인 환경변수
 
