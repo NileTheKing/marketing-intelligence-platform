@@ -36,18 +36,19 @@ public class StoreController {
             @RequestParam(defaultValue = "0") int page, Model model) {
         StoreViewService.MainShopViewData viewData = storeViewService.getMainShopViewData(category, page);
 
-        model.addAttribute("rankings", viewData.getRankings());
+        model.addAttribute("categories", StoreViewService.SHOP_CATEGORIES);
         if (viewData.getSelectedCategory() != null) {
             model.addAttribute("categoryProducts", viewData.getCategoryProducts());
             model.addAttribute("selectedCategory", viewData.getSelectedCategory());
+            model.addAttribute("selectedCategoryLabel", viewData.getSelectedCategoryLabel());
             model.addAttribute("page", viewData.getPage());
             model.addAttribute("hasPrevious", viewData.getPage() > 0);
             model.addAttribute("hasNext", viewData.isHasNext());
         } else {
-            model.addAttribute("techDeals", viewData.getTechDeals());
-            model.addAttribute("foodDeals", viewData.getFoodDeals());
-            model.addAttribute("homeDeals", viewData.getHomeDeals());
-            model.addAttribute("fashionDeals", viewData.getFashionDeals());
+            model.addAttribute("rankings", viewData.getRankings());
+            model.addAttribute("rankingDays", viewData.getRankingDays());
+            model.addAttribute("categoryDeals", viewData.getCategoryDeals());
+            model.addAttribute("openRuns", viewData.getOpenRuns());
         }
 
         return "mainshop";
@@ -55,7 +56,10 @@ public class StoreController {
 
     @GetMapping("/products/{id}")
     public String productDetail(@PathVariable Long id, Model model) {
-        model.addAttribute("product", storeViewService.getProductDisplay(id));
+        StoreViewService.ProductDisplayDto product = storeViewService.getProductDisplay(id);
+        model.addAttribute("product", product);
+        model.addAttribute("categoryLabel", StoreViewService.SHOP_CATEGORIES.get(product.getCategory()));
+        model.addAttribute("related", storeViewService.getRelatedProducts(product));
         return "product/detail";
     }
 
@@ -81,7 +85,8 @@ public class StoreController {
         StoreViewService.CampaignActivitiesViewData viewData =
                 storeViewService.getCampaignActivitiesViewData(userId);
 
-        model.addAttribute("fcfsCampaignActivities", viewData.getFcfsCampaignActivities());
+        model.addAttribute("openRuns", storeViewService.getOpenRuns());
+        model.addAttribute("navActive", "OPENRUN");
         model.addAttribute("raffleCampaignActivities", viewData.getRaffleCampaignActivities());
         model.addAttribute("coupons", viewData.getCoupons());
         model.addAttribute("entryServiceUrl", entryServiceUrl);
@@ -101,6 +106,7 @@ public class StoreController {
         }
 
         model.addAttribute("campaignActivity", campaignActivity);
+        model.addAttribute("navActive", "OPENRUN");
         return "entry";
     }
 

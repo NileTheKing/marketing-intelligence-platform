@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<!-- 쇼핑몰 공통 상품 카드. rank가 있으면 사진 왼쪽 위에 순위를 표시한다. -->
+<a th:fragment="card(item, rank)" th:href="@{/products/{id}(id=${item.id})}" class="block group">
+    <div class="relative aspect-square overflow-hidden rounded bg-[#f3f3f1] mb-3">
+        <img th:if="${item.imageUrl != null}" th:src="${item.imageUrl}" th:alt="${item.name}" loading="lazy"
+            class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]">
+        <div th:unless="${item.imageUrl != null}"
+            class="w-full h-full flex items-center justify-center text-[13px] font-semibold text-[#b5b3ad]"
+            th:text="${item.brand}">brand</div>
+        <span th:if="${rank != null}" th:text="${rank}"
+            class="absolute top-0 left-0 min-w-[26px] h-[26px] px-1.5 flex items-center justify-center bg-black text-white text-[13px] font-bold">1</span>
+    </div>
+    <div class="text-[13px] font-bold text-black" th:text="${item.brand}">brand</div>
+    <div class="mt-0.5 text-[13px] text-[#555] leading-snug line-clamp-2" th:text="${item.name}">name</div>
+    <div class="mt-1.5 flex items-baseline gap-1">
+        <span th:if="${item.discountRate > 0}" class="text-[15px] font-bold text-[#f0302f]"
+            th:text="${item.discountRate} + '%'">15%</span>
+        <span class="text-[15px] font-bold text-black" th:text="${item.price} + '원'">10,000원</span>
+    </div>
+</a>
+
+</html>

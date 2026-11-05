@@ -53,6 +53,9 @@ CATEGORIES = {
 }
 CATEGORY_WEIGHTS = {"DIGITAL": 0.30, "FASHION": 0.27, "BEAUTY": 0.18, "LIVING": 0.15, "FOOD": 0.10}
 VARIANTS = ["", " 프로", " 라이트", " 에디션", " 2세대", " 미니", " 플러스"]
+# CC0 catalog photos, numbered in CATEGORIES order (credits: static/image/product/catalog/CREDITS.md).
+ITEM_IMAGES = {item: f"/image/product/catalog/item_{i:02d}.jpg"
+               for i, (item, _) in enumerate((it for _, items in CATEGORIES.values() for it in items), 1)}
 
 SURNAMES = [("김", "kim", 21), ("이", "lee", 15), ("박", "park", 8), ("최", "choi", 5), ("정", "jung", 5),
             ("강", "kang", 2), ("조", "cho", 2), ("윤", "yoon", 2), ("장", "jang", 2), ("임", "lim", 2),
@@ -196,7 +199,7 @@ class Seeder:
                 self.products.append(self.add("products", {
                     "product_name": f"{brand} {item}{variant}", "brand": brand, "category": category,
                     "price": price, "stock": self.r.randrange(200, 5000), "discount_rate": self.r.choice([0, 0, 5, 10, 15]),
-                    "campaign_only": 0, "image_url": None}))
+                    "campaign_only": 0, "image_url": ITEM_IMAGES[item]}))
         # Popularity is heavily skewed: the top fifth of the catalog takes most of the views.
         self.r.shuffle(self.products)
         self._product_cdf = self._cdf([1 / (rank + 1) ** 1.1 for rank in range(len(self.products))])

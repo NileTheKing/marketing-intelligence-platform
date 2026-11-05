@@ -46,5 +46,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     Optional<Product> findByIdAndCampaignOnlyFalse(Long id);
 
+    List<Product> findTop20ByCampaignOnlyFalseAndCategoryOrderByDiscountRateDescIdAsc(String category);
+
     List<Product> findByCategory(String category);
 }

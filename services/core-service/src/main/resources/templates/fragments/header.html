@@ -2,85 +2,59 @@
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <div th:fragment="header" class="sticky top-0 z-50 bg-white border-b border-light-gray">
 
-    <!-- Top Bar -->
-    <div class="bg-black text-white py-2 text-[11px]">
-        <div class="max-w-[1200px] mx-auto px-4 flex justify-between items-center">
-            <div class="flex gap-4">
-                <span>Axon Exclusive</span>
-                <span>Campaigns</span>
-            </div>
-            <div class="flex gap-4 cursor-pointer items-center">
-                <a sec:authorize="!hasRole('ADMIN') and !hasRole('DEMO')" href="/demo/admin"
-                    class="hover:text-yellow-300 text-yellow-400">관리자 데모</a>
-                <a sec:authorize="hasRole('DEMO')" href="/admin" class="hover:text-yellow-300 text-yellow-400">관리자 데모</a>
-                <!-- Anonymous Users -->
-                <th:block sec:authorize="isAnonymous()">
-                    <a href="/oauth2/authorization/naver" class="hover:text-gray-300 flex items-center gap-1">
-                        <i class="fa-solid fa-n"></i> 네이버 로그인
-                    </a>
-                </th:block>
+    <!-- Utility Links -->
+    <div class="max-w-[1200px] mx-auto px-4 pt-2.5 flex justify-end items-center gap-4 text-[12px] text-[#888]">
+        <a sec:authorize="!hasRole('ADMIN') and !hasRole('DEMO')" href="/demo/admin"
+            class="px-2 py-0.5 border border-black rounded text-black font-semibold hover:bg-black hover:text-white transition-colors">관리자 데모</a>
+        <a sec:authorize="hasRole('DEMO')" href="/admin"
+            class="px-2 py-0.5 border border-black rounded text-black font-semibold hover:bg-black hover:text-white transition-colors">관리자 데모</a>
 
-                <!-- Authenticated Users -->
-                <th:block sec:authorize="isAuthenticated()">
-                    <span class="text-gray-300">
-                        <span th:text="${#authentication.principal.displayName}"
-                            class="font-bold text-white">User</span>님 환영합니다
-                    </span>
+        <a sec:authorize="isAnonymous()" href="/oauth2/authorization/naver" class="hover:text-black">로그인</a>
 
-                    <!-- Admin Only -->
-                    <a sec:authorize="hasRole('ADMIN')" href="/admin"
-                        class="hover:text-yellow-300 text-yellow-400 font-bold flex items-center gap-1">
-                        <i class="fa-solid fa-user-shield"></i> 관리자
-                    </a>
+        <th:block sec:authorize="isAuthenticated()">
+            <span><span th:text="${#authentication.principal.displayName}" class="font-semibold text-black">User</span>님</span>
+            <a sec:authorize="hasRole('ADMIN')" href="/admin" class="font-semibold text-black hover:underline">관리자</a>
+            <a sec:authorize="hasRole('DEMO')" href="/demo/exit" class="hover:text-black">데모 나가기</a>
+            <a sec:authorize="!hasRole('DEMO')" href="#" onclick="common.logout()" class="hover:text-black">로그아웃</a>
+        </th:block>
 
-                    <a sec:authorize="hasRole('DEMO')" href="/demo/exit" class="hover:text-gray-300">데모 나가기</a>
-                    <a sec:authorize="!hasRole('DEMO')" href="#" onclick="common.logout()" class="hover:text-gray-300">로그아웃</a>
-                </th:block>
-
-                <span class="hover:text-gray-300">고객센터</span>
-            </div>
-        </div>
+        <span class="hover:text-black cursor-pointer">고객센터</span>
     </div>
 
     <!-- Main Header -->
-    <div class="max-w-[1200px] mx-auto px-4 h-20 flex justify-between items-center">
-        <a href="/shop" class="text-2xl font-black tracking-tighter">SKU STORE</a>
+    <div class="max-w-[1200px] mx-auto px-4 h-[64px] flex items-center gap-10">
+        <a href="/shop" class="text-[26px] font-black tracking-[-0.04em]">OPENRUN</a>
 
-        <div class="w-[400px] bg-light-gray py-2.5 px-4 rounded flex items-center">
-            <i class="ph ph-magnifying-glass text-gray text-lg"></i>
-            <input type="text" class="bg-transparent border-none w-full ml-2 outline-none text-sm placeholder-gray"
-                placeholder="검색어를 입력하세요">
+        <div class="flex-1 max-w-[440px] bg-[#f3f3f1] h-10 px-4 rounded-md flex items-center">
+            <i class="ph ph-magnifying-glass text-[#999] text-lg"></i>
+            <input type="text" class="bg-transparent border-none w-full ml-2 outline-none text-sm placeholder-[#999]"
+                placeholder="브랜드, 상품을 검색해 보세요">
         </div>
 
-        <div class="flex gap-6">
-            <a href="#" class="flex flex-col items-center hover:opacity-70 transition-opacity">
-                <i class="ph ph-heart text-2xl"></i>
-            </a>
-            <a href="/cart" class="flex flex-col items-center hover:opacity-70 transition-opacity">
-                <i class="ph ph-shopping-cart text-2xl"></i>
-            </a>
-            <a href="/mypage" class="flex flex-col items-center hover:opacity-70 transition-opacity">
-                <i class="ph ph-user text-2xl"></i>
-            </a>
+        <div class="ml-auto flex gap-5 text-[22px]">
+            <a href="#" class="hover:opacity-60 transition-opacity" aria-label="찜"><i class="ph ph-heart"></i></a>
+            <a href="/cart" class="hover:opacity-60 transition-opacity" aria-label="장바구니"><i class="ph ph-shopping-cart"></i></a>
+            <a href="/mypage" class="hover:opacity-60 transition-opacity" aria-label="마이페이지"><i class="ph ph-user"></i></a>
         </div>
     </div>
 
     <!-- Category Nav -->
-    <div class="border-t border-light-gray">
-        <div class="max-w-[1200px] mx-auto px-4 flex items-center">
-            <a href="/shop" class="py-3 px-4 text-sm font-bold border-b-2 border-black">전체</a>
-            <a href="/events" class="py-3 px-4 text-sm font-bold text-accent hover:text-black transition-colors">이벤트</a>
-            <a href="/shop?category=TECH"
-                class="py-3 px-4 text-sm font-bold text-dark-gray hover:text-accent transition-colors">테크</a>
-            <a href="/shop?category=FOOD"
-                class="py-3 px-4 text-sm font-bold text-dark-gray hover:text-accent transition-colors">푸드</a>
-            <a href="/shop?category=FASHION"
-                class="py-3 px-4 text-sm font-bold text-dark-gray hover:text-accent transition-colors">패션</a>
-            <a href="/shop?category=HOME"
-                class="py-3 px-4 text-sm font-bold text-dark-gray hover:text-accent transition-colors">홈/리빙</a>
-        </div>
-    </div>
-</div>
+    <nav class="max-w-[1200px] mx-auto px-4 flex items-center gap-7 text-[15px] font-bold">
+        <a href="/shop" class="py-3 border-b-2"
+            th:classappend="${param.category == null and navActive == null} ? 'border-black text-black' : 'border-transparent text-[#777] hover:text-black'">홈</a>
+        <a href="/events" class="py-3 border-b-2 text-[#f0302f]"
+            th:classappend="${navActive == 'OPENRUN'} ? 'border-[#f0302f]' : 'border-transparent'">오픈런</a>
+        <a href="/shop?category=DIGITAL" class="py-3 border-b-2"
+            th:classappend="${param.category != null and param.category[0] == 'DIGITAL'} ? 'border-black text-black' : 'border-transparent text-[#777] hover:text-black'">디지털</a>
+        <a href="/shop?category=FASHION" class="py-3 border-b-2"
+            th:classappend="${param.category != null and param.category[0] == 'FASHION'} ? 'border-black text-black' : 'border-transparent text-[#777] hover:text-black'">패션</a>
+        <a href="/shop?category=BEAUTY" class="py-3 border-b-2"
+            th:classappend="${param.category != null and param.category[0] == 'BEAUTY'} ? 'border-black text-black' : 'border-transparent text-[#777] hover:text-black'">뷰티</a>
+        <a href="/shop?category=LIVING" class="py-3 border-b-2"
+            th:classappend="${param.category != null and param.category[0] == 'LIVING'} ? 'border-black text-black' : 'border-transparent text-[#777] hover:text-black'">리빙</a>
+        <a href="/shop?category=FOOD" class="py-3 border-b-2"
+            th:classappend="${param.category != null and param.category[0] == 'FOOD'} ? 'border-black text-black' : 'border-transparent text-[#777] hover:text-black'">푸드</a>
+    </nav>
 </div>
 
 </html>

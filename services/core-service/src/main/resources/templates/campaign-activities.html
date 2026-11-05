@@ -3,7 +3,7 @@
     layout:decorate="~{layout/default}">
 
 <head>
-    <title>SKU STORE - 이벤트</title>
+    <title>오픈런 | OPENRUN</title>
 </head>
 
 <body>
@@ -12,75 +12,89 @@
 
         <div class="max-w-[1200px] mx-auto px-4 pt-10 mb-24">
 
-            <div class="mb-10">
-                <h2 class="text-[28px] font-bold tracking-tight">이벤트</h2>
-                <p class="text-sm text-gray mt-1">선착순 한정 특가와 추첨, 쿠폰을 한곳에서 확인하세요</p>
+            <div class="mb-8">
+                <h2 class="text-[28px] font-bold tracking-tight">오픈런</h2>
+                <p class="text-[14px] text-[#888] mt-1">정해진 시각에 열리는 선착순 한정 판매</p>
             </div>
 
-            <!-- 1. FCFS Event -->
-            <div class="mb-20">
-                <div class="flex justify-between items-end mb-5 border-b border-black pb-3">
-                    <h3 class="text-lg font-bold">선착순 특가</h3>
-                    <span class="text-xs text-gray">수량이 소진되면 조기 종료됩니다</span>
+            <!-- 1. Open Run (FCFS): 진행 중, 오픈 예정, 최근 마감 순 -->
+            <div class="mb-20" data-runs>
+                <div class="flex gap-2 mb-6">
+                    <button type="button" data-filter="ALL" class="is-on h-8 px-3.5 rounded-full border text-[13px] font-semibold"
+                        th:text="'전체 ' + ${#lists.size(openRuns)}">전체</button>
+                    <button type="button" data-filter="OPEN" class="h-8 px-3.5 rounded-full border text-[13px] font-semibold">진행 중</button>
+                    <button type="button" data-filter="UPCOMING" class="h-8 px-3.5 rounded-full border text-[13px] font-semibold">오픈 예정</button>
+                    <button type="button" data-filter="ENDED" class="h-8 px-3.5 rounded-full border text-[13px] font-semibold">마감</button>
                 </div>
 
-                <div th:if="${#lists.isEmpty(fcfsCampaignActivities)}" class="text-center py-20 bg-[#f4f4f2]">
-                    <h3 class="text-base font-bold text-dark-gray mb-1">진행 중인 선착순 특가가 없습니다</h3>
-                    <p class="text-sm text-gray">새로운 특가가 곧 찾아옵니다.</p>
-                </div>
+                <p th:if="${#lists.isEmpty(openRuns)}" class="text-center py-20 text-sm text-[#999]">아직 열린 오픈런이 없어요.</p>
 
-                <div th:unless="${#lists.isEmpty(fcfsCampaignActivities)}" class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-10">
-                    <a th:each="activity, stat : ${fcfsCampaignActivities}"
-                        th:href="@{/campaign-activities/{id}(id=${activity.id})}"
-                        th:style="${stat.index >= 8} ? 'display: none;' : ''"
-                        th:classappend="${stat.index >= 8} ? 'hidden-activity' : ''"
-                        class="group event-card" th:data-original="${activity.originalPrice}" th:data-price="${activity.price}">
-                        <div class="relative aspect-square bg-[#f4f4f2] overflow-hidden mb-3 flex items-center justify-center">
-                            <img th:if="${activity.imageUrl != null and activity.imageUrl != ''}"
-                                th:src="@{${activity.imageUrl}}" class="w-full h-full object-cover absolute inset-0 group-hover:scale-[1.03] transition-transform duration-300"
-                                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" alt="">
-                            <i class="ph-thin ph-package text-6xl text-[#b5b3ad]"
-                                th:style="${activity.imageUrl != null and activity.imageUrl != ''} ? 'display: none;' : ''"></i>
-                            <span class="absolute top-3 left-3 bg-black text-white text-[11px] font-bold px-2 py-0.5"
-                                th:text="'선착순 ' + ${#numbers.formatInteger(activity.limitCount, 0, 'COMMA')} + '개'">선착순</span>
+                <div class="grid grid-cols-4 gap-x-4 gap-y-10">
+                    <a th:each="run : ${openRuns}" th:attr="data-state=${run.state.name()}"
+                        th:href="${run.state.name() == 'ENDED'} ? null : @{/campaign-activities/{id}(id=${run.id})}"
+                        class="block group" th:classappend="${run.state.name() == 'ENDED'} ? 'cursor-default'">
+                        <div class="relative aspect-square rounded overflow-hidden bg-[#f3f3f1] mb-3">
+                            <img th:if="${run.imageUrl != null}" th:src="${run.imageUrl}" th:alt="${run.title}"
+                                class="w-full h-full object-cover transition-transform duration-300"
+                                th:classappend="${run.state.name() == 'ENDED'} ? 'opacity-60 grayscale' : 'group-hover:scale-[1.03]'">
+                            <th:block th:switch="${run.state.name()}">
+                                <span th:case="'OPEN'" class="absolute top-0 left-0 px-2 h-[26px] flex items-center bg-[#f0302f] text-white text-[12px] font-bold">진행 중</span>
+                                <span th:case="'UPCOMING'" class="js-countdown absolute top-0 left-0 px-2 h-[26px] flex items-center bg-black text-white text-[12px] font-bold"
+                                    th:attr="data-start=${run.startDate}"
+                                    th:text="${#temporals.format(run.startDate, 'M월 d일 HH:mm')} + ' 오픈'">오픈 예정</span>
+                                <span th:case="*" class="absolute top-0 left-0 px-2 h-[26px] flex items-center bg-[#777] text-white text-[12px] font-bold">마감</span>
+                            </th:block>
                         </div>
-                        <h4 class="text-[13px] leading-snug mb-1.5 line-clamp-2" th:utext="${activity.title}">상품명</h4>
-                        <div class="flex items-baseline gap-1.5">
-                            <span class="card-rate text-[15px] font-bold text-danger"></span>
-                            <span class="text-[15px] font-bold"><span th:text="${activity.price}">10,000</span>원</span>
+                        <div class="text-[14px] text-[#333] leading-snug line-clamp-2" th:text="${run.title}">상품명</div>
+                        <div class="mt-1.5 flex items-baseline gap-1">
+                            <span th:if="${run.discountRate > 0}" class="text-[15px] font-bold text-[#f0302f]"
+                                th:text="${run.discountRate} + '%'">40%</span>
+                            <span class="text-[15px] font-bold" th:text="${run.price} + '원'">179,000원</span>
                         </div>
-                        <div class="text-xs text-gray line-through mt-0.5"><span th:text="${activity.originalPrice}">100,000</span>원</div>
+                        <div class="mt-1 text-[12px] text-[#999]"
+                            th:text="'한정 ' + ${#numbers.formatInteger(run.limitCount, 1, 'COMMA')} + '개, ' + ${#temporals.format(run.endDate, 'M월 d일')} + ' 마감'">한정</div>
                     </a>
                 </div>
             </div>
 
-            <div class="-mt-12 mb-20 text-center" id="load-more-container" th:if="${fcfsCampaignActivities.size() > 8}">
-                <button onclick="loadMoreEvents()"
-                    class="px-8 h-11 border border-[#ddd] bg-white text-sm font-medium hover:border-black transition-colors">더보기</button>
-            </div>
-
+            <style>
+                [data-filter] { border-color: #ddd; color: #555; background: #fff; }
+                [data-filter]:hover:not(:disabled) { border-color: #111; }
+                [data-filter].is-on { background: #111; border-color: #111; color: #fff; }
+                [data-filter]:disabled { opacity: .35; cursor: default; }
+            </style>
             <script>
-                document.addEventListener('DOMContentLoaded', () => {
-                    const toNumber = text => Number(String(text || '').replace(/[^0-9]/g, ''));
-                    document.querySelectorAll('.event-card').forEach(card => {
-                        const original = toNumber(card.dataset.original);
-                        const price = toNumber(card.dataset.price);
-                        if (original > price && price > 0) {
-                            card.querySelector('.card-rate').textContent = Math.round((1 - price / original) * 100) + '%';
+                document.querySelectorAll('[data-runs]').forEach(function (section) {
+                    var cards = section.querySelectorAll('[data-state]');
+                    section.querySelectorAll('[data-filter]').forEach(function (tab) {
+                        var key = tab.dataset.filter;
+                        if (key !== 'ALL') {
+                            var count = section.querySelectorAll('[data-state="' + key + '"]').length;
+                            tab.textContent += ' ' + count;
+                            tab.disabled = count === 0;
                         }
+                        tab.addEventListener('click', function () {
+                            section.querySelectorAll('[data-filter]').forEach(function (t) { t.classList.toggle('is-on', t === tab); });
+                            cards.forEach(function (card) {
+                                card.classList.toggle('hidden', key !== 'ALL' && card.dataset.state !== key);
+                            });
+                        });
                     });
                 });
 
-                function loadMoreEvents() {
-                    const hiddenCards = Array.from(document.querySelectorAll('.hidden-activity'));
-                    hiddenCards.slice(0, 8).forEach(card => {
-                        card.style.display = '';
-                        card.classList.remove('hidden-activity');
-                    });
-                    if (document.querySelectorAll('.hidden-activity').length === 0) {
-                        document.getElementById('load-more-container').style.display = 'none';
+                // 오픈 24시간 전부터는 남은 시간을 초 단위로 보여준다.
+                document.querySelectorAll('.js-countdown').forEach(function (el) {
+                    var start = new Date(el.dataset.start).getTime();
+                    function tick() {
+                        var left = Math.floor((start - Date.now()) / 1000);
+                        if (left <= 0) { el.textContent = '지금 오픈'; el.style.background = '#f0302f'; return; }
+                        if (left > 86400) return;
+                        var pad = function (n) { return String(n).padStart(2, '0'); };
+                        el.textContent = pad(Math.floor(left / 3600)) + ':' + pad(Math.floor(left % 3600 / 60)) + ':' + pad(left % 60);
+                        setTimeout(tick, 1000);
                     }
-                }
+                    tick();
+                });
             </script>
 
             <!-- 2. Raffle Event -->

@@ -74,6 +74,8 @@ public class SecurityConfig {
                                                                 "/favicon.ico", "/welcomepage", "/welcomepage.html",
                                                                 "/oauth2/**", "/login/**", "/test/**")
                                                 .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/products/{productId:[0-9]+}", "/events")
+                                                .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/events/active")
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/products")

@@ -3,68 +3,68 @@
     layout:decorate="~{layout/default}">
 
 <head>
-    <title>SKU STORE - Product Detail</title>
+    <title th:text="${product.name} + ' | OPENRUN'">OPENRUN</title>
 </head>
 
 <body>
-    <div layout:fragment="content" class="w-full max-w-[1200px] mx-auto px-4 py-10">
+    <div layout:fragment="content" class="w-full max-w-[1200px] mx-auto px-4 pt-5 pb-16">
 
-        <div class="flex gap-10 items-start">
-            <!-- Left: Image -->
-            <div class="w-[55%] bg-[#f4f4f4] aspect-[3/4] relative overflow-hidden rounded-sm">
-                <img th:src="${product.imageUrl}" class="w-full h-full object-cover" alt="product image">
+        <nav class="text-[13px] text-[#999] mb-5" aria-label="카테고리 경로">
+            <a href="/shop" class="hover:text-black">홈</a>
+            <th:block th:if="${categoryLabel != null}">
+                <span class="mx-1.5">&gt;</span>
+                <a th:href="@{/shop(category=${product.category})}" class="hover:text-black" th:text="${categoryLabel}">디지털</a>
+            </th:block>
+        </nav>
+
+        <div class="grid grid-cols-[1fr_440px] gap-14" style="align-items: start;">
+            <div class="aspect-square rounded overflow-hidden bg-[#f3f3f1]">
+                <img th:if="${product.imageUrl != null}" th:src="${product.imageUrl}" th:alt="${product.name}"
+                    class="w-full h-full object-cover">
+                <div th:unless="${product.imageUrl != null}"
+                    class="w-full h-full flex items-center justify-center text-[22px] font-semibold text-[#b5b3ad]"
+                    th:text="${product.brand}">brand</div>
             </div>
 
-            <!-- Right: Info -->
-            <div class="w-[45%] sticky top-24">
-                <div class="mb-6">
-                    <a href="#" class="text-sm font-bold text-black underline underline-offset-4 mb-2 inline-block"
-                        th:text="${product.brand}">Brand Name</a>
-                    <h1 class="text-2xl font-medium text-dark-gray leading-snug mb-4" th:text="${product.name}">Product
-                        Name</h1>
+            <div class="sticky top-36">
+                <a th:href="@{/shop(category=${product.category})}" class="text-[15px] font-bold text-black hover:underline"
+                    th:text="${product.brand} + ' >'">brand &gt;</a>
+                <h1 class="mt-2 text-[22px] leading-snug text-[#222]" th:text="${product.name}">상품명</h1>
 
-                    <div class="flex items-center gap-3 mb-6">
-                        <div class="flex text-black text-sm">
-                            <i class="ph-fill ph-star"></i>
-                            <i class="ph-fill ph-star"></i>
-                            <i class="ph-fill ph-star"></i>
-                            <i class="ph-fill ph-star"></i>
-                            <i class="ph-fill ph-star-half"></i>
-                        </div>
-                        <a href="#" class="text-sm text-gray underline"
-                            th:text="${product.reviewCount} + ' Reviews'">100 Reviews</a>
-                    </div>
-
-                    <div class="flex items-center gap-3 mb-8">
-                        <span class="text-3xl font-black text-black" th:text="${product.price} + '원'">45,000원</span>
-                        <span class="text-3xl font-black text-danger" th:if="${product.discountRate > 0}"
-                            th:text="${product.discountRate} + '%'">10%</span>
-                        <span class="text-lg text-gray line-through" th:if="${product.discountRate > 0}"
-                            th:text="${product.originalPrice} + '원'">50,000원</span>
+                <div class="mt-6">
+                    <div th:if="${product.discountRate > 0}" class="text-[15px] text-[#aaa] line-through"
+                        th:text="${product.originalPrice} + '원'">50,000원</div>
+                    <div class="flex items-baseline gap-2">
+                        <span th:if="${product.discountRate > 0}" class="text-[26px] font-bold text-[#f0302f]"
+                            th:text="${product.discountRate} + '%'">15%</span>
+                        <span class="text-[26px] font-bold text-black" th:text="${product.price} + '원'">45,000원</span>
                     </div>
                 </div>
 
-                <div class="border-t border-b border-[#eee] py-6 mb-8">
-                    <div class="flex justify-between items-center mb-3">
-                        <span class="text-sm font-bold text-dark-gray">배송정보</span>
-                        <span class="text-sm text-black">무료배송 (CJ대한통운)</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm font-bold text-dark-gray">도착예정</span>
-                        <span class="text-sm text-black">모레(금) 도착 예정</span>
-                    </div>
-                </div>
+                <dl class="mt-7 py-5 border-y border-[#eee] text-[14px] space-y-3">
+                    <div class="flex"><dt class="w-16 text-[#888]">배송</dt><dd>무료배송</dd></div>
+                    <div class="flex"><dt class="w-16 text-[#888]">도착</dt><dd>모레 도착 예정</dd></div>
+                </dl>
 
-                <div class="flex gap-3">
-                    <button
-                        class="flex-1 h-14 border-2 border-black bg-white text-black font-bold text-base hover:bg-gray-50 transition-colors"
-                        style="border: 2px solid black;">장바구니</button>
-                    <button
-                        class="flex-1 h-14 bg-black text-white font-bold text-base hover:opacity-90 transition-opacity"
+                <div class="mt-7 flex gap-2">
+                    <button type="button" style="border: 1px solid #ccc;"
+                        class="flex-1 h-14 rounded bg-white text-black font-bold text-[15px]">장바구니</button>
+                    <button type="button"
+                        class="flex-1 h-14 rounded bg-black text-white font-bold text-[15px] hover:opacity-90 transition-opacity"
                         th:onclick="'location.href=\'/checkout?productId=' + ${product.id} + '\''">바로구매</button>
                 </div>
             </div>
         </div>
+
+        <section th:unless="${#lists.isEmpty(related)}" class="mt-20">
+            <h3 class="text-[20px] font-bold mb-5"
+                th:text="${categoryLabel != null} ? ${categoryLabel} + ' 인기 상품' : '인기 상품'">인기 상품</h3>
+            <div class="grid grid-cols-4 gap-x-4 gap-y-10">
+                <div th:each="item : ${related}">
+                    <a th:replace="~{fragments/product_card :: card(${item}, null)}"></a>
+                </div>
+            </div>
+        </section>
 
     </div>
 </body>
